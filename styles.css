@@ -1,65 +1,98 @@
+/* ── Tokens globaux ── */
 :root {
-    --font-heading: 'Cormorant Garamond', serif;
-    --font-body: 'Manrope', sans-serif;
-    --font-display: 'IBM Plex Mono', monospace;
+    --font-heading: 'Space Grotesk', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    /* Alias pour compatibilité ui.js */
+    --font-display: 'Space Grotesk', system-ui, sans-serif;
+
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 12px;
-    --radius-xl: 14px;
-    --radius-panel: 20px;
-    --radius-card: 16px;
-    --radius-control: 12px;
-    --success: #4ade80;
-    --danger: #f87171;
-    --watch: #fbbf24;
-    --neutral: #71717a;
-    --principal: #6366f1;
+    --radius-xl: 12px;
+    --radius-panel: 12px;
+    --radius-card: 12px;
+    --radius-control: 8px;
+    --radius-pill: 20px;
 }
 
 html[data-theme='light'] {
-    --bg: #F8F9FB;
+    --bg: #F6F8FA;
     --surface: #FFFFFF;
-    --surface-strong: #F1F5F9;
-    --text: #0F1C2E;
-    --muted: #4A5568;
-    --muted-strong: #718096;
-    --border: #CBD5E0;
-    --border-subtle: #E8EDF4;
-    --accent: #B7862C;
-    --accent-strong: #96690E;
-    --accent-soft: rgba(183, 134, 44, 0.12);
-    --accent-gold: #96690E;
-    --accent-gold-dim: rgba(183,134,44,0.08);
-    --accent-gold-border: rgba(183,134,44,0.30);
-    --glow: rgba(183,134,44,0.12);
-    --success: #2D6A4F;
-    --danger: #C53030;
-    --watch: #C05621;
-    --shadow-soft: 0 1px 3px rgba(15,28,46,0.10), 0 1px 2px rgba(15,28,46,0.08);
-    --shadow-panel: 0 4px 24px rgba(15,28,46,0.12);
+    --surface-strong: #F6F8FA;
+    --text: #1C2128;
+    --muted: #57606A;
+    --muted-strong: #424A53;
+    --border: #D0D7DE;
+    --border-subtle: #E8EDF3;
+
+    /* Primaire (actions, focus, tabs actifs) */
+    --primary: #3B82F6;
+    --primary-soft: rgba(59, 130, 246, 0.10);
+
+    /* Or (métriques clés, KPIs, prix plafond) */
+    --accent: #A8832A;
+    --accent-strong: #7D6020;
+    --accent-soft: rgba(168, 131, 42, 0.10);
+    --accent-gold: #A8832A;
+    --accent-gold-dim: rgba(168, 131, 42, 0.08);
+    --accent-gold-border: rgba(168, 131, 42, 0.25);
+    --glow: rgba(168, 131, 42, 0.10);
+
+    /* Status */
+    --success: #2DA44E;
+    --danger: #CF222E;
+    --watch: #9A6700;
+    --neutral: #57606A;
+    --principal: #3B82F6;
+
+    /* Aliases ui.js */
+    --success-color: #2DA44E;
+    --danger-color: #CF222E;
+    --primary-color: #3B82F6;
+
+    /* Shadows */
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.06);
+    --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.10);
 }
 
 html[data-theme='dark'] {
-    --bg: #0A0F1E;
-    --surface: #0F1829;
-    --surface-strong: #162035;
-    --text: #F0F6FF;
-    --muted: #94A3B8;
-    --muted-strong: #CBD5E0;
-    --border: #1A2F50;
-    --border-subtle: #121D35;
-    --accent: #F0B429;
-    --accent-strong: #F0B429;
-    --accent-soft: rgba(240, 180, 41, 0.15);
-    --accent-gold: #F0B429;
-    --accent-gold-dim: rgba(240,180,41,0.10);
-    --accent-gold-border: rgba(240,180,41,0.35);
-    --glow: rgba(240,180,41,0.18);
-    --success: #4ade80;
-    --danger: #f87171;
-    --watch: #fbbf24;
-    --shadow-soft: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
-    --shadow-panel: 0 4px 32px rgba(0,0,0,0.7);
+    --bg: #0D1117;
+    --surface: #161B22;
+    --surface-strong: #21262D;
+    --text: #E6EDF3;
+    --muted: #8B949E;
+    --muted-strong: #B1BAC4;
+    --border: #30363D;
+    --border-subtle: #21262D;
+
+    /* Primaire */
+    --primary: #3B82F6;
+    --primary-soft: rgba(59, 130, 246, 0.12);
+
+    /* Or */
+    --accent: #C9A84C;
+    --accent-strong: #C9A84C;
+    --accent-soft: rgba(201, 168, 76, 0.12);
+    --accent-gold: #C9A84C;
+    --accent-gold-dim: rgba(201, 168, 76, 0.08);
+    --accent-gold-border: rgba(201, 168, 76, 0.28);
+    --glow: rgba(201, 168, 76, 0.12);
+
+    /* Status */
+    --success: #3FB950;
+    --danger: #F85149;
+    --watch: #E3B341;
+    --neutral: #8B949E;
+    --principal: #3B82F6;
+
+    /* Aliases ui.js */
+    --success-color: #3FB950;
+    --danger-color: #F85149;
+    --primary-color: #3B82F6;
+
+    /* Shadows */
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.40);
+    --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.60);
 }
 
 * {
