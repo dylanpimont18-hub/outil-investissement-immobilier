@@ -1656,6 +1656,10 @@ html[data-theme='light'] #profile-save {
 .analysis-table tbody td {
     padding-top: 12px;
     padding-bottom: 12px;
+    background: var(--surface);
+}
+
+.analysis-table tbody tr:nth-child(even) td {
     background: var(--surface-strong);
 }
 
@@ -1682,6 +1686,7 @@ html[data-theme='light'] #profile-save {
     line-height: 1;
 }
 
+.table-row-active { border-left: 2px solid var(--primary); }
 .table-row-active td:first-child strong { color: var(--primary); }
 
 /* ── Matrice de sensibilité ── */
