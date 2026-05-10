@@ -453,8 +453,13 @@ body.panel-analysis #collection-panel { display: none; }
 #profile-save {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
     font-weight: 700;
+}
+
+html[data-theme='dark'] #save-comparison,
+html[data-theme='dark'] #save-portfolio,
+html[data-theme='dark'] #profile-save {
+    color: #0D1117;
 }
 
 html[data-theme='light'] #save-comparison,
