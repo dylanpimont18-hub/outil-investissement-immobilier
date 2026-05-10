@@ -1593,7 +1593,7 @@ html[data-theme='light'] #profile-save {
 
 .timeline-grid-line { stroke: var(--border); stroke-width: 1; }
 .timeline-zero-line { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 5; }
-.timeline-axis-text { fill: var(--muted); font-size: 11px; font-family: 'Inter', sans-serif; }
+.timeline-axis-text { fill: var(--muted); font-size: 11px; font-family: var(--font-body); }
 
 .timeline-path {
     fill: none;
