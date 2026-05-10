@@ -8,10 +8,6 @@
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 12px;
-    --radius-xl: 12px;
-    --radius-panel: 12px;
-    --radius-card: 12px;
-    --radius-control: 8px;
     --radius-pill: 20px;
 }
 
@@ -155,7 +151,7 @@ body.panel-analysis #collection-panel { display: none; }
     align-items: center;
     padding: 0 16px;
     gap: 12px;
-    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    background: var(--bg);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
     z-index: 100;
