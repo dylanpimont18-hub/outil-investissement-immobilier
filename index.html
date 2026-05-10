@@ -61,15 +61,15 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field" for="nom-bien">
-                                        <span class="status-label">Nom du bien</span>
+                                        <span class="status-label">Nom du bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Nom libre pour identifier ce dossier dans votre comparateur et vos exports PDF.">?</button></span>
                                         <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off">
                                     </label>
                                     <label class="variables-field" for="ville">
-                                        <span class="status-label">Ville</span>
+                                        <span class="status-label">Ville <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Ville où se situe le bien. Utilisée pour contextualiser l'analyse et le rapport.">?</button></span>
                                         <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off">
                                     </label>
                                     <label class="variables-field" for="statut-bien">
-                                        <span class="status-label">Statut</span>
+                                        <span class="status-label">Statut <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Candidat = bien en cours d'étude. Acquis = bien déjà dans votre patrimoine.">?</button></span>
                                         <select id="statut-bien" name="statut-bien" class="variables-input">
                                             <option value="candidate">À étudier</option>
                                             <option value="owned">Déjà au portefeuille</option>
@@ -89,31 +89,31 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field" for="prix">
-                                        <span class="status-label">Prix affiché</span>
+                                        <span class="status-label">Prix affiché <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Prix affiché par le vendeur, avant négociation. Point de départ du calcul du prix d'offre plafond.">?</button></span>
                                         <input id="prix" name="prix" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="nego">
-                                        <span class="status-label">Négociation visée</span>
+                                        <span class="status-label">Négociation visée <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Décote souhaitée sur le prix vendeur, en %. Le prix d'achat retenu sera prix × (1 − nego/100).">?</button></span>
                                         <input id="nego" name="nego" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="loyer">
-                                        <span class="status-label">Loyer cible mensuel</span>
+                                        <span class="status-label">Loyer cible mensuel <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Loyer mensuel hors charges prévu. Base de calcul du rendement brut et du cash-flow.">?</button></span>
                                         <input id="loyer" name="loyer" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="notaire">
-                                        <span class="status-label">Frais de notaire (%)</span>
+                                        <span class="status-label">Frais de notaire (%) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Frais de notaire en % du prix. Environ 7–8 % dans l'ancien, 2–3 % dans le neuf.">?</button></span>
                                         <input id="notaire" name="notaire" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="travaux">
-                                        <span class="status-label">Budget travaux</span>
+                                        <span class="status-label">Budget travaux <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Budget travaux estimé, intégré au coût total d'acquisition et amortissable selon le régime fiscal.">?</button></span>
                                         <input id="travaux" name="travaux" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="meubles">
-                                        <span class="status-label">Budget mobilier</span>
+                                        <span class="status-label">Budget mobilier <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Coût du mobilier pour une location meublée. Amortissable en LMNP et SCI IS.">?</button></span>
                                         <input id="meubles" name="meubles" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="agence">
-                                        <span class="status-label">Frais d'agence</span>
+                                        <span class="status-label">Frais d'agence <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Honoraires d'agence immobilière à la charge de l'acquéreur. Intégrés au coût total.">?</button></span>
                                         <input id="agence" name="agence" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                 </div>
@@ -130,23 +130,23 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field" for="apport">
-                                        <span class="status-label">Apport</span>
+                                        <span class="status-label">Apport <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Apport personnel en €. Réduit le capital emprunté et améliore le cash-flow.">?</button></span>
                                         <input id="apport" name="apport" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="taux-input">
-                                        <span class="status-label">Taux %</span>
+                                        <span class="status-label">Taux % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'intérêt annuel du crédit immobilier, hors assurance. Comparer les offres bancaires.">?</button></span>
                                         <input id="taux-input" name="taux-input" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="duree">
-                                        <span class="status-label">Durée (ans)</span>
+                                        <span class="status-label">Durée (ans) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Durée du prêt en années. Plus longue = mensualité plus faible mais coût total plus élevé.">?</button></span>
                                         <input id="duree" name="duree" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="assurance">
-                                        <span class="status-label">Assurance %</span>
+                                        <span class="status-label">Assurance % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'assurance emprunteur annuel (ADI), en % du capital emprunté. Environ 0,20–0,40 %.">?</button></span>
                                         <input id="assurance" name="assurance" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="frais-bancaires">
-                                        <span class="status-label">Frais bancaires</span>
+                                        <span class="status-label">Frais bancaires <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Frais de dossier bancaire et garantie (hypothèque ou caution). Généralement 1 000–2 000 €.">?</button></span>
                                         <input id="frais-bancaires" name="frais-bancaires" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
                                     </label>
                                 </div>
@@ -163,146 +163,24 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field" for="vacance">
-                                        <span class="status-label">Vacance (%)</span>
+                                        <span class="status-label">Vacance (%) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux de vacance locative estimé en %. 5 % = environ 18 jours sans locataire par an.">?</button></span>
                                         <input id="vacance" name="vacance" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="copro">
-                                        <span class="status-label">Charges de copro / mois</span>
+                                        <span class="status-label">Charges de copro / mois <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Charges de copropriété mensuelles non récupérables sur le locataire, en €.">?</button></span>
                                         <input id="copro" name="copro" type="number" class="variables-input" min="0" step="10" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="fonciere">
-                                        <span class="status-label">Taxe foncière / an</span>
+                                        <span class="status-label">Taxe foncière / an <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taxe foncière annuelle estimée. Vérifier l'avis le plus récent ou demander au vendeur.">?</button></span>
                                         <input id="fonciere" name="fonciere" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="pno">
-                                        <span class="status-label">Assurance PNO / an</span>
+                                        <span class="status-label">Assurance PNO / an <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Prime d'assurance propriétaire non occupant (PNO) annuelle. Obligatoire en copropriété.">?</button></span>
                                         <input id="pno" name="pno" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="gestion">
-                                        <span class="status-label">Gestion %</span>
+                                        <span class="status-label">Gestion % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Honoraires de gestion locative, en % des loyers perçus. 0 si gestion en direct.">?</button></span>
                                         <input id="gestion" name="gestion" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
-                                    </label>
-                                </div>
-                            </fieldset>
-                                </div>
-                            </div>
-
-                            <div class="accord-section" data-open="false">
-                                <button type="button" class="accord-head" aria-expanded="false">
-                                    <span class="accord-title">Vérifications avant offre</span>
-                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                </button>
-                                <div class="accord-body">
-                                <fieldset class="variables-group">
-                                <div class="variables-grid">
-                                    <label class="variables-field" for="dpe">
-                                        <span class="status-label">DPE</span>
-                                        <select id="dpe" name="dpe" class="variables-input">
-                                            <option value="A">A</option>
-                                            <option value="B">B</option>
-                                            <option value="C">C</option>
-                                            <option value="D">D</option>
-                                            <option value="E">E</option>
-                                            <option value="F">F</option>
-                                            <option value="G">G</option>
-                                        </select>
-                                    </label>
-                                    <label class="variables-field" for="loyer-marche">
-                                        <span class="status-label">Loyer de marché</span>
-                                        <input id="loyer-marche" name="loyer-marche" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
-                                    </label>
-                                    <label class="variables-field" for="copro-risque">
-                                        <span class="status-label">Risque copropriété</span>
-                                        <select id="copro-risque" name="copro-risque" class="variables-input">
-                                            <option value="stable">Stable</option>
-                                            <option value="medium">À surveiller</option>
-                                            <option value="high">Sous tension</option>
-                                        </select>
-                                    </label>
-                                </div>
-                            </fieldset>
-                                </div>
-                            </div>
-
-                            <div class="accord-section" data-open="false">
-                                <button type="button" class="accord-head" aria-expanded="false">
-                                    <span class="accord-title">Fiabilité des hypothèses</span>
-                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                </button>
-                                <div class="accord-body">
-                                <fieldset class="variables-group">
-                                <div class="variables-grid">
-                                    <label class="variables-field" for="source-loyer">
-                                        <span class="status-label">Source du loyer</span>
-                                        <select id="source-loyer" name="source-loyer" class="variables-input">
-                                            <option value="verified">Vérifiée</option>
-                                            <option value="estimated">Estimée</option>
-                                            <option value="unknown">Inconnue</option>
-                                        </select>
-                                    </label>
-                                    <label class="variables-field" for="source-charges">
-                                        <span class="status-label">Source des charges</span>
-                                        <select id="source-charges" name="source-charges" class="variables-input">
-                                            <option value="verified">Vérifiée</option>
-                                            <option value="estimated">Estimée</option>
-                                            <option value="unknown">Inconnue</option>
-                                        </select>
-                                    </label>
-                                    <label class="variables-field" for="source-travaux">
-                                        <span class="status-label">Source des travaux</span>
-                                        <select id="source-travaux" name="source-travaux" class="variables-input">
-                                            <option value="verified">Vérifiée</option>
-                                            <option value="estimated">Estimée</option>
-                                            <option value="unknown">Inconnue</option>
-                                        </select>
-                                    </label>
-                                    <label class="variables-field" for="source-documents">
-                                        <span class="status-label">Source des documents</span>
-                                        <select id="source-documents" name="source-documents" class="variables-input">
-                                            <option value="verified">Vérifiée</option>
-                                            <option value="estimated">Estimée</option>
-                                            <option value="unknown">Inconnue</option>
-                                        </select>
-                                    </label>
-                                </div>
-                            </fieldset>
-                                </div>
-                            </div>
-
-                            <div class="accord-section" data-open="false">
-                                <button type="button" class="accord-head" aria-expanded="false">
-                                    <span class="accord-title">Seuils de décision</span>
-                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                </button>
-                                <div class="accord-body">
-                                <fieldset class="variables-group">
-                                <div class="variables-grid">
-                                    <label class="variables-field" for="seuil-cf-min">
-                                        <span class="status-label">CF minimum / mois</span>
-                                        <input id="seuil-cf-min" name="seuil-cf-min" type="number" class="variables-input" step="25" inputmode="numeric">
-                                    </label>
-                                    <label class="variables-field" for="seuil-dscr-min">
-                                        <span class="status-label">DSCR minimum</span>
-                                        <input id="seuil-dscr-min" name="seuil-dscr-min" type="number" class="variables-input" min="0.5" step="0.05" inputmode="decimal">
-                                    </label>
-                                    <label class="variables-field" for="seuil-vacance-max">
-                                        <span class="status-label">Vacance maximale (%)</span>
-                                        <input id="seuil-vacance-max" name="seuil-vacance-max" type="number" class="variables-input" min="0" step="0.5" inputmode="decimal">
-                                    </label>
-                                    <label class="variables-field" for="seuil-ecart-loyer-max">
-                                        <span class="status-label">Écart max au marché (%)</span>
-                                        <input id="seuil-ecart-loyer-max" name="seuil-ecart-loyer-max" type="number" class="variables-input" min="0" step="1" inputmode="numeric">
-                                    </label>
-                                    <label class="variables-field" for="seuil-effort-max">
-                                        <span class="status-label">Effort maximal du foyer (%)</span>
-                                        <input id="seuil-effort-max" name="seuil-effort-max" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
-                                    </label>
-                                    <label class="variables-field" for="blocage-passoire">
-                                        <span class="status-label">Blocage passoire thermique</span>
-                                        <select id="blocage-passoire" name="blocage-passoire" class="variables-input">
-                                            <option value="yes">Oui</option>
-                                            <option value="no">Non</option>
-                                        </select>
                                     </label>
                                 </div>
                             </fieldset>
@@ -318,7 +196,7 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid variables-grid--single">
                                     <label class="variables-field" for="regime">
-                                        <span class="status-label">Régime</span>
+                                        <span class="status-label">Régime <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Régime fiscal de la location : Micro-foncier (abattement 30 %), Réel (déduction charges réelles), SCI IS (imposition société).">?</button></span>
                                         <select id="regime" name="regime" class="variables-input">
                                             <option value="micro-foncier">Micro-foncier</option>
                                             <option value="reel">Foncier réel</option>
@@ -330,22 +208,152 @@
                                 </div>
                             </div>
 
+                            <div class="form-advanced-sep" aria-hidden="true">
+                                <span>Paramètres avancés</span>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Vérifications avant offre</span>
+                                    <span class="accord-badge">Avancé</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="dpe">
+                                        <span class="status-label">DPE <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Classe énergétique du bien. Les passoires thermiques (F, G) seront soumises à restrictions de location d'ici 2025–2028.">?</button></span>
+                                        <select id="dpe" name="dpe" class="variables-input">
+                                            <option value="A">A</option>
+                                            <option value="B">B</option>
+                                            <option value="C">C</option>
+                                            <option value="D">D</option>
+                                            <option value="E">E</option>
+                                            <option value="F">F</option>
+                                            <option value="G">G</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="loyer-marche">
+                                        <span class="status-label">Loyer de marché <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Loyer de marché constaté dans le secteur pour un bien comparable. Permet de vérifier la cohérence du loyer prévu.">?</button></span>
+                                        <input id="loyer-marche" name="loyer-marche" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="copro-risque">
+                                        <span class="status-label">Risque copropriété <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Niveau de risque de la copropriété : stable = charges maîtrisées, medium = travaux prévisibles, high = situation dégradée.">?</button></span>
+                                        <select id="copro-risque" name="copro-risque" class="variables-input">
+                                            <option value="stable">Stable</option>
+                                            <option value="medium">À surveiller</option>
+                                            <option value="high">Sous tension</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Fiabilité des hypothèses</span>
+                                    <span class="accord-badge">Avancé</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="source-loyer">
+                                        <span class="status-label">Source du loyer <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Fiabilité de l'estimation du loyer : vérifié = annonces réelles récentes, estimé = approximation, inconnu = à vérifier.">?</button></span>
+                                        <select id="source-loyer" name="source-loyer" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="source-charges">
+                                        <span class="status-label">Source des charges <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Fiabilité des charges renseignées : vérifié = documents comptables, estimé = approximation, inconnu = à vérifier.">?</button></span>
+                                        <select id="source-charges" name="source-charges" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="source-travaux">
+                                        <span class="status-label">Source des travaux <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Fiabilité du budget travaux : vérifié = devis obtenu, estimé = estimation visuelle, inconnu = non évalué.">?</button></span>
+                                        <select id="source-travaux" name="source-travaux" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="source-documents">
+                                        <span class="status-label">Source des documents <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Qualité des documents fournis par le vendeur (PV AG, charges, diagnostics) : vérifié, estimé ou inconnu.">?</button></span>
+                                        <select id="source-documents" name="source-documents" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Seuils de décision</span>
+                                    <span class="accord-badge">Avancé</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="seuil-cf-min">
+                                        <span class="status-label">CF minimum / mois <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Cash-flow mensuel net minimum acceptable, en €. En dessous de ce seuil, le verdict vire à négatif.">?</button></span>
+                                        <input id="seuil-cf-min" name="seuil-cf-min" type="number" class="variables-input" step="25" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="seuil-dscr-min">
+                                        <span class="status-label">DSCR minimum <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="DSCR minimum (ratio loyer / mensualité). 1,0 = autofinancement, 1,2 = recommandé pour marge de sécurité.">?</button></span>
+                                        <input id="seuil-dscr-min" name="seuil-dscr-min" type="number" class="variables-input" min="0.5" step="0.05" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="seuil-vacance-max">
+                                        <span class="status-label">Vacance maximale (%) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux de vacance maximum toléré, en %. Au-delà, le bien est considéré trop risqué.">?</button></span>
+                                        <input id="seuil-vacance-max" name="seuil-vacance-max" type="number" class="variables-input" min="0" step="0.5" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="seuil-ecart-loyer-max">
+                                        <span class="status-label">Écart max au marché (%) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Écart maximum accepté entre loyer prévu et loyer de marché, en %. Détecte les loyers surévalués.">?</button></span>
+                                        <input id="seuil-ecart-loyer-max" name="seuil-ecart-loyer-max" type="number" class="variables-input" min="0" step="1" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="seuil-effort-max">
+                                        <span class="status-label">Effort maximal du foyer (%) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'effort maximum (mensualité / revenus nets), en %. Limite l'endettement personnel.">?</button></span>
+                                        <input id="seuil-effort-max" name="seuil-effort-max" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="blocage-passoire">
+                                        <span class="status-label">Blocage passoire thermique <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Si activé, un DPE F ou G bloque automatiquement le verdict à négatif, quelle que soit la rentabilité.">?</button></span>
+                                        <select id="blocage-passoire" name="blocage-passoire" class="variables-input">
+                                            <option value="yes">Oui</option>
+                                            <option value="no">Non</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
                             <div class="accord-section" data-open="false">
                                 <button type="button" class="accord-head" aria-expanded="false">
                                     <span class="accord-title">Journal de décision</span>
+                                    <span class="accord-badge">Avancé</span>
                                     <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                                 </button>
                                 <div class="accord-body">
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field variables-field--wide" for="decision-thesis">
-                                        <span class="status-label">Thèse d'investissement <span class="field-required" aria-hidden="true">*</span></span>
+                                        <span class="status-label">Thèse d'investissement <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Résumez en quelques mots pourquoi vous étudiez ce bien. Requis pour enregistrer le dossier (20 caractères min).">?</button></span>
                                         <span id="decision-thesis-help" class="field-assist">Champ requis pour enregistrer le dossier. Résumez la logique d'achat en au moins 20 caractères.</span>
                                         <textarea id="decision-thesis" name="decision-thesis" class="variables-input variables-textarea" rows="4" aria-required="true" aria-describedby="decision-thesis-help decision-thesis-error"></textarea>
                                         <span id="decision-thesis-error" class="field-error" aria-live="polite" hidden></span>
                                     </label>
                                     <label class="variables-field variables-field--wide" for="decision-next-step">
-                                        <span class="status-label">Prochaine étape <span class="field-required" aria-hidden="true">*</span></span>
+                                        <span class="status-label">Prochaine étape <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Prochaine action concrète à mener sur ce dossier (visite, devis, offre…). Requis pour enregistrer (10 caractères min).">?</button></span>
                                         <span id="decision-next-step-help" class="field-assist">Champ requis pour enregistrer le dossier. Indiquez la prochaine étape concrète en au moins 10 caractères.</span>
                                         <textarea id="decision-next-step" name="decision-next-step" class="variables-input variables-textarea" rows="3" aria-required="true" aria-describedby="decision-next-step-help decision-next-step-error"></textarea>
                                         <span id="decision-next-step-error" class="field-error" aria-live="polite" hidden></span>
