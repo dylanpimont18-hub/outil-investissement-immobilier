@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Analysis Hero</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #09090b;
+  color: #f4f4f5;
+  font-family: -apple-system, 'Inter', sans-serif;
+  font-size: 13px;
+  padding: 24px;
+}
+h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; color: #fff; }
+.subtitle { color: #71717a; font-size: 13px; margin-bottom: 28px; }
+
+.options-row { display: flex; gap: 20px; flex-wrap: wrap; }
+
+.opt {
+  flex: 1; min-width: 260px; max-width: 360px;
+  border: 2px solid #27272a; border-radius: 14px; overflow: hidden;
+  cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; background: #111113;
+}
+.opt:hover { border-color: #D4AF37; }
+.opt.selected { border-color: #D4AF37; box-shadow: 0 0 0 1px #D4AF37; }
+
+.opt-preview { background: #0d0d10; padding: 20px; }
+.opt-label { padding: 14px 16px; border-top: 1px solid #1c1c1f; }
+.opt-label h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.opt-label p { font-size: 11px; color: #71717a; line-height: 1.5; }
+
+/* ── OPTION A : Gauge circulaire SVG ── */
+.gauge-wrap { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.gauge-svg { flex-shrink: 0; }
+.gauge-info h4 { font-size: 22px; font-weight: 800; font-family: 'Courier New', monospace; color: #D4AF37; line-height: 1; }
+.gauge-info .verdict { font-size: 12px; font-weight: 600; color: #4ade80; margin-top: 2px; }
+.gauge-info .verdict-label { font-size: 10px; color: #52525b; margin-top: 1px; }
+
+.kpi-row-a { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+.kpi-a {
+  background: #18181b; border: 1px solid #27272a; border-radius: 8px;
+  padding: 8px 10px;
+}
+.kpi-a .kv { font-size: 16px; font-family: 'Courier New', monospace; font-weight: 700; color: #D4AF37; line-height: 1; }
+.kpi-a .kv.green { color: #4ade80; }
+.kpi-a .kv.red { color: #f87171; }
+.kpi-a .kl { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 4px; }
+.kpi-a .kbar { height: 2px; background: #27272a; border-radius: 1px; margin-top: 6px; overflow: hidden; }
+.kpi-a .kbar-fill { height: 100%; border-radius: 1px; background: #D4AF37; }
+
+/* ── OPTION B : Score banner + KPI grid ── */
+.score-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(135deg, rgba(212,175,55,0.08), rgba(212,175,55,0.02));
+  border: 1px solid rgba(212,175,55,0.2); border-radius: 10px;
+  padding: 14px 18px; margin-bottom: 14px;
+}
+.score-left .score-num { font-size: 52px; font-family: 'Courier New', monospace; font-weight: 900; color: #D4AF37; line-height: 1; }
+.score-left .score-denom { font-size: 18px; color: #52525b; }
+.score-right { text-align: right; }
+.score-right .verdict-big { font-size: 16px; font-weight: 700; color: #4ade80; }
+.score-right .verdict-sub { font-size: 11px; color: #52525b; margin-top: 2px; }
+.score-bar { height: 3px; background: #27272a; border-radius: 2px; margin-bottom: 14px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #D4AF37 0%, #4ade80 100%); width: 82%; }
+
+.kpi-row-b { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi-b {
+  background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.kpi-b .kpi-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.kpi-b .kpi-body .kv2 { font-size: 15px; font-family: 'Courier New', monospace; font-weight: 700; color: #D4AF37; }
+.kpi-b .kpi-body .kv2.green { color: #4ade80; }
+.kpi-b .kpi-body .kl2 { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; }
+
+/* ── OPTION C : Terminal-style ── */
+.terminal-header {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 12px;
+}
+.terminal-header .dot { width: 8px; height: 8px; border-radius: 50%; }
+.terminal-header .title-t { font-size: 10px; color: #52525b; letter-spacing: 1px; text-transform: uppercase; }
+.terminal-body { font-family: 'Courier New', monospace; font-size: 12px; }
+.t-line { padding: 2px 0; }
+.t-key { color: #52525b; }
+.t-val { color: #f4f4f5; }
+.t-val.gold { color: #D4AF37; font-weight: 700; }
+.t-val.green { color: #4ade80; font-weight: 700; }
+.t-val.red { color: #f87171; }
+.t-sep { border: none; border-top: 1px solid #27272a; margin: 8px 0; }
+.score-terminal {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #27272a;
+}
+.score-t-num { font-size: 40px; font-weight: 900; color: #D4AF37; font-family: 'Courier New', monospace; line-height: 1; }
+.score-t-bar { flex: 1; margin: 0 14px; }
+.score-t-bar-bg { height: 6px; background: #27272a; border-radius: 3px; overflow: hidden; }
+.score-t-bar-fill { height: 100%; width: 82%; background: #D4AF37; border-radius: 3px; }
+.score-t-badge { font-size: 10px; font-weight: 700; color: #09090b; background: #4ade80; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+
+.recommend-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: #D4AF37; background: rgba(212,175,55,0.12);
+  border: 1px solid rgba(212,175,55,0.3); border-radius: 20px; padding: 2px 8px; margin-bottom: 6px;
+}
+.section-note { font-size: 12px; color: #52525b; margin-top: 28px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h2>Section 2 — Panneau d'analyse : score & KPIs</h2>
+<p class="subtitle">Comment voulez-vous que le verdict et les métriques clés soient présentés ?</p>
+
+<div class="options-row">
+
+  <!-- A : Gauge SVG -->
+  <div class="opt" onclick="select(this,'gauge')">
+    <div class="opt-preview">
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" width="72" height="72" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="28" fill="none" stroke="#27272a" stroke-width="6"/>
+          <circle cx="36" cy="36" r="28" fill="none" stroke="#D4AF37" stroke-width="6"
+            stroke-dasharray="144 176" stroke-dashoffset="44" stroke-linecap="round"
+            transform="rotate(-90 36 36)"/>
+          <text x="36" y="40" text-anchor="middle" fill="#D4AF37" font-size="16" font-weight="900" font-family="Courier New">82</text>
+        </svg>
+        <div class="gauge-info">
+          <h4>82<span style="font-size:14px;color:#52525b;">/100</span></h4>
+          <div class="verdict">● Positif</div>
+          <div class="verdict-label">Score de décision</div>
+        </div>
+      </div>
+      <div class="kpi-row-a">
+        <div class="kpi-a">
+          <div class="kv">5.2%</div>
+          <div class="kl">Nette</div>
+          <div class="kbar"><div class="kbar-fill" style="width:65%"></div></div>
+        </div>
+        <div class="kpi-a">
+          <div class="kv green">+180€</div>
+          <div class="kl">CF/mois</div>
+          <div class="kbar"><div class="kbar-fill" style="width:72%;background:#4ade80"></div></div>
+        </div>
+        <div class="kpi-a">
+          <div class="kv">1.28</div>
+          <div class="kl">DSCR</div>
+          <div class="kbar"><div class="kbar-fill" style="width:80%"></div></div>
+        </div>
+        <div class="kpi-a">
+          <div class="kv">18.4</div>
+          <div class="kl">GRM</div>
+          <div class="kbar"><div class="kbar-fill" style="width:55%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-label">
+      <div class="recommend-badge">★ Recommandé</div>
+      <h3>A — Gauge SVG + barres de progression</h3>
+      <p>Cadran circulaire animé pour le score, 4 KPIs avec mini-barres de progression. Lecture immédiate, très "outil de précision".</p>
+    </div>
+  </div>
+
+  <!-- B : Score banner -->
+  <div class="opt" onclick="select(this,'banner')">
+    <div class="opt-preview">
+      <div class="score-banner">
+        <div class="score-left">
+          <span class="score-num">82</span><span class="score-denom">/100</span>
+        </div>
+        <div class="score-right">
+          <div class="verdict-big">Positif</div>
+          <div class="verdict-sub">Score de décision</div>
+        </div>
+      </div>
+      <div class="score-bar"><div class="score-bar-fill"></div></div>
+      <div class="kpi-row-b">
+        <div class="kpi-b">
+          <div class="kpi-icon" style="background:rgba(212,175,55,0.1)">📈</div>
+          <div class="kpi-body"><div class="kv2">5.2%</div><div class="kl2">Rentabilité nette</div></div>
+        </div>
+        <div class="kpi-b">
+          <div class="kpi-icon" style="background:rgba(74,222,128,0.1)">💶</div>
+          <div class="kpi-body"><div class="kv2 green">+180€</div><div class="kl2">Cash-flow net</div></div>
+        </div>
+        <div class="kpi-b">
+          <div class="kpi-icon" style="background:rgba(147,197,253,0.1)">🏦</div>
+          <div class="kpi-body"><div class="kv2" style="color:#93c5fd">1.28</div><div class="kl2">DSCR</div></div>
+        </div>
+        <div class="kpi-b">
+          <div class="kpi-icon" style="background:rgba(212,175,55,0.1)">📊</div>
+          <div class="kpi-body"><div class="kv2">18.4</div><div class="kl2">GRM</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-label">
+      <h3>B — Bannière score + KPIs avec icônes</h3>
+      <p>Score très grand en vedette, barre de progression pleine largeur, KPIs en 2 colonnes avec icônes colorées. Moderne, lisible d'un coup d'œil.</p>
+    </div>
+  </div>
+
+  <!-- C : Terminal -->
+  <div class="opt" onclick="select(this,'terminal')">
+    <div class="opt-preview">
+      <div class="terminal-header">
+        <div class="dot" style="background:#ff5f57"></div>
+        <div class="dot" style="background:#febc2e"></div>
+        <div class="dot" style="background:#28c840"></div>
+        <span class="title-t" style="margin-left:6px">analyse · dossier-01</span>
+      </div>
+      <div class="terminal-body">
+        <div class="score-terminal">
+          <div class="score-t-num">82</div>
+          <div class="score-t-bar">
+            <div class="score-t-bar-bg"><div class="score-t-bar-fill"></div></div>
+          </div>
+          <div class="score-t-badge">Positif</div>
+        </div>
+        <div class="t-line"><span class="t-key">rentabilite_nette  </span><span class="t-val gold">5.20%</span></div>
+        <div class="t-line"><span class="t-key">cash_flow_mensuel  </span><span class="t-val green">+180 €</span></div>
+        <div class="t-line"><span class="t-key">dscr               </span><span class="t-val gold">1.28</span></div>
+        <div class="t-line"><span class="t-key">grm                </span><span class="t-val">18.4</span></div>
+        <hr class="t-sep">
+        <div class="t-line"><span class="t-key">stress_loyer_-10%  </span><span class="t-val red">-42 €/mois</span></div>
+        <div class="t-line"><span class="t-key">stress_taux_+1pt   </span><span class="t-val gold">+91 €/mois</span></div>
+      </div>
+    </div>
+    <div class="opt-label">
+      <h3>C — Style terminal data</h3>
+      <p>Interface type CLI/terminal avec données alignées en colonnes. Maximum de densité. Excellent pour les profils très techniques mais moins "premium dashboard".</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="section-note">Cliquez pour sélectionner, puis confirmez dans le terminal.</p>
+
+<script>
+function select(el, choice) {
+  document.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  try {
+    if (window.parent && window.parent.__recordChoice) window.parent.__recordChoice(choice, el.querySelector('h3').textContent);
+  } catch(e) {}
+}
+</script>
+</body>
+</html>

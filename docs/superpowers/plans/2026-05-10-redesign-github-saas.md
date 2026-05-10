@@ -1,0 +1,2282 @@
+# Redesign GitHub SaaS — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Réécrire `styles.css` de zéro et mettre à jour les fonts dans `index.html` pour adopter le design system GitHub SaaS (Inter + Space Grotesk, bleu primaire, or pour métriques).
+
+**Architecture:** Réécriture complète de `styles.css` en conservant tous les noms de classes existants. Seul `index.html` est touché pour le `<link>` Google Fonts. Aucune modification de `main.js`, `calculs.js`, `ui.js`, ou `pdf.js`.
+
+**Tech Stack:** CSS custom properties, Google Fonts (Inter + Space Grotesk), vanilla CSS
+
+---
+
+## Observation préalable
+
+`ui.js` référence `var(--success-color)`, `var(--danger-color)`, `var(--primary-color)` qui n'existent pas dans le CSS actuel. Ces aliases doivent être définis dans le nouveau `:root` pour que les composants de `ui.js` fonctionnent correctement.
+
+---
+
+## Task 1 : Mettre à jour les fonts dans index.html
+
+**Files:**
+- Modify: `index.html` (ligne `<link>` Google Fonts, ~ligne 7)
+
+- [ ] **Step 1 : Ouvrir index.html et repérer la balise Google Fonts**
+
+```bash
+grep -n "fonts.googleapis" index.html
+```
+
+- [ ] **Step 2 : Remplacer le lien Google Fonts**
+
+Remplacer la ligne existante qui charge Cormorant Garamond / IBM Plex Mono / Manrope par :
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+```
+
+- [ ] **Step 3 : Vérifier visuellement**
+
+Ouvrir `index.html` dans le navigateur (`python -m http.server 8080` puis `http://localhost:8080`).
+Vérifier dans DevTools → Elements → Computed que `font-family` sur `body` charge Inter.
+
+- [ ] **Step 4 : Commit**
+
+```bash
+git add index.html
+git commit -m "style: swap Google Fonts to Inter + Space Grotesk"
+```
+
+---
+
+## Task 2 : Tokens globaux — :root + thèmes
+
+**Files:**
+- Modify: `styles.css` (lignes 1–63, section tokens)
+
+Cette tâche remplace **uniquement** le bloc `:root`, `html[data-theme='light']` et `html[data-theme='dark']`. Le reste du fichier est inchangé pour l'instant.
+
+- [ ] **Step 1 : Remplacer le bloc tokens (lignes 1–63 de styles.css)**
+
+```css
+/* ── Tokens globaux ── */
+:root {
+    --font-heading: 'Space Grotesk', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    /* Alias pour compatibilité ui.js */
+    --font-display: 'Space Grotesk', system-ui, sans-serif;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 12px;
+    --radius-panel: 12px;
+    --radius-card: 12px;
+    --radius-control: 8px;
+    --radius-pill: 20px;
+}
+
+html[data-theme='light'] {
+    --bg: #F6F8FA;
+    --surface: #FFFFFF;
+    --surface-strong: #F6F8FA;
+    --text: #1C2128;
+    --muted: #57606A;
+    --muted-strong: #424A53;
+    --border: #D0D7DE;
+    --border-subtle: #E8EDF3;
+
+    /* Primaire (actions, focus, tabs actifs) */
+    --primary: #3B82F6;
+    --primary-soft: rgba(59, 130, 246, 0.10);
+
+    /* Or (métriques clés, KPIs, prix plafond) */
+    --accent: #A8832A;
+    --accent-strong: #7D6020;
+    --accent-soft: rgba(168, 131, 42, 0.10);
+    --accent-gold: #A8832A;
+    --accent-gold-dim: rgba(168, 131, 42, 0.08);
+    --accent-gold-border: rgba(168, 131, 42, 0.25);
+    --glow: rgba(168, 131, 42, 0.10);
+
+    /* Status */
+    --success: #2DA44E;
+    --danger: #CF222E;
+    --watch: #9A6700;
+    --neutral: #57606A;
+    --principal: #3B82F6;
+
+    /* Aliases ui.js */
+    --success-color: #2DA44E;
+    --danger-color: #CF222E;
+    --primary-color: #3B82F6;
+
+    /* Shadows */
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.06);
+    --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.10);
+}
+
+html[data-theme='dark'] {
+    --bg: #0D1117;
+    --surface: #161B22;
+    --surface-strong: #21262D;
+    --text: #E6EDF3;
+    --muted: #8B949E;
+    --muted-strong: #B1BAC4;
+    --border: #30363D;
+    --border-subtle: #21262D;
+
+    /* Primaire */
+    --primary: #3B82F6;
+    --primary-soft: rgba(59, 130, 246, 0.12);
+
+    /* Or */
+    --accent: #C9A84C;
+    --accent-strong: #C9A84C;
+    --accent-soft: rgba(201, 168, 76, 0.12);
+    --accent-gold: #C9A84C;
+    --accent-gold-dim: rgba(201, 168, 76, 0.08);
+    --accent-gold-border: rgba(201, 168, 76, 0.28);
+    --glow: rgba(201, 168, 76, 0.12);
+
+    /* Status */
+    --success: #3FB950;
+    --danger: #F85149;
+    --watch: #E3B341;
+    --neutral: #8B949E;
+    --principal: #3B82F6;
+
+    /* Aliases ui.js */
+    --success-color: #3FB950;
+    --danger-color: #F85149;
+    --primary-color: #3B82F6;
+
+    /* Shadows */
+    --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.40);
+    --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.60);
+}
+```
+
+- [ ] **Step 2 : Vérifier que les couleurs s'appliquent**
+
+Ouvrir `http://localhost:8080`. L'app doit avoir le fond GitHub (#0D1117 en dark). Si certains composants semblent cassés, c'est normal — les autres tasks corrigeront cela.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite design tokens — GitHub SaaS palette + Inter/Space Grotesk"
+```
+
+---
+
+## Task 3 : Base, reset, body, topbar, workspace-tabs
+
+**Files:**
+- Modify: `styles.css` (lignes 64–236)
+
+- [ ] **Step 1 : Remplacer les sections reset → workspace-tabs**
+
+```css
+/* ── Reset ── */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+[hidden] { display: none !important; }
+
+html, body {
+    min-height: 100%;
+    overflow-x: clip;
+}
+
+html {
+    scroll-padding-top: 64px;
+}
+
+body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+body.modal-open { overflow: hidden; }
+
+body.panel-analysis .workspace-tabs { display: none; }
+body.panel-analysis #collection-panel { display: none; }
+
+/* ── Shell ── */
+.shell {
+    position: relative;
+    z-index: 1;
+    width: min(1380px, calc(100% - 40px));
+    margin: 0 auto;
+    padding-top: 52px;
+}
+
+/* ── Workspace ── */
+.workspace {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ── Topbar ── */
+.topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+}
+
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.topbar-logo img {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: block;
+}
+
+.topbar-name {
+    font-family: var(--font-heading);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.topbar-study {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.topbar-study-chip {
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 3px 10px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topbar-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.topbar-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--font-body);
+    white-space: nowrap;
+    transition: border-color 150ms, color 150ms, background 150ms;
+}
+
+.topbar-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+/* ── Workspace tabs ── */
+.workspace-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    width: fit-content;
+}
+
+.workspace-tab {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 14px;
+    border-radius: calc(var(--radius-pill) - 4px);
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 150ms, color 150ms;
+}
+
+.workspace-tab.is-active {
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+}
+
+.workspace-tab:hover:not(.is-active) {
+    color: var(--text);
+    background: var(--primary-soft);
+}
+
+@keyframes tabFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+```
+
+- [ ] **Step 2 : Vérifier la topbar**
+
+`http://localhost:8080` — topbar doit avoir fond semi-transparent, boutons avec hover bleu.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite base reset, topbar, workspace-tabs"
+```
+
+---
+
+## Task 4 : Formulaire — accordéons, inputs, labels
+
+**Files:**
+- Modify: `styles.css` (lignes 242–383)
+
+- [ ] **Step 1 : Remplacer les sections accordéon + inputs**
+
+```css
+/* ── Accordéon formulaire ── */
+.accord-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.accord-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface-strong);
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text);
+    transition: background 150ms;
+}
+
+.accord-head:hover {
+    background: var(--primary-soft);
+}
+
+.accord-title {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+}
+
+.accord-chevron {
+    color: var(--muted);
+    flex-shrink: 0;
+    transition: transform 250ms ease-out;
+}
+
+.accord-section[data-open="true"] .accord-chevron {
+    transform: rotate(180deg);
+}
+
+.accord-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 250ms ease-out;
+}
+
+.accord-section[data-open="true"] .accord-body {
+    grid-template-rows: 1fr;
+}
+
+.accord-body > fieldset {
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+    border: none;
+    background: var(--surface);
+}
+
+.accord-body .variables-grid {
+    padding: 12px 14px;
+}
+
+.variables-group {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* ── Grille formulaire ── */
+.variables-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.variables-grid--single {
+    grid-template-columns: 1fr;
+}
+
+.variables-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.variables-field--wide {
+    grid-column: 1 / -1;
+}
+
+/* ── Labels ── */
+.status-label {
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--muted);
+}
+
+/* ── Inputs ── */
+.variables-input {
+    height: 32px;
+    padding: 0 10px;
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    outline: none;
+    transition: border-color 200ms, box-shadow 200ms;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.variables-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.variables-input[aria-invalid='true'] {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(207, 34, 46, 0.12);
+}
+
+.variables-textarea {
+    height: auto;
+    min-height: 72px;
+    padding: 8px 10px;
+    resize: vertical;
+}
+
+.field-assist {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.field-error {
+    font-size: 10px;
+    color: var(--danger);
+}
+
+.field-required {
+    color: var(--danger);
+}
+
+/* ── Context strip ── */
+.context-strip {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--primary);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.variables-form {
+    display: grid;
+    gap: 6px;
+}
+```
+
+- [ ] **Step 2 : Vérifier les inputs**
+
+Ouvrir l'app, cliquer dans un champ — le focus doit afficher un ring bleu (`#3B82F6`).
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite form inputs, accordions — blue focus ring"
+```
+
+---
+
+## Task 5 : Boutons et actions
+
+**Files:**
+- Modify: `styles.css` (section boutons, ~lignes 388–432 et 952–970)
+
+- [ ] **Step 1 : Remplacer toutes les règles de boutons**
+
+```css
+/* ── Boutons formulaire ── */
+.asset-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 12px;
+}
+
+.toolbar-button {
+    padding: 7px 14px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: opacity 150ms, border-color 150ms, background 150ms, color 150ms;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.toolbar-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Bouton primaire (or) — Sauvegarder étude */
+#save-comparison,
+#save-portfolio,
+#profile-save {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+}
+
+html[data-theme='light'] #save-comparison,
+html[data-theme='light'] #save-portfolio,
+html[data-theme='light'] #profile-save {
+    color: #1C2128;
+}
+
+#save-comparison:hover,
+#save-portfolio:hover,
+#profile-save:hover {
+    opacity: 0.88;
+}
+
+/* Boutons secondaires */
+#new-asset,
+#export-decision-pdf {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--muted);
+}
+
+#new-asset:hover,
+#export-decision-pdf:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+/* ── Toolbar select ── */
+.toolbar-select {
+    min-width: 190px;
+    appearance: none;
+}
+
+/* ── Table action buttons ── */
+.table-action {
+    min-height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-strong);
+    color: var(--muted);
+    padding: 0 14px;
+    font-family: var(--font-body);
+    font-size: 0.74rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 150ms, color 150ms, background 150ms;
+}
+
+.table-action:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+```
+
+- [ ] **Step 2 : Vérifier les boutons**
+
+Les boutons "Sauvegarder" doivent être dorés, les boutons secondaires gris avec hover bleu.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite buttons — gold primary, blue secondary hover"
+```
+
+---
+
+## Task 6 : Panels layout (workspace, variables, analysis)
+
+**Files:**
+- Modify: `styles.css` (lignes 650–1060 environ)
+
+- [ ] **Step 1 : Remplacer les sections panels**
+
+```css
+/* ── Workspace layout ── */
+.workspace-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+}
+
+.workspace-board {
+    display: grid;
+    grid-template-columns: 42% 1fr;
+    gap: 12px;
+    align-items: start;
+}
+
+.workspace-board[data-layout="1"] {
+    grid-template-columns: 1fr;
+}
+
+.variables-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--shadow-soft);
+    position: sticky;
+    top: 68px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.analysis-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: var(--shadow-soft);
+    overflow: visible;
+}
+
+.variables-panel::-webkit-scrollbar { width: 4px; }
+.variables-panel::-webkit-scrollbar-track { background: transparent; }
+.variables-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.workspace-panel,
+.variables-panel,
+.analysis-panel {
+    padding: 24px;
+    position: relative;
+}
+
+.workspace-panel {
+    padding: 30px;
+}
+
+.variables-panel,
+.analysis-panel {
+    min-width: 0;
+}
+
+.workspace-board > *,
+.analysis-grid > *,
+.analysis-columns > *,
+.analysis-visuals > *,
+.analysis-tables > *,
+.analysis-forward > * {
+    min-width: 0;
+}
+
+/* ── Brand / Hero screen ── */
+.brand {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    max-width: 760px;
+    padding-right: 14px;
+}
+
+.brand-logo {
+    position: relative;
+    overflow: hidden;
+    width: min(360px, 100%);
+    margin: 0;
+    padding: 14px 18px 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.brand-logo img {
+    display: block;
+    width: 100%;
+    height: auto;
+    position: relative;
+    z-index: 1;
+}
+
+.brand-kicker,
+.status-label,
+.screen-kicker {
+    font-family: var(--font-body);
+    font-size: 0.74rem;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.topbar .brand-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 0;
+    color: var(--accent);
+}
+
+.topbar .brand-kicker::before {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: var(--accent-gold-border);
+}
+
+.brand h1,
+.panel-head h2,
+.screen-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.brand h1 {
+    max-width: 11ch;
+    font-size: clamp(3.1rem, 5.6vw, 6rem);
+    line-height: 0.86;
+    text-wrap: balance;
+}
+
+.brand-note,
+.panel-subtitle,
+.panel-note,
+.screen-copy,
+.screen-list {
+    color: var(--muted);
+}
+
+.brand-note {
+    margin-top: 2px;
+    max-width: 60ch;
+    padding-left: 20px;
+    border-left: 2px solid var(--primary);
+    line-height: 1.8;
+    font-size: 1.08rem;
+}
+
+.brand-highlights {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+    max-width: 820px;
+}
+
+.brand-pill {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 68px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.71rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    box-shadow: var(--shadow-soft);
+}
+
+.brand-pill::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex: none;
+}
+
+.brand-ledger {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 2px;
+    max-width: 820px;
+}
+
+.brand-ledger-item {
+    display: grid;
+    gap: 8px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.brand-ledger-item span {
+    font-family: var(--font-body);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.brand-ledger-item strong {
+    font-size: 0.96rem;
+    font-family: var(--font-heading);
+    line-height: 1.4;
+}
+
+/* ── Toolbar dock (écran accueil) ── */
+.toolbar-dock {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    align-content: start;
+    gap: 22px;
+    align-self: end;
+    padding: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.toolbar-copy {
+    display: grid;
+    gap: 12px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.toolbar-kicker {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.toolbar-note {
+    color: var(--muted);
+    line-height: 1.72;
+    font-size: 1rem;
+}
+
+.toolbar {
+    display: grid;
+    gap: 12px;
+    margin-left: 0;
+}
+
+/* ── Status items (accueil) ── */
+.status-item {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.status-item strong {
+    font-family: var(--font-heading);
+    font-size: 1.46rem;
+    line-height: 0.94;
+    letter-spacing: -0.02em;
+}
+
+/* ── Panel head ── */
+.panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 18px;
+}
+
+.panel-head h2,
+.panel-head h3 {
+    font-family: var(--font-heading);
+    font-size: 1.4rem;
+    line-height: 1.1;
+    font-weight: 700;
+}
+
+.panel-subtitle {
+    max-width: 50ch;
+    text-align: right;
+    line-height: 1.75;
+}
+
+.panel-note {
+    margin-top: 8px;
+    line-height: 1.75;
+}
+
+.panel-head--stacked {
+    display: none;
+}
+
+.workspace-panel > .panel-head {
+    display: none;
+}
+```
+
+- [ ] **Step 2 : Vérifier les panels**
+
+Les panels doivent avoir fond `#161B22` (dark) / `#FFFFFF` (light), bordures fines, sans les dégradés shimmer.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite panel layouts — flat GitHub-style cards"
+```
+
+---
+
+## Task 7 : Score, verdict, KPI cards, badges
+
+**Files:**
+- Modify: `styles.css` (sections score-hero, kpi-card, decision-badge, buybox, analysis-sticky)
+
+- [ ] **Step 1 : Remplacer les sections score + KPI + badges**
+
+```css
+/* ── Score gauge SVG ── */
+.score-hero {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 12px;
+}
+
+.score-gauge { flex-shrink: 0; }
+
+.gauge-track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 8;
+}
+
+.gauge-fill {
+    fill: none;
+    stroke: var(--accent-gold);
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 289;
+    transform: rotate(-90deg);
+    transform-origin: 60px 60px;
+    transition: stroke-dashoffset 600ms ease-out, stroke 300ms;
+}
+
+.gauge-fill--excellent { stroke: var(--success); }
+.gauge-fill--positive  { stroke: var(--accent-gold); }
+.gauge-fill--neutral   { stroke: var(--muted); }
+.gauge-fill--watch     { stroke: var(--watch); }
+.gauge-fill--negative  { stroke: var(--danger); }
+
+.gauge-number {
+    font-family: var(--font-heading);
+    font-size: 26px;
+    font-weight: 700;
+    fill: var(--accent-gold);
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+.score-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.score-verdict {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-gold);
+}
+
+.score-verdict--excellent { color: var(--success); }
+.score-verdict--positive  { color: var(--accent-gold); }
+.score-verdict--neutral   { color: var(--muted); }
+.score-verdict--watch     { color: var(--watch); }
+.score-verdict--negative  { color: var(--danger); }
+
+.score-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+/* ── KPI cards ── */
+.analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    transition: border-color 150ms;
+}
+
+.kpi-card:hover { border-color: var(--primary); }
+
+.kpi-value {
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent-gold);
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.kpi-value.is-excellent, .kpi-value.is-positive { color: var(--success); }
+.kpi-value.is-negative  { color: var(--danger); }
+.kpi-value.is-watch     { color: var(--watch); }
+.kpi-value.is-neutral   { color: var(--muted); }
+
+.kpi-label {
+    font-family: var(--font-body);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.kpi-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.kpi-bar-fill {
+    height: 100%;
+    width: var(--pct, 0%);
+    background: var(--primary);
+    border-radius: 2px;
+    transition: width 400ms ease-out;
+}
+
+/* ── Decision badges ── */
+.decision-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid;
+    transition: background 300ms, color 300ms, border-color 300ms;
+}
+
+.decision-badge--excellent {
+    background: rgba(63, 185, 80, 0.12);
+    color: var(--success);
+    border-color: rgba(63, 185, 80, 0.3);
+}
+.decision-badge--positive {
+    background: var(--accent-gold-dim);
+    color: var(--accent-gold);
+    border-color: var(--accent-gold-border);
+}
+.decision-badge--neutral {
+    background: rgba(139, 148, 158, 0.10);
+    color: var(--muted);
+    border-color: rgba(139, 148, 158, 0.25);
+}
+.decision-badge--watch {
+    background: rgba(227, 179, 65, 0.12);
+    color: var(--watch);
+    border-color: rgba(227, 179, 65, 0.30);
+}
+.decision-badge--negative {
+    background: rgba(248, 81, 73, 0.12);
+    color: var(--danger);
+    border-color: rgba(248, 81, 73, 0.30);
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid;
+}
+
+.status-pill--excellent { background: rgba(63,185,80,0.12);   color: var(--success); border-color: rgba(63,185,80,0.3); }
+.status-pill--positive  { background: var(--accent-gold-dim); color: var(--accent-gold); border-color: var(--accent-gold-border); }
+.status-pill--neutral   { background: rgba(139,148,158,0.10); color: var(--muted);    border-color: rgba(139,148,158,0.25); }
+.status-pill--watch     { background: rgba(227,179,65,0.12);  color: var(--watch);    border-color: rgba(227,179,65,0.30); }
+.status-pill--negative  { background: rgba(248,81,73,0.12);   color: var(--danger);   border-color: rgba(248,81,73,0.30); }
+
+/* ── Analyse sections ── */
+.analysis-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+}
+
+.analysis-block h4 {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 12px;
+}
+
+.analysis-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.analysis-block--wide { grid-column: 1 / -1; }
+
+/* ── Sticky summary ── */
+.analysis-buybox { margin-bottom: 16px; }
+
+.analysis-sticky-summary {
+    position: sticky;
+    top: 14px;
+    z-index: 4;
+    margin-bottom: 16px;
+}
+
+.analysis-sticky-card {
+    display: grid;
+    gap: 14px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.analysis-sticky-copy { display: grid; gap: 10px; }
+
+.analysis-sticky-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.analysis-sticky-action {
+    color: var(--text);
+    line-height: 1.55;
+    font-weight: 600;
+    max-width: 60ch;
+}
+
+.analysis-sticky-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.analysis-sticky-kpi {
+    display: grid;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.analysis-sticky-kpi span {
+    font-family: var(--font-body);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.analysis-sticky-kpi strong {
+    font-family: var(--font-heading);
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+}
+
+/* ── Buybox ── */
+.buybox { display: grid; gap: 18px; }
+
+.buybox-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+}
+
+.buybox-copy { display: grid; gap: 10px; }
+
+.buybox-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.buybox-copy h4 {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: clamp(1.7rem, 2.5vw, 2.3rem);
+    letter-spacing: -0.03em;
+    line-height: 0.96;
+}
+
+.buybox-score {
+    min-width: 148px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    box-shadow: var(--shadow-soft);
+}
+
+.buybox-score span,
+.buybox-kpi span {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.buybox-score strong {
+    font-family: var(--font-heading);
+    font-size: 2.9rem;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+}
+
+.buybox-score small { font-size: 0.9rem; color: var(--muted); }
+
+.buybox-score--positive strong { color: var(--success); }
+.buybox-score--excellent strong { color: var(--accent-gold); }
+.buybox-score--watch strong     { color: var(--watch); }
+.buybox-score--negative strong  { color: var(--danger); }
+
+.buybox-kpis,
+.buybox-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.buybox-panel,
+.buybox-kpi {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+
+.buybox-kpi {
+    padding: 14px;
+    display: grid;
+    gap: 8px;
+    box-shadow: var(--shadow-soft);
+}
+
+.buybox-kpi strong {
+    font-family: var(--font-heading);
+    font-size: 1.72rem;
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+}
+
+.buybox-panel {
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+    box-shadow: var(--shadow-soft);
+}
+
+.buybox-list { list-style: none; display: grid; gap: 10px; }
+
+.buybox-list li {
+    padding: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-strong);
+}
+
+.buybox-list strong { display: block; margin-bottom: 6px; }
+.buybox-list p { color: var(--muted); line-height: 1.55; }
+
+.buybox-kpi.is-positive strong { color: var(--success); }
+.buybox-kpi.is-watch strong    { color: var(--watch); }
+.buybox-kpi.is-neutral strong  { color: var(--neutral); }
+.buybox-kpi.is-negative strong { color: var(--danger); }
+.buybox-kpi.is-excellent strong { color: var(--accent-gold); }
+
+/* ── Metric cards (charts) ── */
+.analysis-visuals,
+.analysis-tables {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+    margin-top: 18px;
+}
+
+.metric-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    background: var(--surface);
+    display: grid;
+    gap: 12px;
+    box-shadow: var(--shadow-soft);
+}
+
+.metric-label {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.metric-value {
+    font-family: var(--font-heading);
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+}
+
+.metric-value.is-positive  { color: var(--success); }
+.metric-value.is-negative  { color: var(--danger); }
+.metric-value.is-watch     { color: var(--watch); }
+.metric-value.is-neutral   { color: var(--neutral); }
+.metric-value.is-excellent { color: var(--accent-gold); }
+
+/* Verdicts visuels */
+.value-positive { color: var(--success); }
+.value-negative { color: var(--danger); }
+
+/* ── Decision card ── */
+.decision-card { display: grid; gap: 18px; }
+
+.analysis-verdict { line-height: 1.6; margin-bottom: 10px; }
+
+.decision-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.decision-hint { color: var(--muted); line-height: 1.6; }
+
+.decision-checkpoints {
+    list-style: none;
+    display: grid;
+    gap: 10px;
+}
+
+.decision-checkpoints li {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.decision-checkpoints div { display: grid; gap: 4px; }
+
+.decision-checkpoints small,
+.table-subline,
+.collection-empty {
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.analysis-block-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.analysis-block-note { color: var(--muted); line-height: 1.68; max-width: 66ch; }
+
+.analysis-forward { display: grid; gap: 18px; margin-top: 18px; }
+
+.analysis-list--compact li { padding-top: 8px; }
+```
+
+- [ ] **Step 2 : Vérifier score + KPI**
+
+Score composite visible, badges de verdict colorés, KPI cards avec valeurs en or/vert/rouge.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite score gauge, KPI cards, decision badges, buybox"
+```
+
+---
+
+## Task 8 : Cartes listes (scénarios, checklist, leviers, alertes)
+
+**Files:**
+- Modify: `styles.css`
+
+- [ ] **Step 1 : Remplacer les sections scénarios/checklist/leviers/alertes**
+
+```css
+/* ── Cartes listes ── */
+.confidence-shell,
+.scenario-shell,
+.journal-card,
+.capacity-shell,
+.concentration-shell {
+    display: grid;
+    gap: 14px;
+}
+
+.scenario-list,
+.concentration-list {
+    display: grid;
+    gap: 10px;
+}
+
+.scenario-card {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.scenario-card p,
+.journal-note { color: var(--muted); line-height: 1.6; }
+
+.scenario-card--negative  { border-color: rgba(248,81,73,0.30);   background: rgba(248,81,73,0.08); }
+.scenario-card--watch     { border-color: rgba(227,179,65,0.30);  background: rgba(227,179,65,0.08); }
+.scenario-card--positive,
+.scenario-card--excellent { border-color: rgba(63,185,80,0.25);   background: rgba(63,185,80,0.06); }
+
+.scenario-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-family: var(--font-body);
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.journal-block { display: grid; gap: 8px; }
+
+.journal-note {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+    min-height: 88px;
+}
+
+.journal-note.is-suggested { font-style: italic; }
+
+.checklist-shell { display: grid; gap: 14px; }
+.checklist-list  { display: grid; gap: 10px; }
+
+.checklist-item {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.checklist-item p { color: var(--muted); line-height: 1.55; }
+
+.checklist-item--negative { border-color: rgba(248,81,73,0.30); background: rgba(248,81,73,0.08); }
+.checklist-item--watch    { border-color: rgba(227,179,65,0.30); background: rgba(227,179,65,0.08); }
+.checklist-item--positive { border-color: rgba(63,185,80,0.25);  background: rgba(63,185,80,0.06); }
+
+.lever-list { display: grid; gap: 12px; }
+
+.lever-card {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.lever-head,
+.table-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.lever-card strong { font-family: var(--font-body); font-size: 1rem; font-weight: 700; }
+.lever-card p      { color: var(--muted); line-height: 1.55; }
+
+.alert-list { display: grid; gap: 12px; }
+
+.alert-card {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.alert-card--negative { border-color: rgba(248,81,73,0.30); background: rgba(248,81,73,0.08); }
+.alert-card--watch    { border-color: rgba(227,179,65,0.30); background: rgba(227,179,65,0.08); }
+.alert-card strong    { font-family: var(--font-body); font-size: 1rem; font-weight: 700; }
+.alert-card p         { color: var(--muted); line-height: 1.55; }
+```
+
+- [ ] **Step 2 : Vérifier les cartes**
+
+Scénarios négatifs avec fond rouge léger, positifs avec fond vert léger.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite scenario/checklist/lever/alert cards — flat GitHub style"
+```
+
+---
+
+## Task 9 : Graphiques (chart bars, timeline SVG)
+
+**Files:**
+- Modify: `styles.css`
+
+- [ ] **Step 1 : Remplacer les sections graphiques**
+
+```css
+/* ── Charts bar ── */
+.chart-list { display: grid; gap: 14px; }
+
+.chart-row {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.chart-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+}
+
+.chart-meta strong { font-family: var(--font-body); font-weight: 700; }
+
+.chart-track {
+    height: 10px;
+    background: var(--border);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+
+.chart-fill {
+    height: 100%;
+    background: var(--accent-gold);
+    border-radius: var(--radius-pill);
+    transition: width 400ms ease-out;
+}
+
+.chart-fill--income,
+.chart-fill--positive { background: var(--success); }
+.chart-fill--expense,
+.chart-fill--negative { background: var(--danger); }
+.chart-fill--neutral  { background: var(--primary); }
+
+/* ── Analysis list ── */
+.analysis-list {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+}
+
+.analysis-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.analysis-list span:last-child,
+.analysis-list strong {
+    font-family: var(--font-heading);
+    text-align: right;
+}
+
+/* ── Timeline chart ── */
+.timeline-chart {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.timeline-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.timeline-pill {
+    display: grid;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.timeline-pill span {
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.timeline-pill strong {
+    font-family: var(--font-heading);
+    font-size: 1.52rem;
+    font-weight: 700;
+    line-height: 0.94;
+}
+
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.timeline-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-strong);
+    color: var(--muted);
+    font-size: 0.84rem;
+}
+
+.timeline-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.timeline-swatch--cashflow  { background: var(--accent-gold); }
+.timeline-swatch--principal { background: var(--primary); }
+.timeline-swatch--wealth    { background: var(--success); }
+
+.timeline-svg {
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-strong);
+}
+
+.timeline-grid-line { stroke: var(--border); stroke-width: 1; }
+.timeline-zero-line { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 5; }
+.timeline-axis-text { fill: var(--muted); font-size: 11px; font-family: 'Inter', sans-serif; }
+
+.timeline-path {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.timeline-path--cashflow  { stroke: var(--accent-gold); }
+.timeline-path--principal { stroke: var(--primary); }
+.timeline-path--wealth    { stroke: var(--success); }
+
+.timeline-dot { stroke-width: 2; }
+.timeline-dot--cashflow  { fill: var(--accent-gold); stroke: var(--surface); }
+.timeline-dot--principal { fill: var(--primary);     stroke: var(--surface); }
+.timeline-dot--wealth    { fill: var(--success);     stroke: var(--surface); }
+```
+
+- [ ] **Step 2 : Vérifier les graphiques**
+
+Les barres de progress et la courbe SVG timeline doivent utiliser or/bleu/vert sans dégradés complexes.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite chart bars and timeline SVG"
+```
+
+---
+
+## Task 10 : Tables et matrice de sensibilité
+
+**Files:**
+- Modify: `styles.css`
+
+- [ ] **Step 1 : Remplacer les sections tables + matrice**
+
+```css
+/* ── Tables analyse ── */
+#analysis-regime-table,
+#analysis-sensitivity-table,
+#portfolio-priorities,
+#acquisition-arbitrage,
+#comparison-table,
+#portfolio-table {
+    position: relative;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.analysis-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 6px;
+    font-size: 0.88rem;
+    min-width: 620px;
+}
+
+.analysis-table th,
+.analysis-table td {
+    padding: 0 16px;
+    border-top: 0;
+    text-align: right;
+}
+
+.analysis-table th {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: 6px;
+}
+
+.analysis-table tbody td {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    background: var(--surface-strong);
+}
+
+.analysis-table tbody td:first-child {
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    font-weight: 700;
+}
+
+.analysis-table tbody td:last-child {
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.analysis-table tbody tr:hover td {
+    background: color-mix(in srgb, var(--surface-strong) 80%, var(--primary-soft) 20%);
+}
+
+.analysis-table th:first-child,
+.analysis-table td:first-child { text-align: left; }
+
+.analysis-table td strong {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.table-row-active td:first-child strong { color: var(--primary); }
+
+/* ── Matrice de sensibilité ── */
+.matrix-shell {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.matrix-legend { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.matrix-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-strong);
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.matrix-legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+.matrix-legend-swatch--excellent { background: rgba(63,185,80,0.50); }
+.matrix-legend-swatch--positive  { background: rgba(59,130,246,0.40); }
+.matrix-legend-swatch--watch     { background: rgba(227,179,65,0.45); }
+.matrix-legend-swatch--negative  { background: rgba(248,81,73,0.45); }
+
+.matrix-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+}
+
+.matrix-grid {
+    display: inline-grid;
+    gap: 8px;
+    width: max-content;
+    min-width: max(100%, 760px);
+}
+
+.matrix-corner,
+.matrix-axis,
+.matrix-cell {
+    min-height: 80px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+}
+
+.matrix-corner,
+.matrix-axis {
+    display: grid;
+    gap: 4px;
+    align-content: center;
+    background: var(--surface);
+}
+
+.matrix-corner span,
+.matrix-axis span {
+    font-family: var(--font-body);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.matrix-corner strong,
+.matrix-axis strong {
+    font-family: var(--font-body);
+    font-size: 0.98rem;
+    font-weight: 700;
+}
+
+.matrix-axis--row { justify-items: start; }
+
+.matrix-cell {
+    display: grid;
+    gap: 6px;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
+    background: var(--surface-strong);
+}
+
+.matrix-cell strong { font-family: var(--font-body); font-size: 1rem; font-weight: 700; }
+
+.matrix-decision {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-body);
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+}
+
+.matrix-cell small {
+    font-family: var(--font-body);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.matrix-cell--excellent { background: rgba(63,185,80,0.14); border-color: rgba(63,185,80,0.28); color: var(--success); }
+.matrix-cell--positive  { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.26); color: var(--primary); }
+.matrix-cell--watch     { background: rgba(227,179,65,0.12); border-color: rgba(227,179,65,0.26); color: var(--watch); }
+.matrix-cell--negative  { background: rgba(248,81,73,0.12);  border-color: rgba(248,81,73,0.26);  color: var(--danger); }
+
+.matrix-axis.is-base,
+.matrix-cell.is-base {
+    box-shadow: 0 0 0 2px var(--primary) inset;
+}
+```
+
+- [ ] **Step 2 : Vérifier les tables**
+
+Ouvrir l'onglet Fiscalité — la table régimes doit être lisible avec fond `--surface-strong` sur les lignes.
+
+- [ ] **Step 3 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite analysis tables and sensitivity matrix"
+```
+
+---
+
+## Task 11 : Modale, profil, responsive
+
+**Files:**
+- Modify: `styles.css`
+
+- [ ] **Step 1 : Remplacer les sections modale + profil**
+
+```css
+/* ── Modale ── */
+.modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(1, 4, 9, 0.72);
+    backdrop-filter: blur(8px);
+}
+
+.modal.open { display: flex; }
+
+.modal-dialog {
+    width: min(780px, 100%);
+    margin-top: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    padding: 20px;
+    box-shadow: var(--shadow-panel);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-note { margin-top: 8px; color: var(--muted); line-height: 1.55; }
+
+.modal-close {
+    min-height: 36px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+    color: var(--text);
+    padding: 0 14px;
+    font: inherit;
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: border-color 150ms, color 150ms;
+}
+
+.modal-close:hover { border-color: var(--primary); color: var(--primary); }
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+.modal-actions .toolbar-button { min-width: 160px; }
+
+/* ── Profil ── */
+.profile-form {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.profile-field { display: grid; gap: 8px; }
+.profile-field--wide { grid-column: span 2; }
+
+.profile-input {
+    min-height: 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+    color: var(--text);
+    padding: 0 14px;
+    font: inherit;
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 200ms, box-shadow 200ms;
+}
+
+.profile-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.profile-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+```
+
+- [ ] **Step 2 : Remplacer le responsive (media queries)**
+
+```css
+/* ── Responsive ── */
+@media (max-width: 860px) {
+    .topbar {
+        grid-template-columns: 1fr;
+        gap: 22px;
+        padding: 24px;
+    }
+    .toolbar { width: 100%; }
+    .asset-actions { flex-direction: column; }
+    .workspace-nav { width: 100%; overflow-x: auto; padding-bottom: 4px; flex-wrap: nowrap; }
+    .brand-highlights, .brand-ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .brand-logo { width: min(320px, 100%); }
+    .profile-form, .profile-summary-grid, .variables-grid,
+    .analysis-grid, .analysis-visuals, .analysis-forward,
+    .analysis-tables, .analysis-columns,
+    .workspace-board[data-layout='2'] {
+        grid-template-columns: 1fr;
+    }
+    .panel-head { flex-direction: column; align-items: flex-start; }
+    .analysis-block-head { flex-direction: column; }
+    .panel-subtitle { text-align: left; }
+    .profile-field--wide { grid-column: span 1; }
+    .variables-field--wide { grid-column: span 1; }
+    .modal-header { flex-direction: column; }
+    .decision-head, .buybox-head, .decision-checkpoints li, .analysis-sticky-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .analysis-sticky-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+    .shell { width: min(100%, calc(100% - 18px)); padding: 16px 0 28px; }
+    .topbar { padding: 18px; }
+    .brand h1 { font-size: clamp(2.6rem, 12vw, 3.8rem); }
+    .brand-note { padding-left: 0; border-left: 0; }
+    .brand-logo { width: min(260px, 100%); padding: 10px 12px 8px; }
+    .brand-highlights, .brand-ledger { grid-template-columns: 1fr; }
+    .toolbar { gap: 8px; }
+    .toolbar-button, .toolbar-select, .profile-input, .modal-close, .variables-input { width: 100%; }
+    .modal-actions .toolbar-button { min-width: 0; }
+    .analysis-sticky-kpis { grid-template-columns: 1fr; }
+}
+```
+
+- [ ] **Step 3 : Vérifier modale et responsive**
+
+Ouvrir la modale profil → fond sombre, boutons corrects. Réduire la fenêtre → grille responsive.
+
+- [ ] **Step 4 : Commit**
+
+```bash
+git add styles.css
+git commit -m "style: rewrite modal, profile form, responsive breakpoints"
+```
+
+---
+
+## Task 12 : Vérification finale + nettoyage
+
+**Files:**
+- Modify: `styles.css` (suppression des règles orphelines éventuelles)
+
+- [ ] **Step 1 : Ouvrir l'app et tester chaque onglet**
+
+`http://localhost:8080` — tester dans cet ordre :
+1. Page d'accueil / écran de bienvenue
+2. Onglet "Étude" — formulaire + accordéons
+3. Onglet "Analyse" — score, KPIs, verdict, buybox, graphiques
+4. Onglet "Scénarios"
+5. Onglet "Fiscalité" — table régimes
+6. Onglet "Revente" — timeline SVG
+7. Modale profil
+8. Basculer light mode / dark mode — vérifier les deux
+
+- [ ] **Step 2 : Chercher les règles CSS qui référencent encore l'ancienne charte**
+
+```bash
+grep -n "Cormorant\|IBM Plex\|Manrope\|0A0F1E\|0F1829\|162035\|B7862C\|F0B429\|color-mix.*accent.*white" styles.css
+```
+
+Supprimer ou corriger toute occurrence trouvée.
+
+- [ ] **Step 3 : Vérifier la taille du fichier**
+
+```bash
+wc -l styles.css
+```
+
+Le fichier doit être ≤ 2400 lignes (taille originale). Si plus long, identifier les doublons.
+
+- [ ] **Step 4 : Commit final**
+
+```bash
+git add styles.css
+git commit -m "style: cleanup orphan rules — GitHub SaaS redesign complete"
+```

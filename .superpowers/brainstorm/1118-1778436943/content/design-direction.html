@@ -1,0 +1,75 @@
+<h2>Quelle direction de design adopter ?</h2>
+<p class="subtitle">Comparaison entre le style actuel et l'inspiration GitHub</p>
+
+<div class="cards">
+
+  <!-- Option A: Style actuel -->
+  <div class="card" data-choice="current" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0B0E14;padding:20px;border-radius:8px;">
+      <div style="font-family:'Cormorant Garamond',Georgia,serif;color:#D4AF37;font-size:22px;font-weight:700;margin-bottom:8px;">Rendement Net</div>
+      <div style="font-family:'IBM Plex Mono',monospace;color:#F0F6FC;font-size:32px;font-weight:700;">6,4 %</div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:8px;padding:10px 14px;flex:1;">
+          <div style="font-family:'Manrope',sans-serif;color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Cash-flow</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:#40916C;font-size:16px;font-weight:700;margin-top:4px;">+142 €</div>
+        </div>
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:8px;padding:10px 14px;flex:1;">
+          <div style="font-family:'Manrope',sans-serif;color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">DSCR</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:#F0F6FC;font-size:16px;font-weight:700;margin-top:4px;">1.18</div>
+        </div>
+      </div>
+      <button style="margin-top:14px;width:100%;background:#D4AF37;color:#0B0E14;border:none;border-radius:8px;padding:10px;font-family:'Manrope',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Analyser →</button>
+    </div>
+    <div class="card-body">
+      <h3>Style actuel — Prestige Editorial</h3>
+      <p>Cormorant Garamond + IBM Plex Mono + Manrope. Fond noir bleuté, or doré, ambiance patrimoniale haut de gamme.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Style GitHub (Inter + Space Grotesk + Bleu) -->
+  <div class="card" data-choice="github" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0D1117;padding:20px;border-radius:8px;">
+      <div style="font-family:'Space Grotesk',sans-serif;color:#E6EDF3;font-size:22px;font-weight:700;margin-bottom:8px;">Rendement Net</div>
+      <div style="font-family:'Space Grotesk',sans-serif;color:#C9A84C;font-size:32px;font-weight:700;">6,4 %</div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:10px;padding:10px 14px;flex:1;">
+          <div style="font-family:'Inter',sans-serif;color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Cash-flow</div>
+          <div style="font-family:'Inter',sans-serif;color:#3FB950;font-size:16px;font-weight:700;margin-top:4px;">+142 €</div>
+        </div>
+        <div style="background:#161B22;border:1px solid #30363D;border-radius:10px;padding:10px 14px;flex:1;">
+          <div style="font-family:'Inter',sans-serif;color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">DSCR</div>
+          <div style="font-family:'Inter',sans-serif;color:#E6EDF3;font-size:16px;font-weight:700;margin-top:4px;">1.18</div>
+        </div>
+      </div>
+      <button style="margin-top:14px;width:100%;background:#3B82F6;color:#fff;border:none;border-radius:10px;padding:10px;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Analyser →</button>
+    </div>
+    <div class="card-body">
+      <h3>Style GitHub — SaaS Moderne</h3>
+      <p>Space Grotesk + Inter. Fond noir GitHub, bleu primaire pour les actions, or pour les métriques clés. Ambiance outil professionnel.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Fusion -->
+  <div class="card" data-choice="fusion" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0D1117;padding:20px;border-radius:8px;">
+      <div style="font-family:'Space Grotesk',sans-serif;color:#C9A84C;font-size:22px;font-weight:700;margin-bottom:8px;letter-spacing:-0.3px;">Rendement Net</div>
+      <div style="font-family:'Space Grotesk',sans-serif;color:#C9A84C;font-size:32px;font-weight:700;">6,4 %</div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <div style="background:#161B22;border:1px solid #30363D;border-left:3px solid #C9A84C;border-radius:8px;padding:10px 14px;flex:1;">
+          <div style="font-family:'Inter',sans-serif;color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Cash-flow</div>
+          <div style="font-family:'Space Grotesk',sans-serif;color:#3FB950;font-size:16px;font-weight:700;margin-top:4px;">+142 €</div>
+        </div>
+        <div style="background:#161B22;border:1px solid #30363D;border-left:3px solid #30363D;border-radius:8px;padding:10px 14px;flex:1;">
+          <div style="font-family:'Inter',sans-serif;color:#8B949E;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">DSCR</div>
+          <div style="font-family:'Space Grotesk',sans-serif;color:#E6EDF3;font-size:16px;font-weight:700;margin-top:4px;">1.18</div>
+        </div>
+      </div>
+      <button style="margin-top:14px;width:100%;background:transparent;color:#C9A84C;border:1.5px solid #C9A84C;border-radius:8px;padding:10px;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Analyser →</button>
+    </div>
+    <div class="card-body">
+      <h3>Style Fusion — Prestige SaaS</h3>
+      <p>Space Grotesk + Inter, mais sans bleu : conserver l'or comme seule couleur d'accent sur fond GitHub. Le meilleur des deux mondes.</p>
+    </div>
+  </div>
+
+</div>

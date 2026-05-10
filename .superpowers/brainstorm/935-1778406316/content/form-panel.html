@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Form Panel</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #09090b; color: #f4f4f5; font-family: -apple-system,'Inter',sans-serif; font-size: 13px; padding: 24px; }
+h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; color: #fff; }
+.subtitle { color: #71717a; font-size: 13px; margin-bottom: 28px; }
+.options-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.opt {
+  flex: 1; min-width: 260px; max-width: 360px;
+  border: 2px solid #27272a; border-radius: 14px; overflow: hidden;
+  cursor: pointer; transition: border-color 0.2s; background: #111113;
+}
+.opt:hover { border-color: #D4AF37; }
+.opt.selected { border-color: #D4AF37; box-shadow: 0 0 0 1px #D4AF37; }
+.opt-preview { background: #0d0d10; padding: 16px; }
+.opt-label { padding: 14px 16px; border-top: 1px solid #1c1c1f; }
+.opt-label h3 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.opt-label p { font-size: 11px; color: #71717a; line-height: 1.5; }
+.recommend-badge {
+  display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: #D4AF37; background: rgba(212,175,55,0.12);
+  border: 1px solid rgba(212,175,55,0.3); border-radius: 20px; padding: 2px 8px; margin-bottom: 6px;
+}
+.section-note { font-size: 12px; color: #52525b; margin-top: 28px; text-align: center; }
+
+/* ── OPTION A : Sections accordéon compactes ── */
+.accord-section { margin-bottom: 6px; border: 1px solid #27272a; border-radius: 8px; overflow: hidden; }
+.accord-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: #18181b; cursor: pointer;
+}
+.accord-head.open { border-bottom: 1px solid #27272a; }
+.accord-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #a1a1aa; }
+.accord-badge { font-size: 9px; color: #52525b; background: #27272a; border-radius: 4px; padding: 1px 6px; }
+.accord-body { padding: 10px 12px; background: #0f0f12; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.field-item { display: flex; flex-direction: column; gap: 3px; }
+.field-label { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; }
+.field-input {
+  height: 28px; background: #18181b; border: 1px solid #27272a; border-radius: 6px;
+  font-size: 11px; color: #a1a1aa; padding: 0 8px; display: flex; align-items: center;
+}
+.field-input.focused { border-color: rgba(212,175,55,0.5); background: rgba(212,175,55,0.04); color: #D4AF37; }
+.chevron { font-size: 10px; color: #52525b; }
+
+/* ── OPTION B : Tabs horizontaux par thème ── */
+.form-tabs { display: flex; gap: 2px; margin-bottom: 10px; background: #18181b; border-radius: 7px; padding: 3px; }
+.form-tab { flex: 1; text-align: center; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 5px; border-radius: 5px; color: #52525b; cursor: pointer; }
+.form-tab.active { background: #27272a; color: #f4f4f5; }
+.tab-content { background: #0f0f12; border: 1px solid #27272a; border-radius: 8px; padding: 12px; }
+.field-grid-b { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field-b { display: flex; flex-direction: column; gap: 4px; }
+.field-b .fl { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.8px; }
+.field-b .fi {
+  height: 30px; background: #18181b; border: 1px solid #27272a; border-radius: 6px;
+  font-size: 12px; color: #a1a1aa; padding: 0 10px; display: flex; align-items: center;
+}
+.field-b .fi.active { border-color: rgba(212,175,55,0.5); color: #D4AF37; }
+.field-wide { grid-column: 1 / -1; }
+.tab-note { font-size: 10px; color: #3f3f46; margin-top: 10px; text-align: center; }
+
+/* ── OPTION C : Flat list sans groupes ── */
+.flat-section-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #3f3f46; margin: 10px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #1c1c1f; }
+.flat-section-label:first-child { margin-top: 0; }
+.field-grid-c { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 4px; }
+.field-c { display: flex; flex-direction: column; gap: 2px; }
+.field-c .fl { font-size: 9px; color: #3f3f46; }
+.field-c .fi-c {
+  height: 26px; background: transparent; border: none; border-bottom: 1px solid #27272a;
+  border-radius: 0; font-size: 11px; color: #71717a; padding: 0 4px; display: flex; align-items: center;
+}
+.field-c .fi-c.active { border-bottom-color: #D4AF37; color: #D4AF37; }
+</style>
+</head>
+<body>
+
+<h2>Section 3 — Panneau de saisie</h2>
+<p class="subtitle">Comment organiser les champs du formulaire ? 8 groupes de paramètres au total.</p>
+
+<div class="options-row">
+
+  <!-- A : Accordéon -->
+  <div class="opt" onclick="sel(this,'accord')">
+    <div class="opt-preview">
+      <div class="accord-section">
+        <div class="accord-head open">
+          <span class="accord-title">Acquisition</span>
+          <span class="accord-badge">7 champs ▾</span>
+        </div>
+        <div class="accord-body">
+          <div class="field-grid">
+            <div class="field-item">
+              <span class="field-label">Prix affiché</span>
+              <div class="field-input">320 000 €</div>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Loyer cible</span>
+              <div class="field-input focused">1 200 €</div>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Travaux</span>
+              <div class="field-input">15 000 €</div>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Notaire %</span>
+              <div class="field-input">7.5%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="accord-section">
+        <div class="accord-head">
+          <span class="accord-title">Financement</span>
+          <span class="accord-badge">5 champs ▸</span>
+        </div>
+      </div>
+      <div class="accord-section">
+        <div class="accord-head">
+          <span class="accord-title">Exploitation</span>
+          <span class="accord-badge">5 champs ▸</span>
+        </div>
+      </div>
+      <div class="accord-section">
+        <div class="accord-head">
+          <span class="accord-title">Seuils de décision</span>
+          <span class="accord-badge">6 champs ▸</span>
+        </div>
+      </div>
+    </div>
+    <div class="opt-label">
+      <div class="recommend-badge">★ Recommandé</div>
+      <h3>A — Sections accordéon compactes</h3>
+      <p>Chaque groupe se déplie/replie. Un seul groupe ouvert à la fois. Formulaire compact, navigation rapide entre les sections. Micro-animation d'ouverture.</p>
+    </div>
+  </div>
+
+  <!-- B : Tabs -->
+  <div class="opt" onclick="sel(this,'tabs')">
+    <div class="opt-preview">
+      <div class="form-tabs">
+        <div class="form-tab active">Achat</div>
+        <div class="form-tab">Crédit</div>
+        <div class="form-tab">Exploit.</div>
+        <div class="form-tab">Seuils</div>
+      </div>
+      <div class="tab-content">
+        <div class="field-grid-b">
+          <div class="field-b">
+            <span class="fl">Prix affiché</span>
+            <div class="fi">320 000 €</div>
+          </div>
+          <div class="field-b">
+            <span class="fl">Loyer cible</span>
+            <div class="fi active">1 200 €</div>
+          </div>
+          <div class="field-b">
+            <span class="fl">Négociation</span>
+            <div class="fi">5 000 €</div>
+          </div>
+          <div class="field-b">
+            <span class="fl">Travaux</span>
+            <div class="fi">15 000 €</div>
+          </div>
+          <div class="field-b">
+            <span class="fl">Notaire %</span>
+            <div class="fi">7.5%</div>
+          </div>
+          <div class="field-b">
+            <span class="fl">Frais agence</span>
+            <div class="fi">3 000 €</div>
+          </div>
+        </div>
+        <div class="tab-note">Onglet 1/4 — Acquisition</div>
+      </div>
+    </div>
+    <div class="opt-label">
+      <h3>B — Onglets thématiques</h3>
+      <p>4 onglets (Achat, Crédit, Exploitation, Seuils). Chaque onglet affiche un groupe de champs. Paginé, très propre, mais cacher des champs risque de faire oublier des saisies.</p>
+    </div>
+  </div>
+
+  <!-- C : Flat -->
+  <div class="opt" onclick="sel(this,'flat')">
+    <div class="opt-preview">
+      <div class="flat-section-label">Acquisition</div>
+      <div class="field-grid-c">
+        <div class="field-c"><span class="fl">Prix affiché</span><div class="fi-c">320 000 €</div></div>
+        <div class="field-c"><span class="fl">Loyer cible</span><div class="fi-c active">1 200 €</div></div>
+        <div class="field-c"><span class="fl">Travaux</span><div class="fi-c">15 000 €</div></div>
+        <div class="field-c"><span class="fl">Notaire %</span><div class="fi-c">7.5%</div></div>
+      </div>
+      <div class="flat-section-label">Financement</div>
+      <div class="field-grid-c">
+        <div class="field-c"><span class="fl">Taux %</span><div class="fi-c">3.8%</div></div>
+        <div class="field-c"><span class="fl">Durée</span><div class="fi-c">20 ans</div></div>
+        <div class="field-c"><span class="fl">Apport</span><div class="fi-c">30 000 €</div></div>
+        <div class="field-c"><span class="fl">Assurance %</span><div class="fi-c">0.10%</div></div>
+      </div>
+      <div class="flat-section-label">Exploitation</div>
+      <div class="field-grid-c">
+        <div class="field-c"><span class="fl">Vacance %</span><div class="fi-c">5%</div></div>
+        <div class="field-c"><span class="fl">Copro / mois</span><div class="fi-c">80 €</div></div>
+      </div>
+    </div>
+    <div class="opt-label">
+      <h3>C — Liste plate avec séparateurs</h3>
+      <p>Tout visible d'un coup, scroll vertical continu. Champs minimalistes style inline. Très rapide à scanner mais long et moins structuré visuellement.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="section-note">Cliquez pour sélectionner, puis confirmez dans le terminal.</p>
+
+<script>
+function sel(el, choice) {
+  document.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+</script>
+</body>
+</html>

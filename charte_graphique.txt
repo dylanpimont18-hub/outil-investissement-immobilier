@@ -1,0 +1,72 @@
+CHARTE GRAPHIQUE - PLATEFORME D'INVESTISSEMENT LOCATIF
+
+============================================================
+1. CONCEPT VISUEL
+============================================================
+L'identité visuelle repose sur trois piliers :
+- Expertise : Rigueur des données et des calculs.
+- Prestige : Aspect patrimonial et immobilier.
+- Technologie : Interface moderne, fluide et réactive.
+
+============================================================
+2. TYPOGRAPHIE
+============================================================
+- Titres (H1, H2, H3) : Montserrat (Bold) - Moderne et statutaire.
+- Corps de texte : Inter (Regular) - Optimisé pour la lisibilité sur écran.
+- Chiffres & Data : JetBrains Mono - Pour l'aspect "outil de précision".
+
+============================================================
+3. MODE CLAIR (LIGHT MODE) - Institutionnel & Pur
+============================================================
+Cible : Confiance, clarté, lecture prolongée de rapports.
+
+COULEURS :
+- Fond principal : #F8F9FA (Gris perle très clair)
+- Fond de carte (Cards) : #FFFFFF (Blanc pur)
+- Texte principal : #1A2B3C (Bleu nuit profond)
+- Texte secondaire : #6C757D (Gris sourd)
+- Bordures & Séparateurs : #E9ECEF
+- Couleur d'accent (Action) : #C5A059 (Or Sablé)
+- Succès (Rendement +) : #2D6A4F (Vert Émeraude)
+- Alerte (Risque) : #E63946 (Corail)
+
+EFFETS :
+- Ombres : 0px 4px 20px rgba(0, 0, 0, 0.05)
+- Bordures : 1px solid #E9ECEF
+- Arrondis (Radius) : 8px (Composants), 12px (Cards)
+
+============================================================
+4. MODE SOMBRE (DARK MODE) - Technique & Premium
+============================================================
+Cible : Analyse de données, aspect "SaaS" moderne, confort nocturne.
+
+COULEURS :
+- Fond principal : #0B0E14 (Noir bleuté profond)
+- Fond de carte (Cards) : #161B22 (Gris anthracite)
+- Texte principal : #F0F6FC (Blanc cassé)
+- Texte secondaire : #8B949E (Gris acier)
+- Bordures & Séparateurs : #30363D
+- Couleur d'accent (Action) : #D4AF37 (Or éclatant)
+- Succès (Rendement +) : #40916C (Vert Menthe)
+- Alerte (Risque) : #FF4D4D (Rouge vif)
+
+EFFETS :
+- Ombres : 0px 4px 20px rgba(0, 0, 0, 0.4)
+- Bordures : 1px solid #30363D
+- Arrondis (Radius) : 8px (Composants), 12px (Cards)
+
+============================================================
+5. ÉLÉMENTS D'INTERFACE (UI)
+============================================================
+- Boutons Primaires : Fond couleur accent (#C5A059), Texte blanc ou noir selon contraste.
+- Boutons Secondaires : Fond transparent, bordure couleur accent.
+- États de survol (Hover) : Réduction de l'opacité de 10% ou légère élévation (shadow).
+- Graphiques : Utiliser des dégradés (Gradients) allant de la couleur d'accent vers le transparent.
+- Icônes : Style "Line" ou "Light", épaisseur de trait constante (1.5px).
+
+============================================================
+6. RÈGLES D'USAGE
+============================================================
+- Espacement : Toujours utiliser un multiple de 4px (8, 16, 24, 32) pour les marges.
+- Hiérarchie : Toujours mettre le Rendement Brut/Net en police Mono et en gras.
+- Contraste : Vérifier que le texte secondaire reste lisible (Accessibilité WCAG).

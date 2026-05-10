@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investissement Web | Décision locative</title>
+    <meta name="theme-color" content="#F8F9FA">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="topbar-brand">
+                <figure class="topbar-logo">
+                    <img src="Logo_site.png" alt="Logo" width="24" height="24">
+                </figure>
+                <span class="topbar-name">Investissement Web</span>
+            </div>
+            <div class="topbar-study">
+                <span id="topbar-study-name" class="topbar-study-chip">—</span>
+            </div>
+            <div class="topbar-actions">
+                <button type="button" id="theme-toggle" class="topbar-btn" aria-label="Basculer thème"></button>
+                <button type="button" id="screen-toggle" class="topbar-btn" aria-label="Mode 2 écrans"></button>
+                <button type="button" id="profile-trigger" class="topbar-btn" aria-label="Profil du foyer"></button>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <nav class="workspace-tabs" aria-label="Navigation">
+                <button class="workspace-tab is-active" data-target="workspace-panel">Saisie &amp; Analyse</button>
+                <button class="workspace-tab" data-target="collection-panel">Portefeuille</button>
+            </nav>
+            <section class="workspace-panel" aria-label="Espace de travail">
+                <div class="panel-head">
+                    <h2 id="workspace-title"></h2>
+                    <p id="workspace-subtitle" class="panel-subtitle"></p>
+                </div>
+                <div id="workspace-board" class="workspace-board" data-layout="2">
+                    <section id="variables-panel" class="variables-panel" aria-label="Variables modifiables">
+                        <div class="panel-head panel-head--stacked">
+                            <div>
+                                <p id="variables-kicker" class="brand-kicker"></p>
+                                <h3>Paramètres du dossier</h3>
+                                <p id="variables-subtitle" class="panel-note"></p>
+                            </div>
+                        </div>
+
+                        <div id="variables-context" class="context-strip"></div>
+
+                        <form id="variables-form" class="variables-form">
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Identité du dossier</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="nom-bien">
+                                        <span class="status-label">Nom du bien</span>
+                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off">
+                                    </label>
+                                    <label class="variables-field" for="ville">
+                                        <span class="status-label">Ville</span>
+                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off">
+                                    </label>
+                                    <label class="variables-field" for="statut-bien">
+                                        <span class="status-label">Statut</span>
+                                        <select id="statut-bien" name="statut-bien" class="variables-input">
+                                            <option value="candidate">À étudier</option>
+                                            <option value="owned">Déjà au portefeuille</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="true">
+                                <button type="button" class="accord-head" aria-expanded="true">
+                                    <span class="accord-title">Acquisition</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="prix">
+                                        <span class="status-label">Prix affiché</span>
+                                        <input id="prix" name="prix" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="nego">
+                                        <span class="status-label">Négociation visée</span>
+                                        <input id="nego" name="nego" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="loyer">
+                                        <span class="status-label">Loyer cible mensuel</span>
+                                        <input id="loyer" name="loyer" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="notaire">
+                                        <span class="status-label">Frais de notaire (%)</span>
+                                        <input id="notaire" name="notaire" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="travaux">
+                                        <span class="status-label">Budget travaux</span>
+                                        <input id="travaux" name="travaux" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="meubles">
+                                        <span class="status-label">Budget mobilier</span>
+                                        <input id="meubles" name="meubles" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="agence">
+                                        <span class="status-label">Frais d'agence</span>
+                                        <input id="agence" name="agence" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Financement</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="apport">
+                                        <span class="status-label">Apport</span>
+                                        <input id="apport" name="apport" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="taux-input">
+                                        <span class="status-label">Taux %</span>
+                                        <input id="taux-input" name="taux-input" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="duree">
+                                        <span class="status-label">Durée (ans)</span>
+                                        <input id="duree" name="duree" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="assurance">
+                                        <span class="status-label">Assurance %</span>
+                                        <input id="assurance" name="assurance" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="frais-bancaires">
+                                        <span class="status-label">Frais bancaires</span>
+                                        <input id="frais-bancaires" name="frais-bancaires" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Exploitation locative</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="vacance">
+                                        <span class="status-label">Vacance (%)</span>
+                                        <input id="vacance" name="vacance" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="copro">
+                                        <span class="status-label">Charges de copro / mois</span>
+                                        <input id="copro" name="copro" type="number" class="variables-input" min="0" step="10" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="fonciere">
+                                        <span class="status-label">Taxe foncière / an</span>
+                                        <input id="fonciere" name="fonciere" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="pno">
+                                        <span class="status-label">Assurance PNO / an</span>
+                                        <input id="pno" name="pno" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="gestion">
+                                        <span class="status-label">Gestion %</span>
+                                        <input id="gestion" name="gestion" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Vérifications avant offre</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="dpe">
+                                        <span class="status-label">DPE</span>
+                                        <select id="dpe" name="dpe" class="variables-input">
+                                            <option value="A">A</option>
+                                            <option value="B">B</option>
+                                            <option value="C">C</option>
+                                            <option value="D">D</option>
+                                            <option value="E">E</option>
+                                            <option value="F">F</option>
+                                            <option value="G">G</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="loyer-marche">
+                                        <span class="status-label">Loyer de marché</span>
+                                        <input id="loyer-marche" name="loyer-marche" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="copro-risque">
+                                        <span class="status-label">Risque copropriété</span>
+                                        <select id="copro-risque" name="copro-risque" class="variables-input">
+                                            <option value="stable">Stable</option>
+                                            <option value="medium">À surveiller</option>
+                                            <option value="high">Sous tension</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Fiabilité des hypothèses</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="source-loyer">
+                                        <span class="status-label">Source du loyer</span>
+                                        <select id="source-loyer" name="source-loyer" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="source-charges">
+                                        <span class="status-label">Source des charges</span>
+                                        <select id="source-charges" name="source-charges" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="source-travaux">
+                                        <span class="status-label">Source des travaux</span>
+                                        <select id="source-travaux" name="source-travaux" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                    <label class="variables-field" for="source-documents">
+                                        <span class="status-label">Source des documents</span>
+                                        <select id="source-documents" name="source-documents" class="variables-input">
+                                            <option value="verified">Vérifiée</option>
+                                            <option value="estimated">Estimée</option>
+                                            <option value="unknown">Inconnue</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Seuils de décision</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="seuil-cf-min">
+                                        <span class="status-label">CF minimum / mois</span>
+                                        <input id="seuil-cf-min" name="seuil-cf-min" type="number" class="variables-input" step="25" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="seuil-dscr-min">
+                                        <span class="status-label">DSCR minimum</span>
+                                        <input id="seuil-dscr-min" name="seuil-dscr-min" type="number" class="variables-input" min="0.5" step="0.05" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="seuil-vacance-max">
+                                        <span class="status-label">Vacance maximale (%)</span>
+                                        <input id="seuil-vacance-max" name="seuil-vacance-max" type="number" class="variables-input" min="0" step="0.5" inputmode="decimal">
+                                    </label>
+                                    <label class="variables-field" for="seuil-ecart-loyer-max">
+                                        <span class="status-label">Écart max au marché (%)</span>
+                                        <input id="seuil-ecart-loyer-max" name="seuil-ecart-loyer-max" type="number" class="variables-input" min="0" step="1" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="seuil-effort-max">
+                                        <span class="status-label">Effort maximal du foyer (%)</span>
+                                        <input id="seuil-effort-max" name="seuil-effort-max" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="blocage-passoire">
+                                        <span class="status-label">Blocage passoire thermique</span>
+                                        <select id="blocage-passoire" name="blocage-passoire" class="variables-input">
+                                            <option value="yes">Oui</option>
+                                            <option value="no">Non</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Fiscalité</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid variables-grid--single">
+                                    <label class="variables-field" for="regime">
+                                        <span class="status-label">Régime</span>
+                                        <select id="regime" name="regime" class="variables-input">
+                                            <option value="micro-foncier">Micro-foncier</option>
+                                            <option value="reel">Foncier réel</option>
+                                            <option value="sci-is">SCI à l'IS</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                            <div class="accord-section" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Journal de décision</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field variables-field--wide" for="decision-thesis">
+                                        <span class="status-label">Thèse d'investissement <span class="field-required" aria-hidden="true">*</span></span>
+                                        <span id="decision-thesis-help" class="field-assist">Champ requis pour enregistrer le dossier. Résumez la logique d'achat en au moins 20 caractères.</span>
+                                        <textarea id="decision-thesis" name="decision-thesis" class="variables-input variables-textarea" rows="4" aria-required="true" aria-describedby="decision-thesis-help decision-thesis-error"></textarea>
+                                        <span id="decision-thesis-error" class="field-error" aria-live="polite" hidden></span>
+                                    </label>
+                                    <label class="variables-field variables-field--wide" for="decision-next-step">
+                                        <span class="status-label">Prochaine étape <span class="field-required" aria-hidden="true">*</span></span>
+                                        <span id="decision-next-step-help" class="field-assist">Champ requis pour enregistrer le dossier. Indiquez la prochaine étape concrète en au moins 10 caractères.</span>
+                                        <textarea id="decision-next-step" name="decision-next-step" class="variables-input variables-textarea" rows="3" aria-required="true" aria-describedby="decision-next-step-help decision-next-step-error"></textarea>
+                                        <span id="decision-next-step-error" class="field-error" aria-live="polite" hidden></span>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div class="asset-actions">
+                            <button type="button" id="new-asset" class="toolbar-button">Nouvelle étude</button>
+                            <button type="button" id="save-comparison" class="toolbar-button">Enregistrer au comparateur</button>
+                            <button type="button" id="save-portfolio" class="toolbar-button">Basculer au portefeuille</button>
+                            <button type="button" id="export-decision-pdf" class="toolbar-button">Exporter la note PDF</button>
+                        </div>
+                    </section>
+
+                    <section id="analysis-panel" class="analysis-panel" aria-label="Analyse évolutive">
+                        <div class="panel-head panel-head--stacked">
+                            <div>
+                                <p id="analysis-kicker" class="brand-kicker"></p>
+                                <h3>Lecture décisionnelle</h3>
+                                <p id="analysis-subtitle" class="panel-note"></p>
+                            </div>
+                        </div>
+
+                        <div id="analysis-sticky-summary" class="analysis-sticky-summary" aria-label="Synthèse instantanée"></div>
+
+                        <section class="analysis-buybox analysis-block">
+                            <div id="analysis-acquisition-decision"></div>
+                        </section>
+
+                        <div id="analysis-metrics" class="analysis-grid"></div>
+
+                        <div class="analysis-columns">
+                            <section class="analysis-block">
+                                <h4>Solidité des hypothèses</h4>
+                                <div id="analysis-confidence"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Scénarios de stress</h4>
+                                <div id="analysis-scenarios"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Journal de décision</h4>
+                                <div id="analysis-journal"></div>
+                            </section>
+                        </div>
+
+                        <div class="analysis-visuals">
+                            <section class="analysis-block">
+                                <h4>Répartition mensuelle</h4>
+                                <div id="analysis-monthly-chart"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Structure du coût d entrée</h4>
+                                <div id="analysis-cost-chart"></div>
+                            </section>
+                        </div>
+
+                        <div class="analysis-forward">
+                            <section class="analysis-block analysis-block--wide">
+                                <div class="analysis-block-head">
+                                    <div>
+                                        <h4>Projection à 10 ans</h4>
+                                        <p class="analysis-block-note">Sans revente : cash-flow cumulé, capital remboursé et valeur créée sur un horizon de 10 ans.</p>
+                                    </div>
+                                </div>
+                                <div id="analysis-timeline-chart"></div>
+                            </section>
+
+                            <section class="analysis-block analysis-block--wide">
+                                <div class="analysis-block-head">
+                                    <div>
+                                        <h4>Matrice prix / loyer</h4>
+                                        <p class="analysis-block-note">Lecture directe du couple prix / loyer avec signal Acheter, Négocier ou Refuser selon l économie du dossier.</p>
+                                    </div>
+                                </div>
+                                <div id="analysis-price-rent-matrix"></div>
+                            </section>
+                        </div>
+
+                        <div class="analysis-tables">
+                            <section class="analysis-block">
+                                <h4>Régimes fiscaux</h4>
+                                <div id="analysis-regime-table"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Comparatif des leviers</h4>
+                                <div id="analysis-sensitivity-table"></div>
+                            </section>
+                        </div>
+
+                        <div class="analysis-columns">
+                            <section class="analysis-block">
+                                <h4>Décision d'exploitation</h4>
+                                <div id="analysis-summary"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Checklist avant offre</h4>
+                                <div id="analysis-checklist"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Leviers prioritaires</h4>
+                                <div id="analysis-action-plan"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Vue détaillée</h4>
+                                <div id="analysis-details"></div>
+                            </section>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="collection-panel" class="workspace-panel" aria-label="Pilotage multi-biens">
+                <div class="panel-head panel-head--stacked">
+                    <div>
+                        <p class="brand-kicker">Multi-biens</p>
+                        <h2>Comparer les dossiers et piloter le portefeuille</h2>
+                        <p class="panel-note">Enregistrez les opportunités, ajoutez les biens déjà détenus et rechargez n importe quelle étude dans le simulateur.</p>
+                    </div>
+                </div>
+
+                <div id="portfolio-summary" class="analysis-grid"></div>
+
+                <div class="analysis-columns">
+                    <section class="analysis-block">
+                        <h4>Lecture consolidée</h4>
+                        <div id="portfolio-decision"></div>
+                    </section>
+
+                    <section class="analysis-block">
+                        <h4>Alertes prioritaires</h4>
+                        <div id="portfolio-alerts"></div>
+                    </section>
+                </div>
+
+                <div class="analysis-columns">
+                    <section class="analysis-block">
+                        <h4>Capacité d'achat restante</h4>
+                        <div id="portfolio-capacity"></div>
+                    </section>
+
+                    <section class="analysis-block">
+                        <h4>Concentration du risque</h4>
+                        <div id="portfolio-concentration"></div>
+                    </section>
+                </div>
+
+                <div class="analysis-tables">
+                    <section class="analysis-block">
+                        <h4>Priorités de portefeuille</h4>
+                        <div id="portfolio-priorities"></div>
+                    </section>
+
+                    <section class="analysis-block">
+                        <h4>Arbitrage des acquisitions</h4>
+                        <div id="acquisition-arbitrage"></div>
+                    </section>
+                </div>
+
+                <div class="analysis-tables">
+                    <section class="analysis-block">
+                        <h4>Comparateur</h4>
+                        <div id="comparison-table"></div>
+                    </section>
+
+                    <section class="analysis-block">
+                        <h4>Portefeuille</h4>
+                        <div id="portfolio-table"></div>
+                    </section>
+                </div>
+            </section>
+        </main>
+
+        <div id="profile-modal" class="modal" aria-hidden="true">
+            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+                <div class="modal-header">
+                    <div>
+                        <p class="brand-kicker">Profil du foyer</p>
+                        <h2 id="profile-modal-title">Définir le profil</h2>
+                        <p id="profile-modal-note" class="modal-note">Renseignez ce profil une fois, puis ajustez-le depuis l en-tête si nécessaire.</p>
+                    </div>
+                    <button type="button" id="profile-close" class="modal-close" aria-label="Fermer la fenêtre profil">Fermer</button>
+                </div>
+
+                <form class="profile-form" id="profile-form">
+                    <label class="profile-field profile-field--wide" for="profile-select">
+                        <span class="status-label">Modèle</span>
+                        <select id="profile-select" name="profile-select" class="profile-input"></select>
+                    </label>
+
+                    <label class="profile-field profile-field--wide" for="profile-name">
+                        <span class="status-label">Nom</span>
+                        <input id="profile-name" name="profile-name" type="text" class="profile-input" maxlength="40" autocomplete="off">
+                    </label>
+
+                    <label class="profile-field" for="profile-income">
+                        <span class="status-label">Revenus annuels du foyer</span>
+                        <input id="profile-income" name="profile-income" type="number" class="profile-input" min="0" step="1000" inputmode="numeric">
+                    </label>
+
+                    <label class="profile-field" for="profile-adults">
+                        <span class="status-label">Adultes</span>
+                        <select id="profile-adults" name="profile-adults" class="profile-input">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                        </select>
+                    </label>
+
+                    <label class="profile-field" for="profile-children">
+                        <span class="status-label">Enfants</span>
+                        <input id="profile-children" name="profile-children" type="number" class="profile-input" min="0" max="8" step="1" inputmode="numeric">
+                    </label>
+                </form>
+
+                <div class="profile-summary-grid">
+                    <div class="status-item">
+                        <span class="status-label">Parts fiscales</span>
+                        <strong id="profile-parts"></strong>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">TMI estimée</span>
+                        <strong id="profile-tmi"></strong>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Composition</span>
+                        <strong id="profile-composition"></strong>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" id="profile-save" class="toolbar-button">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
