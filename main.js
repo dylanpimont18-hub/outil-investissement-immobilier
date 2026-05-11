@@ -2066,6 +2066,7 @@ function renderGuidedChecklist() {
 function openSpotlight(fieldId) {
     const idx = GUIDED_FIELDS.findIndex(f => f.id === fieldId);
     if (idx === -1) return;
+    if (!nodes.spotlightOverlay) return;
     _spotlightFieldId = fieldId;
 
     const field = GUIDED_FIELDS[idx];
@@ -2093,12 +2094,14 @@ function openSpotlight(fieldId) {
 }
 
 function closeSpotlight() {
+    if (!nodes.spotlightOverlay) return;
     nodes.spotlightOverlay.hidden = true;
     _spotlightFieldId = null;
 }
 
 function navigateSpotlight(direction) {
     const idx = GUIDED_FIELDS.findIndex(f => f.id === _spotlightFieldId);
+    if (idx === -1) return;
     const next = idx + direction;
     if (next >= 0 && next < GUIDED_FIELDS.length) {
         openSpotlight(GUIDED_FIELDS[next].id);
