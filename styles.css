@@ -2,6 +2,7 @@
 :root {
     --font-heading: 'Space Grotesk', system-ui, sans-serif;
     --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
     /* Alias pour compatibilité ui.js */
     --font-display: 'Space Grotesk', system-ui, sans-serif;
 
@@ -1397,10 +1398,10 @@ html[data-theme='light'] #profile-save {
 }
 
 .buybox-cf-card strong {
-    font-family: var(--font-heading);
-    font-size: 2.1rem;
-    line-height: 0.96;
-    letter-spacing: -0.03em;
+    font-family: var(--font-mono);
+    font-size: 1.9rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
 }
 
 .buybox-cf-card small {
@@ -1437,7 +1438,7 @@ html[data-theme='light'] #profile-save {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 9px 16px;
+    padding: 8px 16px;
     border-bottom: 1px solid var(--border);
     font-family: var(--font-mono);
     font-size: 0.82rem;
