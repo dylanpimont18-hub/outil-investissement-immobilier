@@ -1687,7 +1687,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
         </article>
       </section>
 
-      <p class="footer-note">Document genere localement depuis Investissement Web. Cette fiche sert de support d arbitrage et ne remplace pas un conseil fiscal, juridique ou bancaire personnalise.</p>
+      <p class="footer-note">Document genere localement depuis Spark Investissement. Cette fiche sert de support d arbitrage et ne remplace pas un conseil fiscal, juridique ou bancaire personnalise.</p>
     </main>
     <script>
       (function () {
