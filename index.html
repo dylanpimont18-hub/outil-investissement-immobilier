@@ -25,7 +25,7 @@
             <div class="topbar-actions">
                 <button type="button" id="theme-toggle" class="topbar-btn" aria-label="Basculer thème"></button>
                 <button type="button" id="screen-toggle" class="topbar-btn" aria-label="Mode 2 écrans"></button>
-                <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode guidé" aria-pressed="false">Guide</button>
+                <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode tutoriel" aria-pressed="false">Tuto</button>
                 <button type="button" id="profile-trigger" class="topbar-btn" aria-label="Profil du foyer"></button>
             </div>
         </header>
@@ -67,19 +67,6 @@
     </div>
 </div>
 
-<div class="guided-checklist" id="guided-checklist" hidden>
-    <div class="guided-checklist__head">
-        <span>Guide de saisie</span>
-        <span class="guided-checklist__progress" id="guided-progress">0 / 8</span>
-    </div>
-    <div class="guided-checklist__bar-track">
-        <div class="guided-checklist__bar-fill" id="guided-bar" style="width:0%"></div>
-    </div>
-    <div class="guided-checklist__section-label">Essentiels</div>
-    <ul class="guided-checklist__list" id="guided-list-essentiel"></ul>
-    <div class="guided-checklist__section-label">Importants</div>
-    <ul class="guided-checklist__list" id="guided-list-important"></ul>
-</div>
 
                         <form id="variables-form" class="variables-form">
                             <div class="accord-section" data-priority="optionnel" data-open="false">
@@ -640,18 +627,17 @@
         </div>
     </div>
 
-    <div class="spotlight-overlay" id="spotlight-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="spotlight-title">
-        <div class="spotlight-card">
-            <div class="spotlight-card__header">
-                <span class="spotlight-card__step" id="spotlight-step">1 / 8</span>
-                <span class="spotlight-card__title" id="spotlight-title"></span>
-            </div>
-            <input class="spotlight-card__input" id="spotlight-input" type="text" autocomplete="off">
-            <p class="spotlight-card__desc" id="spotlight-desc"></p>
-            <div class="spotlight-card__actions">
-                <button type="button" id="spotlight-prev">← Précédent</button>
-                <button type="button" id="spotlight-next" class="is-primary">Suivant →</button>
-            </div>
+    <div id="tuto-tooltip" class="tuto-tooltip" hidden></div>
+
+    <div id="tuto-bar" class="tuto-bar" hidden>
+        <div class="tuto-bar__step" id="tuto-step-label">Étape 1 / 6</div>
+        <div class="tuto-bar__content">
+            <strong id="tuto-bar-title"></strong>
+            <span id="tuto-bar-desc"></span>
+        </div>
+        <div class="tuto-bar__actions">
+            <button type="button" id="tuto-prev" class="tuto-btn">← Précédent</button>
+            <button type="button" id="tuto-next" class="tuto-btn tuto-btn--primary">Suivant →</button>
         </div>
     </div>
 
