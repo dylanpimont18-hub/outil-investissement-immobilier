@@ -1280,8 +1280,13 @@ function renderFormKpiBar(analysisModel) {
 }
 
 function buildAnalysisAcquisitionDecision(analysisModel) {
-    const { acquisitionDecision, metrics } = analysisModel;
-    const cfClass = metrics.cfNetNet > 0 ? 'is-positive' : (metrics.cfNetNet < 0 ? 'is-negative' : '');
+    const { acquisitionDecision, metrics, cfNet, loyerMinimum, monthly, annual } = analysisModel;
+    const cfNetClass = metrics.cfNetNet > 0 ? 'is-positive' : (metrics.cfNetNet < 0 ? 'is-negative' : '');
+    const cfAvantClass = cfNet > 0 ? 'is-positive' : (cfNet < 0 ? 'is-negative' : '');
+    const loyer12 = annual.loyersEncaisses / 12;
+    const charges12 = annual.charges / 12;
+    const impots12 = annual.impots / 12;
+    const regimeLabel = getRegimeLabel(state.variablesData.regime);
 
     nodes.analysisAcquisitionDecision.innerHTML = `
         <div class="buybox">
@@ -1311,11 +1316,49 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
                 </div>
             </div>
 
-            <div class="buybox-kpis">
-                <article class="buybox-kpi ${cfClass}">
-                    <span>Cash-flow net-net</span>
-                    <strong>${formatSignedCurrency(metrics.cfNetNet)} / mois</strong>
+            <div class="buybox-cf-row">
+                <article class="buybox-cf-card ${cfAvantClass}">
+                    <span class="status-label">CF avant impôt</span>
+                    <strong>${formatSignedCurrency(cfNet)} <small>/ mois</small></strong>
                 </article>
+                <div class="buybox-cf-arrow" aria-hidden="true">→</div>
+                <article class="buybox-cf-card ${cfNetClass}">
+                    <span class="status-label">CF net-net (après impôt)</span>
+                    <strong>${formatSignedCurrency(metrics.cfNetNet)} <small>/ mois</small></strong>
+                </article>
+            </div>
+
+            <div class="buybox-breakdown">
+                <span class="status-label">Décomposition mensuelle</span>
+                <ul class="cf-waterfall">
+                    <li class="cf-waterfall__row">
+                        <span>Loyer encaissé</span>
+                        <strong class="value-positive">${formatSignedCurrency(loyer12)}</strong>
+                    </li>
+                    <li class="cf-waterfall__row">
+                        <span>Mensualité crédit</span>
+                        <strong class="value-negative">−${formatPlainCurrency(monthly.mensualiteTotale)}</strong>
+                    </li>
+                    <li class="cf-waterfall__row">
+                        <span>Charges d'exploitation</span>
+                        <strong class="value-negative">−${formatPlainCurrency(charges12)}</strong>
+                    </li>
+                    <li class="cf-waterfall__row cf-waterfall__row--subtotal ${cfAvantClass}">
+                        <span>= CF avant impôt</span>
+                        <strong>${formatSignedCurrency(cfNet)}</strong>
+                    </li>
+                    <li class="cf-waterfall__row">
+                        <span>Impôts (${regimeLabel})</span>
+                        <strong class="${impots12 > 0 ? 'value-negative' : ''}">${impots12 > 0 ? '−' : ''}${formatPlainCurrency(Math.abs(impots12))}</strong>
+                    </li>
+                    <li class="cf-waterfall__row cf-waterfall__row--total ${cfNetClass}">
+                        <span>= CF net-net</span>
+                        <strong>${formatSignedCurrency(metrics.cfNetNet)}</strong>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="buybox-kpis">
                 <article class="buybox-kpi">
                     <span>Prix affiché</span>
                     <strong>${formatCurrency(acquisitionDecision.currentPrice)}</strong>
@@ -1327,6 +1370,18 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
                 <article class="buybox-kpi ${acquisitionDecision.negotiationToTenable > 0 ? 'is-watch' : 'is-positive'}">
                     <span>Baisse minimale</span>
                     <strong>${acquisitionDecision.negotiationToTenable > 0 ? formatPlainCurrency(acquisitionDecision.negotiationToTenable) : 'Aucune'}</strong>
+                </article>
+                <article class="buybox-kpi">
+                    <span>Prix de revient</span>
+                    <strong>${formatCurrency(metrics.coutTotal)}</strong>
+                </article>
+                <article class="buybox-kpi">
+                    <span>Mensualité crédit</span>
+                    <strong>${formatPlainCurrency(monthly.mensualiteTotale)}</strong>
+                </article>
+                <article class="buybox-kpi ${loyerMinimum > (analysisModel.annual.loyersEncaisses / 12) ? 'is-watch' : 'is-positive'}">
+                    <span>Loyer min. viable</span>
+                    <strong>${formatPlainCurrency(loyerMinimum)}</strong>
                 </article>
             </div>
 

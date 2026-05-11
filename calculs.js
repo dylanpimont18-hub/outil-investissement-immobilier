@@ -1053,6 +1053,17 @@ function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, threshol
     };
 }
 
+function computeLoyerMinimum(prixNet, inputs, tmi) {
+    let low = 0;
+    let high = Math.max((inputs['loyer'] || 0) * 4, 3000);
+    for (let i = 0; i < 40; i++) {
+        const mid = (low + high) / 2;
+        if (computeCF(prixNet, mid, inputs, tmi) < 0) low = mid;
+        else high = mid;
+    }
+    return Math.ceil((low + high) / 2);
+}
+
 export function computeAnalysisViewModel(projectData) {
     const inputs = projectData;
     const adults = inputs.adults || 2;
@@ -1144,7 +1155,9 @@ export function computeAnalysisViewModel(projectData) {
             assurance: model.coutAssuranceMensuel,
             mensualiteTotale: model.mensualiteTotale,
             cashflow: model.cfNetNet
-        }
+        },
+        cfNet: model.cfNet,
+        loyerMinimum: computeLoyerMinimum(prixNet, inputs, tmi)
     };
 }
 
