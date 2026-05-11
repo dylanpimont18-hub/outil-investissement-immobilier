@@ -38,7 +38,8 @@ const STORAGE_KEYS = {
     variablesData: 'investissementWebVariablesData',
     assetRecords: 'investissementWebAssetRecords',
     activeAssetId: 'investissementWebActiveAssetId',
-    syncTick: 'investissementWebSyncTick'
+    syncTick: 'investissementWebSyncTick',
+    guidedMode: 'investissementWebGuidedMode'
 };
 
 const PROFILE_OPTIONS = [
@@ -108,6 +109,16 @@ const VARIABLE_DEFAULTS = {
 };
 
 const VARIABLE_KEYS = Object.keys(VARIABLE_DEFAULTS);
+const GUIDED_FIELDS = [
+    { id: 'prix',       label: 'Prix affiché',    priority: 'essentiel', accordTitle: 'Acquisition' },
+    { id: 'loyer',      label: 'Loyer cible',     priority: 'essentiel', accordTitle: 'Acquisition' },
+    { id: 'taux-input', label: "Taux d'intérêt",  priority: 'essentiel', accordTitle: 'Financement' },
+    { id: 'duree',      label: 'Durée du prêt',   priority: 'essentiel', accordTitle: 'Financement' },
+    { id: 'apport',     label: 'Apport',           priority: 'essentiel', accordTitle: 'Financement' },
+    { id: 'vacance',    label: 'Vacance',           priority: 'important', accordTitle: 'Exploitation locative' },
+    { id: 'fonciere',   label: 'Taxe foncière',    priority: 'important', accordTitle: 'Exploitation locative' },
+    { id: 'regime',     label: 'Régime fiscal',    priority: 'important', accordTitle: 'Fiscalité' },
+];
 const REGIME_VALUES = new Set(['micro-foncier', 'reel', 'sci-is']);
 const OWNERSHIP_VALUES = new Set(['candidate', 'owned']);
 const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
@@ -198,7 +209,13 @@ const nodes = {
     themeMeta: document.querySelector('meta[name="theme-color"]'),
     fkpiRdtBrut: document.getElementById('fkpi-rdt-brut'),
     fkpiCfNet: document.getElementById('fkpi-cf-net'),
-    fkpiDscr: document.getElementById('fkpi-dscr')
+    fkpiDscr: document.getElementById('fkpi-dscr'),
+    guidedToggle: document.getElementById('guided-toggle'),
+    guidedChecklist: document.getElementById('guided-checklist'),
+    guidedProgress: document.getElementById('guided-progress'),
+    guidedBar: document.getElementById('guided-bar'),
+    guidedListEssentiel: document.getElementById('guided-list-essentiel'),
+    guidedListImportant: document.getElementById('guided-list-important'),
 };
 
 function getPanelMode() {
@@ -1929,6 +1946,7 @@ function renderWorkspaceContent() {
     nodes.variablesContext.textContent = `Étude active : ${getCurrentAssetName()} · ${getCurrentAssetStatus()} · Foyer : ${state.profileData.name} · ${formatCurrency(state.profileData.income)} · ${composition} · TMI ${tmi} %.`;
 
     if (showVariables) renderFormKpiBar(analysisModel);
+    if (showVariables && isGuidedModeActive()) renderGuidedChecklist();
     buildAnalysisStickySummary(analysisModel);
     buildAnalysisMetrics(analysisModel);
     buildAnalysisAcquisitionDecision(analysisModel);
@@ -1964,6 +1982,74 @@ function renderModalState() {
     nodes.profileModal.classList.toggle('open', state.isProfileModalOpen);
     nodes.profileModal.setAttribute('aria-hidden', String(!state.isProfileModalOpen));
     document.body.classList.toggle('modal-open', state.isProfileModalOpen);
+}
+
+function isGuidedModeActive() {
+    return localStorage.getItem(STORAGE_KEYS.guidedMode) === 'true';
+}
+
+function setGuidedMode(active) {
+    localStorage.setItem(STORAGE_KEYS.guidedMode, String(active));
+    if (!active && typeof closeSpotlight === 'function') closeSpotlight();
+    applyGuidedModeUI(active);
+}
+
+function applyGuidedModeUI(active) {
+    if (!nodes.guidedToggle) return;
+    nodes.guidedToggle.setAttribute('aria-pressed', String(active));
+    nodes.guidedToggle.classList.toggle('is-active', active);
+    if (nodes.guidedChecklist) nodes.guidedChecklist.hidden = !active;
+    if (active) renderGuidedChecklist();
+}
+
+function isFieldFilled(fieldId) {
+    const current = state.variablesData[fieldId];
+    const def = VARIABLE_DEFAULTS[fieldId];
+    if (current === undefined || current === null) return false;
+    return String(current) !== String(def);
+}
+
+function renderGuidedChecklist() {
+    if (!nodes.guidedListEssentiel || !nodes.guidedListImportant) return;
+
+    const done = GUIDED_FIELDS.filter(f => isFieldFilled(f.id)).length;
+    const total = GUIDED_FIELDS.length;
+    const firstPending = GUIDED_FIELDS.find(f => !isFieldFilled(f.id));
+
+    nodes.guidedProgress.textContent = `${done} / ${total}`;
+    nodes.guidedBar.style.width = `${Math.round((done / total) * 100)}%`;
+
+    function buildItem(field) {
+        const filled = isFieldFilled(field.id);
+        const isCurrent = firstPending && field.id === firstPending.id;
+        const li = document.createElement('li');
+        li.className = 'guided-checklist__item' +
+            (filled ? ' is-done' : '') +
+            (isCurrent ? ' is-current' : '');
+        li.dataset.fieldId = field.id;
+
+        const check = document.createElement('span');
+        check.className = 'guided-checklist__check';
+        check.textContent = filled ? '✓' : isCurrent ? '→' : '';
+
+        const name = document.createElement('span');
+        name.className = 'guided-checklist__name';
+        name.textContent = field.label;
+
+        li.appendChild(check);
+        li.appendChild(name);
+        li.addEventListener('click', () => {
+            if (typeof openSpotlight === 'function') openSpotlight(field.id);
+        });
+        return li;
+    }
+
+    nodes.guidedListEssentiel.innerHTML = '';
+    nodes.guidedListImportant.innerHTML = '';
+    GUIDED_FIELDS.forEach(f => {
+        const target = f.priority === 'essentiel' ? nodes.guidedListEssentiel : nodes.guidedListImportant;
+        target.appendChild(buildItem(f));
+    });
 }
 
 function render(options = {}) {
@@ -2028,6 +2114,11 @@ function handleScreenToggle() {
 }
 
 function bindEvents() {
+    if (nodes.guidedToggle) {
+        nodes.guidedToggle.addEventListener('click', () => {
+            setGuidedMode(!isGuidedModeActive());
+        });
+    }
     nodes.themeToggle.addEventListener('click', () => {
         state.theme = state.theme === 'dark' ? 'light' : 'dark';
         localStorage.setItem(STORAGE_KEYS.theme, state.theme);
@@ -2130,6 +2221,7 @@ populateProfiles();
 setupCrossWindowSync();
 bindEvents();
 render();
+applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 initAccordion();
 

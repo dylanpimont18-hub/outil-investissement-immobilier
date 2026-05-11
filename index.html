@@ -25,6 +25,7 @@
             <div class="topbar-actions">
                 <button type="button" id="theme-toggle" class="topbar-btn" aria-label="Basculer thème"></button>
                 <button type="button" id="screen-toggle" class="topbar-btn" aria-label="Mode 2 écrans"></button>
+                <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode guidé" aria-pressed="false">Guide</button>
                 <button type="button" id="profile-trigger" class="topbar-btn" aria-label="Profil du foyer"></button>
             </div>
         </header>
@@ -64,6 +65,20 @@
         <span class="form-kpi-bar__value" id="fkpi-dscr">—</span>
         <span class="form-kpi-bar__label">DSCR</span>
     </div>
+</div>
+
+<div class="guided-checklist" id="guided-checklist" hidden>
+    <div class="guided-checklist__head">
+        <span>Guide de saisie</span>
+        <span class="guided-checklist__progress" id="guided-progress">0 / 8</span>
+    </div>
+    <div class="guided-checklist__bar-track">
+        <div class="guided-checklist__bar-fill" id="guided-bar" style="width:0%"></div>
+    </div>
+    <div class="guided-checklist__section-label">Essentiels</div>
+    <ul class="guided-checklist__list" id="guided-list-essentiel"></ul>
+    <div class="guided-checklist__section-label">Importants</div>
+    <ul class="guided-checklist__list" id="guided-list-important"></ul>
 </div>
 
                         <form id="variables-form" class="variables-form">
