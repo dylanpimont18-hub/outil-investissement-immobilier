@@ -1990,6 +1990,7 @@ function isGuidedModeActive() {
 
 function setGuidedMode(active) {
     localStorage.setItem(STORAGE_KEYS.guidedMode, String(active));
+    // closeSpotlight is defined in Task 6 as a function declaration (var-hoisted) — typeof guard is intentional
     if (!active && typeof closeSpotlight === 'function') closeSpotlight();
     applyGuidedModeUI(active);
 }
@@ -1999,18 +2000,19 @@ function applyGuidedModeUI(active) {
     nodes.guidedToggle.setAttribute('aria-pressed', String(active));
     nodes.guidedToggle.classList.toggle('is-active', active);
     if (nodes.guidedChecklist) nodes.guidedChecklist.hidden = !active;
-    if (active) renderGuidedChecklist();
 }
 
 function isFieldFilled(fieldId) {
     const current = state.variablesData[fieldId];
     const def = VARIABLE_DEFAULTS[fieldId];
     if (current === undefined || current === null) return false;
+    // Note: fields with default=0 (apport, vacance) stay "unfilled" if user sets them to 0 intentionally — acceptable UX trade-off
     return String(current) !== String(def);
 }
 
 function renderGuidedChecklist() {
-    if (!nodes.guidedListEssentiel || !nodes.guidedListImportant) return;
+    if (!nodes.guidedListEssentiel || !nodes.guidedListImportant
+        || !nodes.guidedProgress || !nodes.guidedBar) return;
 
     const done = GUIDED_FIELDS.filter(f => isFieldFilled(f.id)).length;
     const total = GUIDED_FIELDS.length;
