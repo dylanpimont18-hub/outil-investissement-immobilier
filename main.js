@@ -224,22 +224,7 @@ const nodes = {
     exportDecisionPdf: document.getElementById('export-decision-pdf'),
     analysisKicker: document.getElementById('analysis-kicker'),
     analysisSubtitle: document.getElementById('analysis-subtitle'),
-    analysisStickySummary: document.getElementById('analysis-sticky-summary'),
     analysisAcquisitionDecision: document.getElementById('analysis-acquisition-decision'),
-    analysisChecklist: document.getElementById('analysis-checklist'),
-    analysisConfidence: document.getElementById('analysis-confidence'),
-    analysisScenarios: document.getElementById('analysis-scenarios'),
-    analysisJournal: document.getElementById('analysis-journal'),
-    analysisMetrics: document.getElementById('analysis-metrics'),
-    analysisMonthlyChart: document.getElementById('analysis-monthly-chart'),
-    analysisCostChart: document.getElementById('analysis-cost-chart'),
-    analysisTimelineChart: document.getElementById('analysis-timeline-chart'),
-    analysisPriceRentMatrix: document.getElementById('analysis-price-rent-matrix'),
-    analysisRegimeTable: document.getElementById('analysis-regime-table'),
-    analysisSensitivityTable: document.getElementById('analysis-sensitivity-table'),
-    analysisSummary: document.getElementById('analysis-summary'),
-    analysisActionPlan: document.getElementById('analysis-action-plan'),
-    analysisDetails: document.getElementById('analysis-details'),
     portfolioSummary: document.getElementById('portfolio-summary'),
     portfolioDecision: document.getElementById('portfolio-decision'),
     portfolioAlerts: document.getElementById('portfolio-alerts'),
@@ -562,19 +547,6 @@ function formatSignedCurrency(value) {
     return label;
 }
 
-function formatCompactCurrency(value) {
-    if (!Number.isFinite(value)) {
-        return '--';
-    }
-    const roundedValue = Math.round(value);
-    const sign = roundedValue > 0 ? '+' : (roundedValue < 0 ? '-' : '');
-    const compactValue = new Intl.NumberFormat('fr-FR', {
-        notation: 'compact',
-        maximumFractionDigits: 1
-    }).format(Math.abs(roundedValue));
-    return `${sign}${compactValue} €`;
-}
-
 function formatPlainCurrency(value) {
     return formatCurrency(value).replace(/\u00A0/g, ' ');
 }
@@ -599,18 +571,6 @@ function getRegimeLabel(regime) {
     return 'Foncier réel';
 }
 
-function getChecklistTone(status) {
-    if (status === 'ready') return 'positive';
-    if (status === 'watch') return 'watch';
-    return 'negative';
-}
-
-function getChecklistLabel(status) {
-    if (status === 'ready') return 'OK';
-    if (status === 'watch') return 'A verifier';
-    return 'Bloquant';
-}
-
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -618,10 +578,6 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
-}
-
-function formatMultilineText(value) {
-    return escapeHtml(value).replace(/\n/g, '<br>');
 }
 
 function getDecisionJournalFields() {
@@ -731,218 +687,6 @@ function formatCheckpointValue(checkpoint) {
         return formatPercent(checkpoint.value);
     }
     return String(checkpoint.value);
-}
-
-function buildBarChartMarkup(items) {
-    const maxValue = Math.max(1, ...items.map(item => Math.abs(item.value)));
-    return `
-        <div class="chart-list">
-            ${items.map(item => {
-                const formattedValue = item.signedValue !== undefined
-                    ? formatSignedCurrency(item.signedValue)
-                    : formatCurrency(item.value);
-                const width = Math.max(6, Math.round((Math.abs(item.value) / maxValue) * 100));
-                return `
-                    <div class="chart-row">
-                        <div class="chart-meta">
-                            <span>${item.label}</span>
-                            <strong>${formattedValue}</strong>
-                        </div>
-                        <div class="chart-track">
-                            <div class="chart-fill chart-fill--${item.kind}" style="width: ${width}%"></div>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
-
-function buildSvgPath(points) {
-    return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-}
-
-function buildProjectionChart(projection) {
-    const width = 760;
-    const height = 280;
-    const padding = { top: 18, right: 18, bottom: 34, left: 56 };
-    const plotWidth = width - padding.left - padding.right;
-    const plotHeight = height - padding.top - padding.bottom;
-    const series = [
-        { key: 'cumulativeCashflow', label: 'CF cumulé', tone: 'cashflow' },
-        { key: 'cumulativePrincipal', label: 'Capital remboursé', tone: 'principal' },
-        { key: 'traction', label: 'Valeur créée', tone: 'wealth' }
-    ];
-    const values = projection.years.flatMap(item => series.map(seriesItem => item[seriesItem.key]));
-    const minValue = Math.min(0, ...values);
-    const maxValue = Math.max(0, ...values);
-    const valueRange = Math.max(1, maxValue - minValue);
-    const tickCount = 5;
-    const finalYear = projection.years[projection.years.length - 1] || {
-        cumulativeCashflow: 0,
-        cumulativePrincipal: 0,
-        traction: 0
-    };
-
-    const xForIndex = index => padding.left + (projection.years.length <= 1 ? plotWidth / 2 : (plotWidth * index) / (projection.years.length - 1));
-    const yForValue = value => padding.top + ((maxValue - value) / valueRange) * plotHeight;
-    const tickValues = Array.from({ length: tickCount }, (_, index) => maxValue - ((valueRange / (tickCount - 1)) * index));
-
-    return `
-        <div class="timeline-chart">
-            <div class="timeline-summary">
-                <div class="timeline-pill">
-                    <span>Projection</span>
-                    <strong>${projection.horizonYears} ans</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>CF cumulé</span>
-                    <strong>${formatSignedCurrency(finalYear.cumulativeCashflow)}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Capital remboursé</span>
-                    <strong>${formatCurrency(finalYear.cumulativePrincipal)}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Valeur créée</span>
-                    <strong>${formatSignedCurrency(finalYear.traction)}</strong>
-                </div>
-            </div>
-            <div class="timeline-legend">
-                ${series.map(item => `
-                    <span class="timeline-legend-item">
-                        <span class="timeline-swatch timeline-swatch--${item.tone}"></span>
-                        <span>${item.label}</span>
-                    </span>
-                `).join('')}
-            </div>
-            <svg viewBox="0 0 ${width} ${height}" class="timeline-svg" aria-label="Projection pluriannuelle">
-                ${tickValues.map(value => `
-                    <g>
-                        <line class="timeline-grid-line" x1="${padding.left}" y1="${yForValue(value).toFixed(1)}" x2="${width - padding.right}" y2="${yForValue(value).toFixed(1)}"></line>
-                        <text class="timeline-axis-text" x="${padding.left - 10}" y="${(yForValue(value) + 4).toFixed(1)}" text-anchor="end">${formatCompactCurrency(value)}</text>
-                    </g>
-                `).join('')}
-                ${(minValue < 0 && maxValue > 0) ? `<line class="timeline-zero-line" x1="${padding.left}" y1="${yForValue(0).toFixed(1)}" x2="${width - padding.right}" y2="${yForValue(0).toFixed(1)}"></line>` : ''}
-                ${projection.years.map((item, index) => `
-                    <text class="timeline-axis-text" x="${xForIndex(index).toFixed(1)}" y="${height - 8}" text-anchor="middle">A${item.year}</text>
-                `).join('')}
-                ${series.map(seriesItem => {
-                    const points = projection.years.map((item, index) => ({
-                        x: xForIndex(index),
-                        y: yForValue(item[seriesItem.key])
-                    }));
-                    return `
-                        <path class="timeline-path timeline-path--${seriesItem.tone}" d="${buildSvgPath(points)}"></path>
-                        ${points.map(point => `
-                            <circle class="timeline-dot timeline-dot--${seriesItem.tone}" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.5"></circle>
-                        `).join('')}
-                    `;
-                }).join('')}
-            </svg>
-        </div>
-    `;
-}
-
-function getMatrixToneClass(value) {
-    if (value >= 100) return 'excellent';
-    if (value >= 0) return 'positive';
-    if (value >= -100) return 'watch';
-    return 'negative';
-}
-
-function buildPriceRentMatrixMarkup(matrix) {
-    return `
-        <div class="matrix-shell">
-            <div class="matrix-legend">
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--excellent"></span>Très favorable</span>
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--positive"></span>Acheter</span>
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--watch"></span>Négocier</span>
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--negative"></span>Refuser</span>
-            </div>
-            <div class="matrix-scroll">
-                <div class="matrix-grid" style="grid-template-columns: minmax(132px, 1.15fr) repeat(${matrix.columnRents.length}, minmax(92px, 1fr));">
-                    <div class="matrix-corner">
-                        <span>Prix affiché</span>
-                        <strong>Loyer visé</strong>
-                    </div>
-                    ${matrix.columnRents.map(column => `
-                        <div class="matrix-axis ${column.isBase ? 'is-base' : ''}">
-                            <span>Loyer</span>
-                            <strong>${formatCurrency(column.value)}</strong>
-                        </div>
-                    `).join('')}
-                    ${matrix.rows.map(row => `
-                        <div class="matrix-axis matrix-axis--row ${row.isBase ? 'is-base' : ''}">
-                            <span>Prix d'offre</span>
-                            <strong>${formatCurrency(row.value)}</strong>
-                        </div>
-                        ${row.cells.map(cell => `
-                            <div class="matrix-cell matrix-cell--${cell.decisionTone} ${cell.isBase ? 'is-base' : ''}">
-                                <span class="matrix-decision matrix-decision--${cell.decisionTone}">${cell.decisionLabel}</span>
-                                <strong>${formatSignedCurrency(cell.cfNetNet)}</strong>
-                                <small>${cell.isBase ? 'Référence · CF / mois' : 'CF / mois'}</small>
-                            </div>
-                        `).join('')}
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function buildRegimeTable(regimeComparison) {
-    nodes.analysisRegimeTable.innerHTML = `
-        <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Régime</th>
-                    <th>CF / mois</th>
-                    <th>Lecture</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${regimeComparison.map((item, index) => {
-                    const cssClass = item.cfNetNet >= 0 ? 'value-positive' : 'value-negative';
-                    const status = index === 0 ? 'Optimal' : (item.isCurrent ? 'Actuel' : '');
-                    return `
-                        <tr>
-                            <td>${item.label}</td>
-                            <td><strong class="${cssClass}">${formatSignedCurrency(item.cfNetNet)}</strong></td>
-                            <td>${status}</td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>
-    `;
-}
-
-function buildSensitivityTable(sensitivity) {
-    nodes.analysisSensitivityTable.innerHTML = `
-        <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Scénario</th>
-                    <th>CF / mois</th>
-                    <th>Impact</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${sensitivity.map(item => {
-                    const cfClass = item.cfNetNet >= 0 ? 'value-positive' : 'value-negative';
-                    const deltaClass = item.delta >= 0 ? 'value-positive' : 'value-negative';
-                    return `
-                        <tr>
-                            <td>${item.label}</td>
-                            <td><strong class="${cfClass}">${formatSignedCurrency(item.cfNetNet)}</strong></td>
-                            <td><strong class="${deltaClass}">${formatSignedCurrency(item.delta)}</strong></td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>
-    `;
 }
 
 function buildAssetActionButtons(assetId, scope) {
@@ -1535,116 +1279,9 @@ function renderFormKpiBar(analysisModel) {
     nodes.fkpiDscr.className = 'form-kpi-bar__value';
 }
 
-function buildAnalysisMetrics(analysisModel) {
-    const { metrics, acquisitionDecision, confidenceModel, scenarioModel } = analysisModel;
-    const cards = [
-        {
-            label: 'Cash-flow net-net',
-            value: formatSignedCurrency(metrics.cfNetNet),
-            rawValue: metrics.cfNetNet,
-            cssClass: getMetricClass(metrics.cfNetNet),
-            barPct: Math.min(100, Math.max(0, (metrics.cfNetNet + 200) / 400 * 100))
-        },
-        {
-            label: 'Rentabilité brute',
-            value: `${(metrics.rentaBrute ?? 0).toFixed(2).replace('.', ',')} %`,
-            rawValue: metrics.rentaBrute ?? 0,
-            cssClass: (metrics.rentaBrute ?? 0) >= 7 ? 'is-positive' : (metrics.rentaBrute ?? 0) >= 5 ? 'is-watch' : 'is-negative',
-            barPct: Math.min(100, ((metrics.rentaBrute ?? 0) / 10) * 100)
-        },
-        {
-            label: 'DSCR',
-            value: formatRatio(metrics.dscr),
-            rawValue: metrics.dscr,
-            cssClass: metrics.dscr >= 1.1 ? 'is-positive' : (metrics.dscr >= 1 ? 'is-watch' : 'is-negative'),
-            barPct: Math.min(100, (metrics.dscr / 1.5) * 100)
-        },
-        {
-            label: 'Offre plafond',
-            value: formatPlainCurrency(acquisitionDecision.maxOfferPrice),
-            rawValue: acquisitionDecision.maxOfferPrice,
-            cssClass: acquisitionDecision.currentPrice <= acquisitionDecision.maxOfferPrice + 500 ? 'is-positive' : 'is-watch',
-            barPct: Math.min(100, Math.max(0, (acquisitionDecision.maxOfferPrice / (acquisitionDecision.currentPrice || 1)) * 100))
-        },
-        {
-            label: 'Score décision',
-            value: `${acquisitionDecision.score}/100`,
-            rawValue: acquisitionDecision.score,
-            cssClass: getDecisionClass(acquisitionDecision.tone),
-            barPct: acquisitionDecision.score
-        },
-        {
-            label: 'Fiabilité',
-            value: `${confidenceModel.score}/100`,
-            rawValue: confidenceModel.score,
-            cssClass: getDecisionClass(confidenceModel.tone),
-            barPct: confidenceModel.score
-        },
-        {
-            label: 'Zone solide',
-            value: formatPlainCurrency(acquisitionDecision.solidOfferPrice),
-            rawValue: acquisitionDecision.solidOfferPrice,
-            cssClass: acquisitionDecision.currentPrice <= acquisitionDecision.solidOfferPrice + 500 ? 'is-positive' : 'is-neutral',
-            barPct: Math.min(100, Math.max(0, (acquisitionDecision.solidOfferPrice / (acquisitionDecision.currentPrice || 1)) * 100))
-        },
-        {
-            label: 'Résistance',
-            value: scenarioModel.label,
-            rawValue: 0,
-            cssClass: getDecisionClass(scenarioModel.tone),
-            barPct: 50
-        }
-    ];
-
-    nodes.analysisMetrics.innerHTML = cards.map((card, i) => `
-        <article class="kpi-card" data-kpi-index="${i}">
-            <div class="kpi-value ${card.cssClass}" data-kpi-value="${escapeHtml(card.value)}">${escapeHtml(card.value)}</div>
-            <div class="kpi-label">${escapeHtml(card.label)}</div>
-            <div class="kpi-bar"><div class="kpi-bar-fill" style="--pct: ${card.barPct ?? 50}%"></div></div>
-        </article>
-    `).join('');
-
-    nodes.analysisMetrics.querySelectorAll('[data-kpi-value]').forEach(el => {
-        animateCounter(el, el.dataset.kpiValue);
-    });
-}
-
-function buildAnalysisStickySummary(analysisModel) {
-    const { acquisitionDecision, confidenceModel, scenarioModel } = analysisModel;
-
-    nodes.analysisStickySummary.innerHTML = `
-        <div class="analysis-sticky-card">
-            <div class="analysis-sticky-copy">
-                <span class="status-label">En un coup d œil</span>
-                <div class="analysis-sticky-head">
-                    <strong class="decision-badge decision-badge--${acquisitionDecision.tone}">${acquisitionDecision.label}</strong>
-                    <p class="analysis-sticky-action">${escapeHtml(acquisitionDecision.action)}</p>
-                </div>
-            </div>
-            <div class="analysis-sticky-kpis">
-                <article class="analysis-sticky-kpi">
-                    <span>Score</span>
-                    <strong>${acquisitionDecision.score}/100</strong>
-                </article>
-                <article class="analysis-sticky-kpi">
-                    <span>Offre plafond</span>
-                    <strong>${formatPlainCurrency(acquisitionDecision.maxOfferPrice)}</strong>
-                </article>
-                <article class="analysis-sticky-kpi">
-                    <span>Fiabilité</span>
-                    <strong>${confidenceModel.label}</strong>
-                </article>
-                <article class="analysis-sticky-kpi">
-                    <span>Stress</span>
-                    <strong>${scenarioModel.label}</strong>
-                </article>
-            </div>
-        </div>
-    `;
-}
-
 function buildAnalysisAcquisitionDecision(analysisModel) {
-    const { acquisitionDecision, acquisitionChecklist, confidenceModel, scenarioModel } = analysisModel;
+    const { acquisitionDecision, metrics } = analysisModel;
+    const cfClass = metrics.cfNetNet > 0 ? 'is-positive' : (metrics.cfNetNet < 0 ? 'is-negative' : '');
 
     nodes.analysisAcquisitionDecision.innerHTML = `
         <div class="buybox">
@@ -1655,14 +1292,10 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
                         <h4>${acquisitionDecision.label}</h4>
                         <div class="buybox-badges">
                             <strong class="decision-badge decision-badge--${acquisitionDecision.tone}">${acquisitionDecision.priceBand}</strong>
-                            <strong class="status-pill status-pill--${acquisitionDecision.checklistTone}">${acquisitionDecision.checklistLabel}</strong>
-                            <strong class="status-pill status-pill--${confidenceModel.tone}">Fiabilité ${confidenceModel.label}</strong>
-                            <strong class="status-pill status-pill--${scenarioModel.tone}">Stress ${scenarioModel.label}</strong>
                         </div>
                     </div>
                     <p class="analysis-verdict">${acquisitionDecision.summary}</p>
                     <p class="decision-hint">Action prioritaire : <strong>${acquisitionDecision.action}</strong></p>
-                    <p class="decision-hint">Vérifications terrain : <strong>${acquisitionChecklist.summary}</strong></p>
                 </div>
                 <div class="score-hero">
                     <svg class="score-gauge" viewBox="0 0 120 120" width="96" height="96" role="img" aria-label="Score ${acquisitionDecision.score}/100">
@@ -1679,6 +1312,10 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
             </div>
 
             <div class="buybox-kpis">
+                <article class="buybox-kpi ${cfClass}">
+                    <span>Cash-flow net-net</span>
+                    <strong>${formatSignedCurrency(metrics.cfNetNet)} / mois</strong>
+                </article>
                 <article class="buybox-kpi">
                     <span>Prix affiché</span>
                     <strong>${formatCurrency(acquisitionDecision.currentPrice)}</strong>
@@ -1686,10 +1323,6 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
                 <article class="buybox-kpi ${acquisitionDecision.currentPrice <= acquisitionDecision.maxOfferPrice + 500 ? 'is-positive' : 'is-watch'}">
                     <span>Offre plafond</span>
                     <strong>${formatCurrency(acquisitionDecision.maxOfferPrice)}</strong>
-                </article>
-                <article class="buybox-kpi ${acquisitionDecision.currentPrice <= acquisitionDecision.solidOfferPrice + 500 ? 'is-positive' : 'is-neutral'}">
-                    <span>Prix confortable</span>
-                    <strong>${formatCurrency(acquisitionDecision.solidOfferPrice)}</strong>
                 </article>
                 <article class="buybox-kpi ${acquisitionDecision.negotiationToTenable > 0 ? 'is-watch' : 'is-positive'}">
                     <span>Baisse minimale</span>
@@ -1730,213 +1363,6 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
     `;
 }
 
-function buildAnalysisChecklist(analysisModel) {
-    const { acquisitionChecklist } = analysisModel;
-
-    nodes.analysisChecklist.innerHTML = `
-        <div class="checklist-shell">
-            <div class="decision-head">
-                <span class="status-label">Vérifications terrain</span>
-                <strong class="status-pill status-pill--${acquisitionChecklist.readinessTone}">${acquisitionChecklist.readinessLabel}</strong>
-            </div>
-            <p class="decision-hint">${acquisitionChecklist.summary}</p>
-            <div class="checklist-list">
-                ${acquisitionChecklist.items.map(item => {
-                    const tone = getChecklistTone(item.status);
-                    return `
-                        <article class="checklist-item checklist-item--${tone}">
-                            <div class="lever-head">
-                                <strong>${item.label}</strong>
-                                <span class="status-pill status-pill--${tone}">${getChecklistLabel(item.status)}</span>
-                            </div>
-                            <p>${item.detail}</p>
-                        </article>
-                    `;
-                }).join('')}
-            </div>
-        </div>
-    `;
-}
-
-function buildAnalysisConfidence(analysisModel) {
-    const { confidenceModel } = analysisModel;
-
-    nodes.analysisConfidence.innerHTML = `
-        <div class="confidence-shell">
-            <div class="decision-head">
-                <span class="status-label">Fiabilité des hypothèses</span>
-                <strong class="status-pill status-pill--${confidenceModel.tone}">${confidenceModel.label}</strong>
-            </div>
-            <p class="decision-hint">${confidenceModel.summary}</p>
-            <div class="timeline-summary">
-                <div class="timeline-pill">
-                    <span>Score</span>
-                    <strong>${confidenceModel.score}/100</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Confirmées</span>
-                    <strong>${confidenceModel.verifiedCount}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Estimées</span>
-                    <strong>${confidenceModel.estimatedCount}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Manquantes</span>
-                    <strong>${confidenceModel.unknownCount}</strong>
-                </div>
-            </div>
-            <ul class="decision-checkpoints">
-                ${confidenceModel.items.map(item => `
-                    <li>
-                        <div>
-                            <span>${item.label}</span>
-                            <small>${item.critical ? 'Point critique' : 'Point de confort'}</small>
-                        </div>
-                        <strong class="status-pill status-pill--${item.tone}">${item.statusLabel}</strong>
-                    </li>
-                `).join('')}
-            </ul>
-        </div>
-    `;
-}
-
-function buildAnalysisScenarios(analysisModel) {
-    const { scenarioModel } = analysisModel;
-
-    nodes.analysisScenarios.innerHTML = `
-        <div class="scenario-shell">
-            <div class="decision-head">
-                <span class="status-label">Scénarios de stress</span>
-                <strong class="status-pill status-pill--${scenarioModel.tone}">${scenarioModel.label}</strong>
-            </div>
-            <p class="decision-hint">${scenarioModel.summary}</p>
-            <div class="scenario-list">
-                ${scenarioModel.scenarios.map(item => `
-                    <article class="scenario-card scenario-card--${item.tone}">
-                        <div class="lever-head">
-                            <strong>${item.label}</strong>
-                            <span class="status-pill status-pill--${item.tone}">${item.matrixLabel}</span>
-                        </div>
-                        <p>${item.description}</p>
-                        <div class="scenario-metrics">
-                            <span>CF ${formatSignedCurrency(item.cfNetNet)}</span>
-                            <span>DSCR ${formatRatio(item.dscr)}</span>
-                        </div>
-                    </article>
-                `).join('')}
-            </div>
-        </div>
-    `;
-}
-
-function buildAnalysisJournal(analysisModel) {
-    const { decisionJournal } = analysisModel;
-    const thesis = decisionJournal.thesis || decisionJournal.suggestedThesis;
-    const nextStep = decisionJournal.nextStep || decisionJournal.suggestedNextStep;
-
-    nodes.analysisJournal.innerHTML = `
-        <div class="journal-card">
-            <div class="decision-head">
-                <span class="status-label">Trace de décision</span>
-                <strong class="status-pill status-pill--${decisionJournal.tone}">${decisionJournal.label}</strong>
-            </div>
-            <p class="decision-hint">${decisionJournal.summary}</p>
-            <div class="journal-block">
-                <span class="status-label">Thèse d'investissement</span>
-                <p class="journal-note ${decisionJournal.thesis ? '' : 'is-suggested'}">${formatMultilineText(thesis)}</p>
-            </div>
-            <div class="journal-block">
-                <span class="status-label">Prochaine étape</span>
-                <p class="journal-note ${decisionJournal.nextStep ? '' : 'is-suggested'}">${formatMultilineText(nextStep)}</p>
-            </div>
-        </div>
-    `;
-}
-
-function buildAnalysisSummary(analysisModel, tmi, parts, composition) {
-    const { decision } = analysisModel;
-    nodes.analysisSummary.innerHTML = `
-        <div class="decision-card">
-            <div class="decision-head">
-                <span class="status-label">Décision d'exploitation</span>
-                <strong class="decision-badge decision-badge--${decision.tone}">${decision.label}</strong>
-            </div>
-            <p class="analysis-verdict">${decision.summary}</p>
-            <p class="decision-hint">Étape recommandée : <strong>${decision.action}</strong></p>
-            <ul class="decision-checkpoints">
-                ${decision.checkpoints.map(checkpoint => `
-                    <li>
-                        <div>
-                            <span>${checkpoint.label}</span>
-                            <small>${checkpoint.target}</small>
-                        </div>
-                        <strong class="status-pill status-pill--${checkpoint.tone}">${formatCheckpointValue(checkpoint)}</strong>
-                    </li>
-                `).join('')}
-            </ul>
-            <ul class="analysis-list analysis-list--compact">
-                <li><span>Profil actif</span><strong>${state.profileData.name}</strong></li>
-                <li><span>Composition du foyer</span><strong>${composition}</strong></li>
-                <li><span>Parts fiscales</span><strong>${parts.toLocaleString('fr-FR')} part${parts > 1 ? 's' : ''}</strong></li>
-                <li><span>TMI estimée</span><strong>${tmi} %</strong></li>
-            </ul>
-        </div>
-    `;
-}
-
-function buildActionPlan(levers) {
-    if (!levers.length) {
-        nodes.analysisActionPlan.innerHTML = '<p class="collection-empty">Aucun levier prioritaire n a été identifié à ce stade.</p>';
-        return;
-    }
-
-    nodes.analysisActionPlan.innerHTML = `
-        <div class="lever-list">
-            ${levers.map((lever, index) => `
-                <article class="lever-card">
-                    <div class="lever-head">
-                        <span class="status-label">Priorité ${index + 1}</span>
-                        <span class="status-pill status-pill--${lever.delta >= 0 ? 'positive' : 'negative'}">${formatSignedCurrency(lever.delta)} / mois</span>
-                    </div>
-                    <strong>${lever.label}</strong>
-                    <p>${lever.category} · CF projeté ${formatSignedCurrency(lever.nextCf)}</p>
-                </article>
-            `).join('')}
-        </div>
-    `;
-}
-
-function buildAnalysisDetails(analysisModel, composition) {
-    const { metrics, decision, confidenceModel, decisionThresholds } = analysisModel;
-    nodes.analysisDetails.innerHTML = `
-        <ul class="analysis-list">
-            <li><span>Nom du bien</span><strong>${escapeHtml(getCurrentAssetName())}</strong></li>
-            <li><span>Statut du dossier</span><strong>${getCurrentAssetStatus()}</strong></li>
-            <li><span>Ville</span><strong>${escapeHtml(state.variablesData.ville || 'Ville non renseignée')}</strong></li>
-            <li><span>Prix net vendeur</span><strong>${formatCurrency(metrics.prixNet)}</strong></li>
-            <li><span>Rentabilité brute</span><strong>${formatPercent(metrics.rentaBrute)}</strong></li>
-            <li><span>Rentabilité nette</span><strong>${formatPercent(metrics.rentaNette)}</strong></li>
-            <li><span>Cash-on-cash</span><strong>${formatPercent(metrics.coc)}</strong></li>
-            <li><span>DSCR</span><strong>${formatRatio(metrics.dscr)}</strong></li>
-            <li><span>GRM</span><strong>${formatRatio(metrics.grm)}</strong></li>
-            <li><span>Fiabilité du dossier</span><strong>${confidenceModel.score}/100</strong></li>
-            <li><span>CF minimum</span><strong>${formatSignedCurrency(decisionThresholds.minCf)}</strong></li>
-            <li><span>DSCR minimum</span><strong>${formatRatio(decisionThresholds.minDscr)}</strong></li>
-            <li><span>Régime choisi</span><strong>${getRegimeLabel(state.variablesData.regime)}</strong></li>
-            <li><span>Verdict d'exploitation</span><strong>${decision.label}</strong></li>
-            <li><span>Composition du foyer</span><strong>${composition}</strong></li>
-        </ul>
-    `;
-}
-
-function buildAnalysisVisuals(analysisModel) {
-    nodes.analysisMonthlyChart.innerHTML = buildBarChartMarkup(analysisModel.monthlyBreakdown);
-    nodes.analysisCostChart.innerHTML = buildBarChartMarkup(analysisModel.costBreakdown);
-    nodes.analysisTimelineChart.innerHTML = buildProjectionChart(analysisModel.projection);
-    nodes.analysisPriceRentMatrix.innerHTML = buildPriceRentMatrixMarkup(analysisModel.priceRentMatrix);
-}
-
 function renderCollections() {
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
@@ -1958,7 +1384,7 @@ function renderCollections() {
 
 function renderWorkspaceContent() {
     const analysisModel = getCurrentAnalysisModel();
-    const { metrics, parts, tmi } = analysisModel;
+    const { tmi } = analysisModel;
     const composition = getProfileComposition(state.profileData);
     const useLocalFallback = !IS_ANALYSIS_WINDOW && state.screens === 2 && state.analysisPopupBlocked;
     const showVariables = !IS_ANALYSIS_WINDOW;
@@ -2004,19 +1430,7 @@ function renderWorkspaceContent() {
     nodes.variablesContext.textContent = `Étude active : ${getCurrentAssetName()} · ${getCurrentAssetStatus()} · Foyer : ${state.profileData.name} · ${formatCurrency(state.profileData.income)} · ${composition} · TMI ${tmi} %.`;
 
     if (showVariables) renderFormKpiBar(analysisModel);
-    buildAnalysisStickySummary(analysisModel);
-    buildAnalysisMetrics(analysisModel);
     buildAnalysisAcquisitionDecision(analysisModel);
-    buildAnalysisConfidence(analysisModel);
-    buildAnalysisScenarios(analysisModel);
-    buildAnalysisJournal(analysisModel);
-    buildAnalysisVisuals(analysisModel);
-    buildRegimeTable(analysisModel.regimeComparison);
-    buildSensitivityTable(analysisModel.sensitivity);
-    buildAnalysisSummary(analysisModel, tmi, parts, composition);
-    buildAnalysisChecklist(analysisModel);
-    buildActionPlan(analysisModel.actionLevers);
-    buildAnalysisDetails(analysisModel, composition);
     renderCollections();
     syncAssetActionLabels();
 }
