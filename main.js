@@ -2265,6 +2265,8 @@ function initWorkspaceTabs() {
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
 
+    collectionPanel.style.display = 'none'; // hide on load — workspace tab is active by default
+
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('is-active'));
