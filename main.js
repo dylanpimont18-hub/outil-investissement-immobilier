@@ -2340,6 +2340,7 @@ render();
 applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 initAccordion();
+initTutoBar();
 
 if (!IS_ANALYSIS_WINDOW && state.screens === 2) {
     openAnalysisWindow({ focus: false });
