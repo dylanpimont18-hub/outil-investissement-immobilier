@@ -195,7 +195,10 @@ const nodes = {
     profileParts: document.getElementById('profile-parts'),
     profileTmi: document.getElementById('profile-tmi'),
     profileComposition: document.getElementById('profile-composition'),
-    themeMeta: document.querySelector('meta[name="theme-color"]')
+    themeMeta: document.querySelector('meta[name="theme-color"]'),
+    fkpiRdtBrut: document.getElementById('fkpi-rdt-brut'),
+    fkpiCfNet: document.getElementById('fkpi-cf-net'),
+    fkpiDscr: document.getElementById('fkpi-dscr')
 };
 
 function getPanelMode() {
@@ -1428,6 +1431,35 @@ function closeAnalysisWindow() {
     state.analysisPopupBlocked = false;
 }
 
+function renderFormKpiBar(analysisModel) {
+    if (!nodes.fkpiRdtBrut) return;
+    const { metrics } = analysisModel;
+    const prix = state.variablesData.prix ?? 0;
+
+    if (!prix) {
+        nodes.fkpiRdtBrut.textContent = '—';
+        nodes.fkpiRdtBrut.className = 'form-kpi-bar__value form-kpi-bar__value--gold';
+        nodes.fkpiCfNet.textContent = '—';
+        nodes.fkpiCfNet.className = 'form-kpi-bar__value';
+        nodes.fkpiDscr.textContent = '—';
+        nodes.fkpiDscr.className = 'form-kpi-bar__value';
+        return;
+    }
+
+    const rdt = metrics.rentaBrute ?? 0;
+    nodes.fkpiRdtBrut.textContent = `${rdt.toFixed(2).replace('.', ',')} %`;
+    nodes.fkpiRdtBrut.className = 'form-kpi-bar__value form-kpi-bar__value--gold';
+
+    const cf = metrics.cfNetNet ?? 0;
+    const cfText = (cf >= 0 ? '+' : '') + cf.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
+    nodes.fkpiCfNet.textContent = cfText;
+    nodes.fkpiCfNet.className = `form-kpi-bar__value ${cf >= 0 ? 'form-kpi-bar__value--green' : 'form-kpi-bar__value--red'}`;
+
+    const dscr = metrics.dscr ?? 0;
+    nodes.fkpiDscr.textContent = dscr.toFixed(2).replace('.', ',');
+    nodes.fkpiDscr.className = 'form-kpi-bar__value';
+}
+
 function buildAnalysisMetrics(analysisModel) {
     const { metrics, acquisitionDecision, confidenceModel, scenarioModel } = analysisModel;
     const cards = [
@@ -1896,6 +1928,7 @@ function renderWorkspaceContent() {
         : 'Toutes les hypothèses restent pilotées depuis la fenêtre principale.';
     nodes.variablesContext.textContent = `Étude active : ${getCurrentAssetName()} · ${getCurrentAssetStatus()} · Foyer : ${state.profileData.name} · ${formatCurrency(state.profileData.income)} · ${composition} · TMI ${tmi} %.`;
 
+    if (showVariables) renderFormKpiBar(analysisModel);
     buildAnalysisStickySummary(analysisModel);
     buildAnalysisMetrics(analysisModel);
     buildAnalysisAcquisitionDecision(analysisModel);
