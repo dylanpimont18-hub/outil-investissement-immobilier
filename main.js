@@ -267,18 +267,13 @@ const nodes = {
     fkpiCfNet: document.getElementById('fkpi-cf-net'),
     fkpiDscr: document.getElementById('fkpi-dscr'),
     guidedToggle: document.getElementById('guided-toggle'),
-    guidedChecklist: document.getElementById('guided-checklist'),
-    guidedProgress: document.getElementById('guided-progress'),
-    guidedBar: document.getElementById('guided-bar'),
-    guidedListEssentiel: document.getElementById('guided-list-essentiel'),
-    guidedListImportant: document.getElementById('guided-list-important'),
-    spotlightOverlay: document.getElementById('spotlight-overlay'),
-    spotlightStep: document.getElementById('spotlight-step'),
-    spotlightTitle: document.getElementById('spotlight-title'),
-    spotlightInput: document.getElementById('spotlight-input'),
-    spotlightDesc: document.getElementById('spotlight-desc'),
-    spotlightPrev: document.getElementById('spotlight-prev'),
-    spotlightNext: document.getElementById('spotlight-next'),
+    tutoBar: document.getElementById('tuto-bar'),
+    tutoTooltip: document.getElementById('tuto-tooltip'),
+    tutoStepLabel: document.getElementById('tuto-step-label'),
+    tutoBarTitle: document.getElementById('tuto-bar-title'),
+    tutoBarDesc: document.getElementById('tuto-bar-desc'),
+    tutoPrev: document.getElementById('tuto-prev'),
+    tutoNext: document.getElementById('tuto-next'),
 };
 
 function getPanelMode() {
@@ -2009,7 +2004,6 @@ function renderWorkspaceContent() {
     nodes.variablesContext.textContent = `Étude active : ${getCurrentAssetName()} · ${getCurrentAssetStatus()} · Foyer : ${state.profileData.name} · ${formatCurrency(state.profileData.income)} · ${composition} · TMI ${tmi} %.`;
 
     if (showVariables) renderFormKpiBar(analysisModel);
-    if (showVariables && isGuidedModeActive()) renderGuidedChecklist();
     buildAnalysisStickySummary(analysisModel);
     buildAnalysisMetrics(analysisModel);
     buildAnalysisAcquisitionDecision(analysisModel);
@@ -2051,10 +2045,17 @@ function isGuidedModeActive() {
     return localStorage.getItem(STORAGE_KEYS.guidedMode) === 'true';
 }
 
+function getTutoStep() {
+    return parseInt(localStorage.getItem('sparkTutoStep') || '0', 10);
+}
+
+function setTutoStep(n) {
+    localStorage.setItem('sparkTutoStep', String(n));
+}
+
 function setGuidedMode(active) {
     localStorage.setItem(STORAGE_KEYS.guidedMode, String(active));
-    // closeSpotlight is defined in Task 6 as a function declaration (var-hoisted) — typeof guard is intentional
-    if (!active && typeof closeSpotlight === 'function') closeSpotlight();
+    if (active) setTutoStep(0);
     applyGuidedModeUI(active);
     render({ syncVariables: false, syncProfile: false });
 }
@@ -2063,114 +2064,94 @@ function applyGuidedModeUI(active) {
     if (!nodes.guidedToggle) return;
     nodes.guidedToggle.setAttribute('aria-pressed', String(active));
     nodes.guidedToggle.classList.toggle('is-active', active);
-    if (nodes.guidedChecklist) nodes.guidedChecklist.hidden = !active;
-}
-
-function isFieldFilled(fieldId) {
-    const current = state.variablesData[fieldId];
-    const def = VARIABLE_DEFAULTS[fieldId];
-    if (current === undefined || current === null) return false;
-    // Note: fields with default=0 (apport, vacance) stay "unfilled" if user sets them to 0 intentionally — acceptable UX trade-off
-    return String(current) !== String(def);
-}
-
-function renderGuidedChecklist() {
-    if (!nodes.guidedListEssentiel || !nodes.guidedListImportant
-        || !nodes.guidedProgress || !nodes.guidedBar) return;
-
-    const done = GUIDED_FIELDS.filter(f => isFieldFilled(f.id)).length;
-    const total = GUIDED_FIELDS.length;
-    const firstPending = GUIDED_FIELDS.find(f => !isFieldFilled(f.id));
-
-    nodes.guidedProgress.textContent = `${done} / ${total}`;
-    nodes.guidedBar.style.width = `${Math.round((done / total) * 100)}%`;
-
-    function buildItem(field) {
-        const filled = isFieldFilled(field.id);
-        const isCurrent = firstPending && field.id === firstPending.id;
-        const li = document.createElement('li');
-        li.className = 'guided-checklist__item' +
-            (filled ? ' is-done' : '') +
-            (isCurrent ? ' is-current' : '');
-        li.dataset.fieldId = field.id;
-
-        const check = document.createElement('span');
-        check.className = 'guided-checklist__check';
-        check.textContent = filled ? '✓' : isCurrent ? '→' : '';
-
-        const name = document.createElement('span');
-        name.className = 'guided-checklist__name';
-        name.textContent = field.label;
-
-        li.appendChild(check);
-        li.appendChild(name);
-        li.addEventListener('click', () => {
-            if (typeof openSpotlight === 'function') openSpotlight(field.id);
-        });
-        return li;
-    }
-
-    nodes.guidedListEssentiel.innerHTML = '';
-    nodes.guidedListImportant.innerHTML = '';
-    GUIDED_FIELDS.forEach(f => {
-        const target = f.priority === 'essentiel' ? nodes.guidedListEssentiel : nodes.guidedListImportant;
-        target.appendChild(buildItem(f));
-    });
-}
-
-function openSpotlight(fieldId) {
-    const idx = GUIDED_FIELDS.findIndex(f => f.id === fieldId);
-    if (idx === -1) return;
-    if (!nodes.spotlightOverlay) return;
-    _spotlightFieldId = fieldId;
-
-    const field = GUIDED_FIELDS[idx];
-    const realInput = document.getElementById(field.id);
-    if (!realInput) return;
-
-    // Open the parent accordion if collapsed
-    const accordHead = [...document.querySelectorAll('.accord-head')]
-        .find(btn => btn.querySelector('.accord-title')?.textContent === field.accordTitle);
-    if (accordHead) {
-        const section = accordHead.closest('.accord-section');
-        if (section && section.dataset.open !== 'true') accordHead.click();
-    }
-
-    const tip = realInput.closest('label')?.querySelector('[data-tip]')?.dataset.tip ?? '';
-
-    nodes.spotlightStep.textContent = `${idx + 1} / ${GUIDED_FIELDS.length}`;
-    nodes.spotlightTitle.textContent = field.label;
-    nodes.spotlightInput.value = realInput.value;
-    nodes.spotlightInput.type = realInput.type === 'number' ? 'number' : 'text';
-    nodes.spotlightDesc.textContent = tip;
-    nodes.spotlightOverlay.hidden = false;
-    nodes.spotlightInput.focus();
-    nodes.spotlightInput.select();
-}
-
-function closeSpotlight() {
-    if (!nodes.spotlightOverlay) return;
-    nodes.spotlightOverlay.hidden = true;
-    _spotlightFieldId = null;
-}
-
-function navigateSpotlight(direction) {
-    const idx = GUIDED_FIELDS.findIndex(f => f.id === _spotlightFieldId);
-    if (idx === -1) return;
-    const next = idx + direction;
-    if (next >= 0 && next < GUIDED_FIELDS.length) {
-        openSpotlight(GUIDED_FIELDS[next].id);
+    document.body.classList.toggle('tuto-active', active);
+    if (nodes.tutoBar) nodes.tutoBar.hidden = !active;
+    if (active) {
+        applyTutoStep(getTutoStep());
     } else {
-        closeSpotlight();
+        removeTutoHighlights();
+        if (nodes.tutoTooltip) nodes.tutoTooltip.hidden = true;
     }
 }
 
-function syncSpotlightInputToField(value) {
-    if (!_spotlightFieldId) return;
-    const realInput = document.getElementById(_spotlightFieldId);
-    if (!realInput) return;
-    realInput.value = value;
-    realInput.dispatchEvent(new Event('input', { bubbles: true }));
+function removeTutoHighlights() {
+    document.querySelectorAll('.tuto-highlight').forEach(el => el.classList.remove('tuto-highlight'));
+}
+
+function applyTutoStep(n) {
+    const step = TUTO_STEPS[n];
+    if (!step) return;
+    setTutoStep(n);
+
+    // Open the relevant accordion
+    if (step.accordTitle) {
+        const accordHead = [...document.querySelectorAll('.accord-head')]
+            .find(btn => btn.querySelector('.accord-title')?.textContent.trim() === step.accordTitle);
+        if (accordHead) {
+            const section = accordHead.closest('.accord-section');
+            if (section && section.dataset.open !== 'true') accordHead.click();
+        }
+    }
+
+    // Highlight fields
+    removeTutoHighlights();
+    step.fields.forEach(f => {
+        const input = document.getElementById(f.id);
+        if (input) {
+            const label = input.closest('label') || input.closest('.variables-field');
+            if (label) label.classList.add('tuto-highlight');
+        }
+    });
+
+    // Position tooltip on first field
+    const firstField = step.fields[0];
+    if (firstField && nodes.tutoTooltip) {
+        const firstInput = document.getElementById(firstField.id);
+        const label = firstInput?.closest('label') || firstInput?.closest('.variables-field');
+        if (label) {
+            const rect = label.getBoundingClientRect();
+            nodes.tutoTooltip.innerHTML = `<strong>${firstField.label}</strong><em>${firstField.exemple}</em>${firstField.explication}`;
+            nodes.tutoTooltip.hidden = false;
+            const top = Math.max(8, rect.top + window.scrollY - nodes.tutoTooltip.offsetHeight - 10);
+            const left = Math.min(rect.left, window.innerWidth - 296);
+            nodes.tutoTooltip.style.top = `${top}px`;
+            nodes.tutoTooltip.style.left = `${Math.max(8, left)}px`;
+            label.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            nodes.tutoTooltip.hidden = true;
+        }
+    } else if (nodes.tutoTooltip) {
+        nodes.tutoTooltip.hidden = true;
+    }
+
+    renderTutoBar(n);
+}
+
+function renderTutoBar(n) {
+    const step = TUTO_STEPS[n];
+    if (!step || !nodes.tutoBar) return;
+    const total = TUTO_STEPS.length - 1;
+    nodes.tutoStepLabel.textContent = n === 0 ? 'Introduction' : `Étape ${n} / ${total - 1}`;
+    nodes.tutoBarTitle.textContent = step.title;
+    nodes.tutoBarDesc.textContent = step.description;
+    nodes.tutoPrev.disabled = n === 0;
+    nodes.tutoNext.textContent = n === TUTO_STEPS.length - 1 ? 'Terminer' : 'Suivant →';
+}
+
+function initTutoBar() {
+    if (!nodes.tutoPrev || !nodes.tutoNext) return;
+    nodes.tutoPrev.addEventListener('click', () => {
+        const current = getTutoStep();
+        if (current > 0) applyTutoStep(current - 1);
+    });
+    nodes.tutoNext.addEventListener('click', () => {
+        const current = getTutoStep();
+        if (current < TUTO_STEPS.length - 1) {
+            applyTutoStep(current + 1);
+        } else {
+            setGuidedMode(false);
+        }
+    });
 }
 
 function render(options = {}) {
@@ -2296,23 +2277,6 @@ function bindEvents() {
         }
     });
 
-    // Spotlight events
-    if (nodes.spotlightInput) {
-        nodes.spotlightInput.addEventListener('input', e => {
-            syncSpotlightInputToField(e.target.value);
-        });
-        nodes.spotlightInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); navigateSpotlight(1); }
-            if (e.key === 'Escape') closeSpotlight();
-        });
-    }
-    if (nodes.spotlightNext) nodes.spotlightNext.addEventListener('click', () => navigateSpotlight(1));
-    if (nodes.spotlightPrev) nodes.spotlightPrev.addEventListener('click', () => navigateSpotlight(-1));
-    if (nodes.spotlightOverlay) {
-        nodes.spotlightOverlay.addEventListener('click', e => {
-            if (e.target === nodes.spotlightOverlay) closeSpotlight();
-        });
-    }
 }
 
 function initWorkspaceTabs() {
