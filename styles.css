@@ -2400,3 +2400,9 @@ html[data-theme='dark'] .accord-section[data-priority="essentiel"][data-open="tr
     color: #fff;
     border-color: var(--primary);
 }
+
+/* ── Restore title color for priority sections ── */
+.accord-section[data-priority="essentiel"] .accord-title,
+.accord-section[data-priority="important"] .accord-title {
+    color: var(--text);
+}

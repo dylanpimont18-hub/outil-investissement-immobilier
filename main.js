@@ -1457,7 +1457,7 @@ function closeAnalysisWindow() {
 }
 
 function renderFormKpiBar(analysisModel) {
-    if (!nodes.fkpiRdtBrut) return;
+    if (!nodes.fkpiRdtBrut || !nodes.fkpiCfNet || !nodes.fkpiDscr) return;
     const { metrics } = analysisModel;
     const prix = state.variablesData.prix ?? 0;
 
