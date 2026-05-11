@@ -2110,7 +2110,14 @@ function applyTutoStep(n) {
         const label = firstInput?.closest('label') || firstInput?.closest('.variables-field');
         if (label) {
             const rect = label.getBoundingClientRect();
-            nodes.tutoTooltip.innerHTML = `<strong>${firstField.label}</strong><em>${firstField.exemple}</em>${firstField.explication}`;
+            nodes.tutoTooltip.innerHTML = '';
+            const strong = document.createElement('strong');
+            strong.textContent = firstField.label;
+            const em = document.createElement('em');
+            em.textContent = firstField.exemple;
+            const span = document.createElement('span');
+            span.textContent = firstField.explication;
+            nodes.tutoTooltip.append(strong, em, span);
             nodes.tutoTooltip.hidden = false;
             const top = Math.max(8, rect.top + window.scrollY - nodes.tutoTooltip.offsetHeight - 10);
             const left = Math.min(rect.left, window.innerWidth - 296);
@@ -2129,9 +2136,13 @@ function applyTutoStep(n) {
 
 function renderTutoBar(n) {
     const step = TUTO_STEPS[n];
-    if (!step || !nodes.tutoBar) return;
+    if (!step || !nodes.tutoBar || !nodes.tutoStepLabel || !nodes.tutoBarTitle
+        || !nodes.tutoBarDesc || !nodes.tutoPrev || !nodes.tutoNext) return;
     const total = TUTO_STEPS.length - 1;
-    nodes.tutoStepLabel.textContent = n === 0 ? 'Introduction' : `Étape ${n} / ${total - 1}`;
+    nodes.tutoStepLabel.textContent =
+        n === 0 ? 'Introduction'
+        : n === TUTO_STEPS.length - 1 ? 'Conclusion'
+        : `Étape ${n} / ${total - 1}`;
     nodes.tutoBarTitle.textContent = step.title;
     nodes.tutoBarDesc.textContent = step.description;
     nodes.tutoPrev.disabled = n === 0;
