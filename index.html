@@ -640,6 +640,21 @@
         </div>
     </div>
 
+    <div class="spotlight-overlay" id="spotlight-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="spotlight-title">
+        <div class="spotlight-card">
+            <div class="spotlight-card__header">
+                <span class="spotlight-card__step" id="spotlight-step">1 / 8</span>
+                <span class="spotlight-card__title" id="spotlight-title"></span>
+            </div>
+            <input class="spotlight-card__input" id="spotlight-input" type="text" autocomplete="off">
+            <p class="spotlight-card__desc" id="spotlight-desc"></p>
+            <div class="spotlight-card__actions">
+                <button type="button" id="spotlight-prev">← Précédent</button>
+                <button type="button" id="spotlight-next" class="is-primary">Suivant →</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="main.js"></script>
 </body>
 </html>

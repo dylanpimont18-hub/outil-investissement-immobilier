@@ -119,6 +119,7 @@ const GUIDED_FIELDS = [
     { id: 'fonciere',   label: 'Taxe foncière',    priority: 'important', accordTitle: 'Exploitation locative' },
     { id: 'regime',     label: 'Régime fiscal',    priority: 'important', accordTitle: 'Fiscalité' },
 ];
+let _spotlightFieldId = null;
 const REGIME_VALUES = new Set(['micro-foncier', 'reel', 'sci-is']);
 const OWNERSHIP_VALUES = new Set(['candidate', 'owned']);
 const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
@@ -216,6 +217,13 @@ const nodes = {
     guidedBar: document.getElementById('guided-bar'),
     guidedListEssentiel: document.getElementById('guided-list-essentiel'),
     guidedListImportant: document.getElementById('guided-list-important'),
+    spotlightOverlay: document.getElementById('spotlight-overlay'),
+    spotlightStep: document.getElementById('spotlight-step'),
+    spotlightTitle: document.getElementById('spotlight-title'),
+    spotlightInput: document.getElementById('spotlight-input'),
+    spotlightDesc: document.getElementById('spotlight-desc'),
+    spotlightPrev: document.getElementById('spotlight-prev'),
+    spotlightNext: document.getElementById('spotlight-next'),
 };
 
 function getPanelMode() {
@@ -2055,6 +2063,58 @@ function renderGuidedChecklist() {
     });
 }
 
+function openSpotlight(fieldId) {
+    const idx = GUIDED_FIELDS.findIndex(f => f.id === fieldId);
+    if (idx === -1) return;
+    _spotlightFieldId = fieldId;
+
+    const field = GUIDED_FIELDS[idx];
+    const realInput = document.getElementById(field.id);
+    if (!realInput) return;
+
+    // Open the parent accordion if collapsed
+    const accordHead = [...document.querySelectorAll('.accord-head')]
+        .find(btn => btn.querySelector('.accord-title')?.textContent === field.accordTitle);
+    if (accordHead) {
+        const section = accordHead.closest('.accord-section');
+        if (section && section.dataset.open !== 'true') accordHead.click();
+    }
+
+    const tip = realInput.closest('label')?.querySelector('[data-tip]')?.dataset.tip ?? '';
+
+    nodes.spotlightStep.textContent = `${idx + 1} / ${GUIDED_FIELDS.length}`;
+    nodes.spotlightTitle.textContent = field.label;
+    nodes.spotlightInput.value = realInput.value;
+    nodes.spotlightInput.type = realInput.type === 'number' ? 'number' : 'text';
+    nodes.spotlightDesc.textContent = tip;
+    nodes.spotlightOverlay.hidden = false;
+    nodes.spotlightInput.focus();
+    nodes.spotlightInput.select();
+}
+
+function closeSpotlight() {
+    nodes.spotlightOverlay.hidden = true;
+    _spotlightFieldId = null;
+}
+
+function navigateSpotlight(direction) {
+    const idx = GUIDED_FIELDS.findIndex(f => f.id === _spotlightFieldId);
+    const next = idx + direction;
+    if (next >= 0 && next < GUIDED_FIELDS.length) {
+        openSpotlight(GUIDED_FIELDS[next].id);
+    } else {
+        closeSpotlight();
+    }
+}
+
+function syncSpotlightInputToField(value) {
+    if (!_spotlightFieldId) return;
+    const realInput = document.getElementById(_spotlightFieldId);
+    if (!realInput) return;
+    realInput.value = value;
+    realInput.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function render(options = {}) {
     const { syncProfile = true, syncVariables = true } = options;
 
@@ -2177,6 +2237,24 @@ function bindEvents() {
             closeAnalysisWindow();
         }
     });
+
+    // Spotlight events
+    if (nodes.spotlightInput) {
+        nodes.spotlightInput.addEventListener('input', e => {
+            syncSpotlightInputToField(e.target.value);
+        });
+        nodes.spotlightInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); navigateSpotlight(1); }
+            if (e.key === 'Escape') closeSpotlight();
+        });
+    }
+    if (nodes.spotlightNext) nodes.spotlightNext.addEventListener('click', () => navigateSpotlight(1));
+    if (nodes.spotlightPrev) nodes.spotlightPrev.addEventListener('click', () => navigateSpotlight(-1));
+    if (nodes.spotlightOverlay) {
+        nodes.spotlightOverlay.addEventListener('click', e => {
+            if (e.target === nodes.spotlightOverlay) closeSpotlight();
+        });
+    }
 }
 
 function initWorkspaceTabs() {
