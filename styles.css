@@ -2328,9 +2328,9 @@ body.tuto-active {
 
 /* keep topbar-btn--guided style for the Tuto button */
 .topbar-btn--guided.is-active {
-    background: var(--primary-soft);
-    color: var(--primary);
-    border-color: rgba(59, 130, 246, 0.3);
+    background: rgba(197, 160, 89, .15);
+    color: var(--accent);
+    border-color: var(--accent);
 }
 
 /* ── Restore title color for priority sections ── */
