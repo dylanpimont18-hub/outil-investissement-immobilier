@@ -109,17 +109,72 @@ const VARIABLE_DEFAULTS = {
 };
 
 const VARIABLE_KEYS = Object.keys(VARIABLE_DEFAULTS);
-const GUIDED_FIELDS = [
-    { id: 'prix',       label: 'Prix affiché',    priority: 'essentiel', accordTitle: 'Acquisition' },
-    { id: 'loyer',      label: 'Loyer cible',     priority: 'essentiel', accordTitle: 'Acquisition' },
-    { id: 'taux-input', label: "Taux d'intérêt",  priority: 'essentiel', accordTitle: 'Financement' },
-    { id: 'duree',      label: 'Durée du prêt',   priority: 'essentiel', accordTitle: 'Financement' },
-    { id: 'apport',     label: 'Apport',           priority: 'essentiel', accordTitle: 'Financement' },
-    { id: 'vacance',    label: 'Vacance',           priority: 'important', accordTitle: 'Exploitation locative' },
-    { id: 'fonciere',   label: 'Taxe foncière',    priority: 'important', accordTitle: 'Exploitation locative' },
-    { id: 'regime',     label: 'Régime fiscal',    priority: 'important', accordTitle: 'Fiscalité' },
+const TUTO_STEPS = [
+    {
+        title: 'Bienvenue sur Spark Investissement',
+        description: 'Ce tutoriel vous guide pas à pas. Cliquez Suivant pour démarrer.',
+        accordTitle: null,
+        fields: []
+    },
+    {
+        title: 'Identité du dossier',
+        description: 'Donnez un nom à votre étude et indiquez la ville du bien.',
+        accordTitle: 'Identité du dossier',
+        fields: [
+            { id: 'nom-bien', label: 'Nom du bien', exemple: 'ex : Appart T2 Lyon 7e', explication: 'Un nom libre pour retrouver ce dossier dans votre comparateur et vos exports PDF.' },
+            { id: 'ville', label: 'Ville', exemple: 'ex : Lyon', explication: 'Ville où se situe le bien, pour contextualiser l\'analyse.' },
+            { id: 'statut-bien', label: 'Statut', exemple: 'À étudier ou Déjà au portefeuille', explication: 'Indiquez si ce bien est en cours d\'étude ou déjà acquis.' }
+        ]
+    },
+    {
+        title: 'Prix & loyer',
+        description: 'Le prix vendeur et le loyer cible : les deux chiffres qui définissent la rentabilité.',
+        accordTitle: 'Acquisition',
+        fields: [
+            { id: 'prix', label: 'Prix affiché', exemple: 'ex : 185 000', explication: 'Prix demandé par le vendeur, avant toute négociation.' },
+            { id: 'loyer', label: 'Loyer cible mensuel', exemple: 'ex : 750', explication: 'Loyer mensuel hors charges que vous estimez pouvoir obtenir.' },
+            { id: 'nego', label: 'Négociation visée (%)', exemple: 'ex : 5', explication: 'Décote visée sur le prix. 5 % sur 185 000 € = offre à 175 750 €.' },
+            { id: 'notaire', label: 'Frais de notaire (%)', exemple: 'ex : 7.5', explication: 'Environ 7–8 % dans l\'ancien, 2–3 % dans le neuf.' },
+            { id: 'travaux', label: 'Budget travaux', exemple: 'ex : 15 000', explication: 'Travaux de rénovation estimés, intégrés au coût total d\'acquisition.' }
+        ]
+    },
+    {
+        title: 'Financement',
+        description: 'Les conditions de votre crédit immobilier définissent votre mensualité et votre cash-flow.',
+        accordTitle: 'Financement',
+        fields: [
+            { id: 'apport', label: 'Apport', exemple: 'ex : 20 000', explication: 'Somme apportée sans emprunt. Réduit le capital à financer.' },
+            { id: 'taux-input', label: 'Taux d\'intérêt (%)', exemple: 'ex : 3.75', explication: 'Taux annuel du crédit, hors assurance. Comparez plusieurs banques.' },
+            { id: 'duree', label: 'Durée du prêt (ans)', exemple: 'ex : 20', explication: 'Plus longue = mensualité plus basse, mais coût total plus élevé.' },
+            { id: 'assurance', label: 'Assurance emprunteur (%)', exemple: 'ex : 0.30', explication: 'Taux d\'assurance décès-invalidité annuel, en % du capital emprunté.' }
+        ]
+    },
+    {
+        title: 'Exploitation locative',
+        description: 'Les charges et aléas réels. Ne sous-estimez pas la vacance : elle impacte directement le rendement.',
+        accordTitle: 'Exploitation locative',
+        fields: [
+            { id: 'vacance', label: 'Vacance (%)', exemple: 'ex : 5', explication: '5 % = environ 18 jours sans locataire par an.' },
+            { id: 'fonciere', label: 'Taxe foncière / an', exemple: 'ex : 1 200', explication: 'Demandez l\'avis de taxe foncière au vendeur ou estimez via impots.gouv.fr.' },
+            { id: 'copro', label: 'Charges de copro / mois', exemple: 'ex : 80', explication: 'Part non récupérable sur le locataire. Demandez les 3 derniers PV d\'AG.' },
+            { id: 'gestion', label: 'Gestion (%)', exemple: 'ex : 0', explication: 'Honoraires d\'agence de gestion. 0 si vous gérez en direct.' }
+        ]
+    },
+    {
+        title: 'Fiscalité',
+        description: 'Le régime fiscal détermine comment vos revenus locatifs sont imposés.',
+        accordTitle: 'Fiscalité',
+        fields: [
+            { id: 'regime', label: 'Régime fiscal', exemple: 'Micro-foncier, Foncier réel ou SCI IS', explication: 'Micro-foncier : abattement 30 % forfaitaire. Réel : déduction des charges réelles. SCI IS : imposition comme une société.' }
+        ]
+    },
+    {
+        title: 'Analyse disponible',
+        description: 'Toutes les données essentielles sont saisies. Consultez le panneau Analyse — verdict, métriques et projections sont à jour.',
+        accordTitle: null,
+        fields: []
+    }
 ];
-let _spotlightFieldId = null;
 const REGIME_VALUES = new Set(['micro-foncier', 'reel', 'sci-is']);
 const OWNERSHIP_VALUES = new Set(['candidate', 'owned']);
 const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
