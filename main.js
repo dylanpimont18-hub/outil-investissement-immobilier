@@ -1993,6 +1993,7 @@ function setGuidedMode(active) {
     // closeSpotlight is defined in Task 6 as a function declaration (var-hoisted) — typeof guard is intentional
     if (!active && typeof closeSpotlight === 'function') closeSpotlight();
     applyGuidedModeUI(active);
+    render({ syncVariables: false, syncProfile: false });
 }
 
 function applyGuidedModeUI(active) {
