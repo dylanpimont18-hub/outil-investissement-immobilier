@@ -1,5 +1,6 @@
 import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
+import { initScanner, onScannerTabActivated } from './scanner.js';
 
 const _counterState = new WeakMap();
 
@@ -39,7 +40,8 @@ const STORAGE_KEYS = {
     assetRecords: 'investissementWebAssetRecords',
     activeAssetId: 'investissementWebActiveAssetId',
     syncTick: 'investissementWebSyncTick',
-    guidedMode: 'investissementWebGuidedMode'
+    guidedMode: 'investissementWebGuidedMode',
+    sparkMode: 'investissementWebSparkMode'
 };
 
 const PROFILE_OPTIONS = [
@@ -267,6 +269,14 @@ const nodes = {
     fkpiCfNet: document.getElementById('fkpi-cf-net'),
     fkpiDscr: document.getElementById('fkpi-dscr'),
     guidedToggle: document.getElementById('guided-toggle'),
+    modeToggle: document.getElementById('mode-toggle'),
+    modeBtnGuided: document.getElementById('mode-btn-guided'),
+    modeBtnFull: document.getElementById('mode-btn-full'),
+    guidedModeBody: document.getElementById('guided-mode-body'),
+    guidedStepsBar: document.getElementById('guided-steps-bar'),
+    guidedProgressFill: document.getElementById('guided-progress-fill'),
+    guidedStepContent: document.getElementById('guided-step-content'),
+    analysisCFWaterfall: document.getElementById('analysis-cf-waterfall'),
     tutoBar: document.getElementById('tuto-bar'),
     tutoTooltip: document.getElementById('tuto-tooltip'),
     tutoStepLabel: document.getElementById('tuto-step-label'),
@@ -1293,6 +1303,27 @@ function loadAssetIntoWorkspace(assetId) {
     render({ syncVariables: true, syncProfile: false });
 }
 
+export function saveCurrentStudy() {
+    const existingIndex = state.assetRecords.findIndex(a => a.id === state.activeAssetId);
+    const now = Date.now();
+    const base = existingIndex >= 0 ? state.assetRecords[existingIndex] : null;
+    const id = base?.id || createAssetId();
+    const record = {
+        id,
+        variablesData: sanitizeVariablesData(state.variablesData),
+        inComparison: Boolean(base?.inComparison),
+        inPortfolio: Boolean(base?.inPortfolio),
+        createdAt: base?.createdAt || now,
+        updatedAt: now,
+    };
+    if (existingIndex >= 0) state.assetRecords.splice(existingIndex, 1, record);
+    else state.assetRecords.push(record);
+    state.activeAssetId = id;
+    saveAssetRecords();
+    saveActiveAssetId();
+    emitStateUpdate();
+}
+
 function removeAssetFromScope(assetId, scope) {
     const assetIndex = state.assetRecords.findIndex(item => item.id === assetId);
     if (assetIndex < 0) {
@@ -1533,6 +1564,74 @@ function renderFormKpiBar(analysisModel) {
     const dscr = metrics.dscr ?? 0;
     nodes.fkpiDscr.textContent = dscr.toFixed(2).replace('.', ',');
     nodes.fkpiDscr.className = 'form-kpi-bar__value';
+}
+
+function renderCFWaterfall(analysisModel) {
+    if (!nodes.analysisCFWaterfall) return;
+    const { monthlyBreakdown, metrics } = analysisModel;
+
+    const loyerRow  = monthlyBreakdown.find(r => r.label === 'Loyers encaissés');
+    const creditRow = monthlyBreakdown.find(r => r.label === 'Crédit + assurance');
+    const chargesRow = monthlyBreakdown.find(r => r.label === "Charges d'exploitation");
+    const impotsRow = monthlyBreakdown.find(r => r.label === 'Impôts');
+    const cfRow     = monthlyBreakdown.find(r => r.label === 'Cash-flow net-net');
+
+    const loyerBrut = loyerRow ? loyerRow.value : 1;
+    const cfVal = cfRow ? cfRow.signedValue : 0;
+    const cfColor = cfVal >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    function barPct(val) {
+        return Math.min(100, Math.max(2, (Math.abs(val) / loyerBrut) * 100)).toFixed(1);
+    }
+
+    function fmtEur(v) {
+        const sign = v >= 0 ? '+' : '−';
+        return `${sign}${Math.abs(Math.round(v)).toLocaleString('fr-FR')} €`;
+    }
+
+    const rows = [
+        { label: loyerRow?.label || 'Loyers', val: loyerRow?.signedValue || 0, kind: 'income' },
+        { label: creditRow?.label || 'Crédit', val: creditRow?.signedValue || 0, kind: 'expense' },
+        { label: chargesRow?.label || 'Charges', val: chargesRow?.signedValue || 0, kind: 'watch' },
+        { label: impotsRow?.label || 'Impôts', val: impotsRow?.signedValue || 0, kind: impotsRow?.kind || 'expense' },
+    ];
+
+    const rdtBrut = metrics.rentaBrute != null ? metrics.rentaBrute.toFixed(1) + ' %' : '—';
+    const dscrVal = metrics.dscr != null ? metrics.dscr.toFixed(2) : '—';
+
+    nodes.analysisCFWaterfall.innerHTML = `
+        <div class="cf-waterfall__head">
+            <span class="cf-waterfall__title">Cash-flow — calcul en direct</span>
+            <span class="cf-waterfall__live">● LIVE</span>
+        </div>
+        <div class="cf-waterfall__kpis">
+            <div class="cf-waterfall__kpi">
+                <span class="cf-waterfall__kpi-val" style="color:var(--accent-gold)">${escapeHtml(rdtBrut)}</span>
+                <span class="cf-waterfall__kpi-lbl">Rendement brut</span>
+            </div>
+            <div class="cf-waterfall__kpi">
+                <span class="cf-waterfall__kpi-val" style="color:${cfColor}">${escapeHtml(fmtEur(cfVal))}</span>
+                <span class="cf-waterfall__kpi-lbl">CF net/mois</span>
+            </div>
+            <div class="cf-waterfall__kpi">
+                <span class="cf-waterfall__kpi-val">${escapeHtml(dscrVal)}</span>
+                <span class="cf-waterfall__kpi-lbl">DSCR</span>
+            </div>
+        </div>
+        <div class="cf-waterfall__bars">
+            ${rows.map(r => `
+            <div class="cf-waterfall__row">
+                <span class="cf-waterfall__row-label">${escapeHtml(r.label)}</span>
+                <div class="cf-waterfall__bar"><div class="cf-waterfall__bar-fill cf-waterfall__bar-fill--${escapeHtml(r.kind)}" style="width:${barPct(r.val)}%"></div></div>
+                <span class="cf-waterfall__row-val" style="color:${r.val >= 0 ? 'var(--success)' : 'var(--danger)'}">${escapeHtml(fmtEur(r.val))}</span>
+            </div>`).join('')}
+            <div class="cf-waterfall__row cf-waterfall__row--total">
+                <span class="cf-waterfall__row-label">Net net</span>
+                <div class="cf-waterfall__bar"><div class="cf-waterfall__bar-fill cf-waterfall__bar-fill--${cfVal >= 0 ? 'positive' : 'negative'}" style="width:${barPct(cfVal)}%"></div></div>
+                <span class="cf-waterfall__row-val" style="color:${cfColor};font-weight:700">${escapeHtml(fmtEur(cfVal))}</span>
+            </div>
+        </div>
+    `;
 }
 
 function buildAnalysisMetrics(analysisModel) {
@@ -2005,6 +2104,7 @@ function renderWorkspaceContent() {
 
     if (showVariables) renderFormKpiBar(analysisModel);
     buildAnalysisStickySummary(analysisModel);
+    renderCFWaterfall(analysisModel);
     buildAnalysisMetrics(analysisModel);
     buildAnalysisAcquisitionDecision(analysisModel);
     buildAnalysisConfidence(analysisModel);
@@ -2294,20 +2394,30 @@ function initWorkspaceTabs() {
     const tabs = document.querySelectorAll('.workspace-tab');
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
+    const scannerPanel = document.getElementById('scanner-panel');
 
-    collectionPanel.style.display = 'none'; // hide on load — workspace tab is active by default
+    collectionPanel.style.display = 'none';
+    if (scannerPanel) scannerPanel.style.display = 'none';
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('is-active'));
             tab.classList.add('is-active');
             const target = tab.dataset.target;
+            workspacePanel.style.display = 'none';
+            collectionPanel.style.display = 'none';
+            if (scannerPanel) scannerPanel.style.display = 'none';
+
             if (target === 'collection-panel') {
-                workspacePanel.style.display = 'none';
                 collectionPanel.style.display = '';
                 collectionPanel.style.animation = 'tabFadeIn 200ms ease-out';
+            } else if (target === 'scanner-panel') {
+                if (scannerPanel) {
+                    scannerPanel.style.display = '';
+                    scannerPanel.style.animation = 'tabFadeIn 200ms ease-out';
+                    onScannerTabActivated();
+                }
             } else {
-                collectionPanel.style.display = 'none';
                 workspacePanel.style.display = '';
                 workspacePanel.style.animation = 'tabFadeIn 200ms ease-out';
             }
@@ -2339,6 +2449,7 @@ bindEvents();
 render();
 applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
+initScanner({ saveCurrentStudy });
 initAccordion();
 initTutoBar();
 
