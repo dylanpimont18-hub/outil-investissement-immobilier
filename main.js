@@ -198,6 +198,8 @@ const state = {
     variablesData: loadVariablesData(),
     assetRecords: loadAssetRecords(),
     activeAssetId: loadActiveAssetId(),
+    sparkMode: loadSparkMode(),
+    guidedStepIndex: 0,
     analysisPopupBlocked: false
 };
 
@@ -358,6 +360,31 @@ function loadVariablesData() {
     }
 
     return sanitizeVariablesData(VARIABLE_DEFAULTS);
+}
+
+function loadSparkMode() {
+    const saved = localStorage.getItem(STORAGE_KEYS.sparkMode);
+    return saved === 'guided' ? 'guided' : 'full';
+}
+
+function saveSparkMode(mode) {
+    localStorage.setItem(STORAGE_KEYS.sparkMode, mode);
+}
+
+function renderModeSwitch(mode) {
+    if (!nodes.modeBtnGuided || !nodes.modeBtnFull) return;
+    const isGuided = mode === 'guided';
+
+    nodes.modeBtnGuided.setAttribute('aria-pressed', String(isGuided));
+    nodes.modeBtnFull.setAttribute('aria-pressed', String(!isGuided));
+
+    if (nodes.variablesForm) nodes.variablesForm.hidden = isGuided;
+    if (nodes.guidedModeBody) nodes.guidedModeBody.hidden = !isGuided;
+
+    if (isGuided) {
+        renderGuidedSteps(state.guidedStepIndex ?? 0);
+        renderGuidedStep(state.guidedStepIndex ?? 0);
+    }
 }
 
 function loadAssetRecords() {
@@ -2269,6 +2296,7 @@ function render(options = {}) {
     const { syncProfile = true, syncVariables = true } = options;
 
     applyTheme();
+    if (!IS_ANALYSIS_WINDOW) renderModeSwitch(state.sparkMode);
     nodes.screenToggle.textContent = state.screens === 1 ? 'Affichage : 1 écran' : 'Affichage : 2 écrans';
 
     if (syncProfile) {
@@ -2378,6 +2406,17 @@ function bindEvents() {
     nodes.exportDecisionPdf.addEventListener('click', handleDecisionSummaryExport);
     nodes.comparisonTable.addEventListener('click', handleAssetTableAction);
     nodes.portfolioTable.addEventListener('click', handleAssetTableAction);
+
+    if (nodes.modeToggle && !IS_ANALYSIS_WINDOW) {
+        nodes.modeToggle.addEventListener('click', e => {
+            const btn = e.target.closest('[data-mode]');
+            if (!btn) return;
+            const newMode = btn.dataset.mode;
+            state.sparkMode = newMode;
+            saveSparkMode(newMode);
+            renderModeSwitch(newMode);
+        });
+    }
 
     window.addEventListener('beforeunload', () => {
         if (syncChannel) {
