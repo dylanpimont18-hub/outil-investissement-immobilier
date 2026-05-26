@@ -86,34 +86,15 @@
                         </div>
 
                         <form id="variables-form" class="variables-form">
-                            <div class="accord-section" data-priority="optionnel" data-open="false">
-                                <button type="button" class="accord-head" aria-expanded="false">
-                                    <span class="accord-title">Identité du dossier</span>
-                                    <span class="accord-badge">Optionnel</span>
-                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                </button>
-                                <div class="accord-body">
-                                <fieldset class="variables-group">
-                                <div class="variables-grid">
-                                    <label class="variables-field" for="nom-bien">
-                                        <span class="status-label">Nom du bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Nom libre pour identifier ce dossier dans votre comparateur et vos exports PDF.">?</button></span>
-                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off">
-                                    </label>
-                                    <label class="variables-field" for="ville">
-                                        <span class="status-label">Ville <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Ville où se situe le bien. Utilisée pour contextualiser l'analyse et le rapport.">?</button></span>
-                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off">
-                                    </label>
-                                    <label class="variables-field" for="statut-bien">
-                                        <span class="status-label">Statut <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Candidat = bien en cours d'étude. Acquis = bien déjà dans votre patrimoine.">?</button></span>
-                                        <select id="statut-bien" name="statut-bien" class="variables-input">
-                                            <option value="candidate">À étudier</option>
-                                            <option value="owned">Déjà au portefeuille</option>
-                                        </select>
-                                    </label>
+
+                            <!-- ZONE ESSENTIEL (open) -->
+                            <div class="form-zone" data-zone="essentiel" data-open="true">
+                                <div class="form-zone__head" role="button" tabindex="0" aria-expanded="true">
+                                    <span class="form-zone__badge form-zone__badge--essentiel">ESSENTIEL</span>
+                                    <span class="form-zone__name">Acquisition &amp; financement</span>
+                                    <span class="form-zone__chevron">▶</span>
                                 </div>
-                            </fieldset>
-                                </div>
-                            </div>
+                                <div class="form-zone__body">
 
                             <div class="accord-section" data-priority="essentiel" data-open="true">
                                 <button type="button" class="accord-head" aria-expanded="true">
@@ -191,6 +172,18 @@
                                 </div>
                             </div>
 
+                                </div>
+                            </div>
+
+                            <!-- ZONE IMPORTANT (closed) -->
+                            <div class="form-zone" data-zone="important" data-open="false">
+                                <div class="form-zone__head" role="button" tabindex="0" aria-expanded="false">
+                                    <span class="form-zone__badge form-zone__badge--important">IMPORTANT</span>
+                                    <span class="form-zone__name">Exploitation &amp; fiscalité</span>
+                                    <span class="form-zone__chevron">▶</span>
+                                </div>
+                                <div class="form-zone__body" hidden>
+
                             <div class="accord-section" data-priority="important" data-open="false">
                                 <button type="button" class="accord-head" aria-expanded="false">
                                     <span class="accord-title">Exploitation locative</span>
@@ -247,9 +240,17 @@
                                 </div>
                             </div>
 
-                            <div class="form-advanced-sep" aria-hidden="true">
-                                <span>Paramètres avancés</span>
+                                </div>
                             </div>
+
+                            <!-- ZONE AVANCÉ (closed) -->
+                            <div class="form-zone" data-zone="avance" data-open="false">
+                                <div class="form-zone__head" role="button" tabindex="0" aria-expanded="false">
+                                    <span class="form-zone__badge form-zone__badge--avance">AVANCÉ</span>
+                                    <span class="form-zone__name">Vérifications, seuils &amp; journal</span>
+                                    <span class="form-zone__chevron">▶</span>
+                                </div>
+                                <div class="form-zone__body" hidden>
 
                             <div class="accord-section" data-priority="avance" data-open="false">
                                 <button type="button" class="accord-head" aria-expanded="false">
@@ -401,6 +402,51 @@
                             </fieldset>
                                 </div>
                             </div>
+
+                                </div>
+                            </div>
+
+                            <!-- ZONE OPTIONNEL (closed) -->
+                            <div class="form-zone" data-zone="optionnel" data-open="false">
+                                <div class="form-zone__head" role="button" tabindex="0" aria-expanded="false">
+                                    <span class="form-zone__badge form-zone__badge--avance">OPTIONNEL</span>
+                                    <span class="form-zone__name">Identité du dossier</span>
+                                    <span class="form-zone__chevron">▶</span>
+                                </div>
+                                <div class="form-zone__body" hidden>
+
+                            <div class="accord-section" data-priority="optionnel" data-open="false">
+                                <button type="button" class="accord-head" aria-expanded="false">
+                                    <span class="accord-title">Identité du dossier</span>
+                                    <span class="accord-badge">Optionnel</span>
+                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                </button>
+                                <div class="accord-body">
+                                <fieldset class="variables-group">
+                                <div class="variables-grid">
+                                    <label class="variables-field" for="nom-bien">
+                                        <span class="status-label">Nom du bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Nom libre pour identifier ce dossier dans votre comparateur et vos exports PDF.">?</button></span>
+                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off">
+                                    </label>
+                                    <label class="variables-field" for="ville">
+                                        <span class="status-label">Ville <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Ville où se situe le bien. Utilisée pour contextualiser l'analyse et le rapport.">?</button></span>
+                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off">
+                                    </label>
+                                    <label class="variables-field" for="statut-bien">
+                                        <span class="status-label">Statut <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Candidat = bien en cours d'étude. Acquis = bien déjà dans votre patrimoine.">?</button></span>
+                                        <select id="statut-bien" name="statut-bien" class="variables-input">
+                                            <option value="candidate">À étudier</option>
+                                            <option value="owned">Déjà au portefeuille</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </fieldset>
+                                </div>
+                            </div>
+
+                                </div>
+                            </div>
+
                         </form>
 
                         <div class="asset-actions">

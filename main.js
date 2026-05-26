@@ -2516,6 +2516,18 @@ function bindEvents() {
         render({ syncVariables: false, syncProfile: false });
     });
 
+    document.addEventListener('click', e => {
+        const zoneHead = e.target.closest('.form-zone__head');
+        if (!zoneHead) return;
+        const zone = zoneHead.closest('.form-zone');
+        if (!zone) return;
+        const isOpen = zone.dataset.open === 'true';
+        zone.dataset.open = String(!isOpen);
+        zoneHead.setAttribute('aria-expanded', String(!isOpen));
+        const body = zone.querySelector('.form-zone__body');
+        if (body) body.hidden = isOpen;
+    });
+
     nodes.screenToggle.addEventListener('click', handleScreenToggle);
     nodes.profileTrigger.addEventListener('click', openProfileModal);
     nodes.profileClose.addEventListener('click', () => closeProfileModal());
