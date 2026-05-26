@@ -2801,7 +2801,7 @@ body.tuto-active {
     font-weight: 700;
     padding: 2px 7px;
     border-radius: 3px;
-    background: rgba(59, 130, 246, .15);
+    background: var(--primary-soft);
     color: var(--primary);
     letter-spacing: .3px;
 }
