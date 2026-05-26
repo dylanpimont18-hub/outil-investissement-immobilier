@@ -119,6 +119,10 @@ def main(full: bool = False, send_email: bool = True, progress_callback=None):
 
     if not resultats:
         _log("Aucun résultat calculable. Fin.")
+        new_ids = {a["id"] for a in nouvelles}
+        cache.update(new_ids)
+        _save_cache(cache)
+        _log(f"Cache mis à jour : {len(cache)} annonces au total")
         cb(100, "Scan terminé")
         return
 
@@ -142,7 +146,13 @@ def main(full: bool = False, send_email: bool = True, progress_callback=None):
     _save_results(resultats, stats, marche)
     _log(f"Résultats sauvegardés : {RESULTS_FILE}")
 
-    # 9. Envoi email
+    # 9. Mise à jour cache (avant l'email pour ne pas repasser à l'IA si l'email échoue)
+    new_ids = {a["id"] for a in nouvelles}
+    cache.update(new_ids)
+    _save_cache(cache)
+    _log(f"Cache mis à jour : {len(cache)} annonces au total")
+
+    # 10. Envoi email
     if send_email:
         try:
             envoyer(resultats, stats, marche)
@@ -150,12 +160,6 @@ def main(full: bool = False, send_email: bool = True, progress_callback=None):
         except Exception as e:
             _log(f"ERREUR envoi email : {e}")
             sys.exit(1)
-
-    # 10. Mise à jour cache
-    new_ids = {a["id"] for a in nouvelles}
-    cache.update(new_ids)
-    _save_cache(cache)
-    _log(f"Cache mis à jour : {len(cache)} annonces au total")
     cb(100, "Scan terminé")
 
 

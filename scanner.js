@@ -10,6 +10,32 @@ let _pollInterval = null;
 let _scanRunning = false;
 let _saveCurrentStudy = null;
 
+// ─── État tableau ─────────────────────────────────────────────────────────────
+let _allResultats = [];
+let _displayedResultats = [];
+let _sortKey = 'cf_net';
+let _sortDir = -1; // -1 = décroissant, 1 = croissant
+let _displayCount = 20; // nombre ou 'all'
+
+const SORT_COLS = [
+  { key: 'cf_net',         label: 'CF net',          th: 'CF net' },
+  { key: 'cf_apres_impot', label: 'CF après impôt',  th: 'CF après impôt' },
+  { key: 'renta_brute',    label: 'Renta brute',      th: 'Renta brute' },
+  { key: 'score',          label: 'Score IA',         th: 'Score' },
+  { key: 'dscr',           label: 'DSCR',             th: 'DSCR' },
+  { key: 'prix',           label: 'Prix',             th: 'Prix' },
+  { key: 'loyer_estime',   label: 'Loyer',            th: 'Loyer' },
+  { key: 'prix_m2',        label: 'Prix/m²',          th: 'Prix/m²' },
+  { key: 'surface',        label: 'Surface',          th: 'Surface' },
+  { key: 'mensualite',     label: 'Mensualité',       th: 'Mensualité' },
+];
+
+function _getVal(r, key) {
+  if (key === 'prix_m2') return r.surface ? r.prix / r.surface : null;
+  const v = r[key];
+  return v != null ? v : null;
+}
+
 // ─── Points d'entrée publics ────────────────────────────────────────────────
 
 export function initScanner({ saveCurrentStudy } = {}) {
@@ -35,11 +61,15 @@ function _bindButtons() {
   });
   document.getElementById('btn-clear-cache')?.addEventListener('click', async () => {
     if (confirm('Vider le cache ? Le prochain scan traitera toutes les annonces.')) {
-      // Le scan/full vide le cache mais on veut juste vider sans scanner.
-      // On appelle POST /api/scan/full avec un flag... mais comme l'API ne le supporte pas,
-      // on avertit simplement et on laisse l'utilisateur lancer un scan complet.
       alert('Cache vidé au prochain "Scan complet".');
     }
+  });
+
+  // Délégation unique pour les boutons "→ Analyser" (rebind évité à chaque re-render)
+  document.getElementById('scanner-results')?.addEventListener('click', e => {
+    const btn = e.target.closest('.scanner-analyser-btn');
+    if (!btn) return;
+    _analyserBien(_displayedResultats[parseInt(btn.dataset.rank, 10)]);
   });
 }
 
@@ -147,31 +177,119 @@ function _statCard(val, label, cls) {
 // ─── Rendu tableau ────────────────────────────────────────────────────────────
 
 function _renderTable(resultats) {
-  const top = resultats.slice(0, 15);
-  const rows = top.map((r, i) => _renderRow(r, i + 1)).join('');
+  _allResultats = resultats;
+  _applyTable();
+}
+
+function _applyTable() {
+  const sorted = [..._allResultats].sort((a, b) => {
+    const av = _getVal(a, _sortKey);
+    const bv = _getVal(b, _sortKey);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return (av - bv) * _sortDir;
+  });
+
+  _displayedResultats = _displayCount === 'all' ? sorted : sorted.slice(0, _displayCount);
+
+  const total = _allResultats.length;
+  const shown = _displayedResultats.length;
+  const sortLabel = SORT_COLS.find(c => c.key === _sortKey)?.label ?? _sortKey;
+  const dirArrow = _sortDir === -1 ? '↓' : '↑';
+
+  // Options du select d'affichage
+  const countPresets = [10, 20, 50, 100];
+  const isCustom = _displayCount !== 'all' && !countPresets.includes(_displayCount);
+  const countOptions = [
+    ...countPresets.map(n => `<option value="${n}" ${_displayCount === n ? 'selected' : ''}>${n} biens</option>`),
+    `<option value="all" ${_displayCount === 'all' ? 'selected' : ''}>Tout (${total})</option>`,
+    `<option value="custom" ${isCustom ? 'selected' : ''}>Personnalisé…</option>`,
+  ].join('');
+
+  const customInput = (isCustom || false)
+    ? `<input id="scanner-count-custom" type="number" min="1" max="${total}" value="${_displayCount}" style="width:60px;background:var(--input-bg,#161b22);border:1px solid #C5A059;color:var(--text,#e6edf3);border-radius:5px;padding:3px 6px;font-size:12px">`
+    : `<input id="scanner-count-custom" type="number" min="1" max="${total}" value="${_displayCount}" style="width:60px;background:var(--input-bg,#161b22);border:1px solid #C5A059;color:var(--text,#e6edf3);border-radius:5px;padding:3px 6px;font-size:12px;display:none">`;
+
+  // En-têtes triables
+  const thSortable = (key, label) => {
+    const active = key === _sortKey;
+    const arrow = active ? (` ${dirArrow}`) : ' <span style="opacity:.35;font-size:10px">↕</span>';
+    const style = active
+      ? `color:#C5A059;font-weight:600;border-bottom:2px solid #C5A059;cursor:pointer;white-space:nowrap;padding:8px 10px;text-align:right`
+      : `cursor:pointer;white-space:nowrap;padding:8px 10px;text-align:right;color:var(--text-muted,#8b949e);font-weight:500`;
+    return `<th data-sort="${key}" style="${style}">${label}${arrow}</th>`;
+  };
+
+  const rows = _displayedResultats.map((r, i) => _renderRow(r, i + 1, i)).join('');
 
   const container = document.getElementById('scanner-results');
   container.innerHTML = `
-    <div class="scanner-results-header">
-      <span>Top ${top.length} opportunités — triées par CF net</span>
+    <div class="scanner-results-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span style="font-size:12px;color:var(--text-muted,#8b949e)">
+        <span style="color:var(--text,#e6edf3);font-weight:600">${shown}</span>${shown < total ? ` / ${total}` : ''} biens — triés par <span style="color:#C5A059">${sortLabel} ${dirArrow}</span>
+      </span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--text-muted,#8b949e)">Afficher :</span>
+        <select id="scanner-count-select" style="background:var(--input-bg,#161b22);border:1px solid var(--border,#30363d);color:var(--text,#e6edf3);border-radius:5px;padding:3px 8px;font-size:12px">${countOptions}</select>
+        ${customInput}
+      </div>
     </div>
     <table class="scanner-table">
       <thead>
         <tr>
-          <th>#</th><th>Bien</th><th>Prix</th><th>Loyer</th>
-          <th>Mensualité</th><th>CF net</th><th>CF après impôt</th>
-          <th>DSCR</th><th>Renta brute</th><th>Score</th><th>Lien</th><th></th>
+          <th style="padding:8px 10px;text-align:center;color:var(--text-muted,#8b949e);font-weight:500">#</th>
+          <th style="padding:8px 10px;text-align:left;color:var(--text-muted,#8b949e);font-weight:500">Bien</th>
+          ${thSortable('prix', 'Prix')}
+          ${thSortable('loyer_estime', 'Loyer')}
+          ${thSortable('prix_m2', 'Prix/m²')}
+          ${thSortable('mensualite', 'Mensualité')}
+          ${thSortable('cf_net', 'CF net')}
+          ${thSortable('cf_apres_impot', 'CF après impôt')}
+          ${thSortable('dscr', 'DSCR')}
+          ${thSortable('renta_brute', 'Renta brute')}
+          ${thSortable('score', 'Score')}
+          <th style="padding:8px 10px;color:var(--text-muted,#8b949e);font-weight:500">Lien</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
   `;
 
-  container.addEventListener('click', e => {
-    const btn = e.target.closest('.scanner-analyser-btn');
-    if (!btn) return;
-    const idx = parseInt(btn.dataset.rank, 10);
-    _analyserBien(top[idx]);
+  // Tri par clic sur en-tête
+  container.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (_sortKey === key) {
+        _sortDir *= -1;
+      } else {
+        _sortKey = key;
+        _sortDir = -1;
+      }
+      _applyTable();
+    });
+  });
+
+  // Sélecteur d'affichage
+  document.getElementById('scanner-count-select')?.addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'all') {
+      _displayCount = 'all';
+      document.getElementById('scanner-count-custom').style.display = 'none';
+    } else if (v === 'custom') {
+      document.getElementById('scanner-count-custom').style.display = '';
+      document.getElementById('scanner-count-custom').focus();
+    } else {
+      _displayCount = parseInt(v, 10);
+      document.getElementById('scanner-count-custom').style.display = 'none';
+      _applyTable();
+    }
+  });
+
+  document.getElementById('scanner-count-custom')?.addEventListener('change', e => {
+    const n = parseInt(e.target.value, 10);
+    if (n > 0) { _displayCount = n; _applyTable(); }
   });
 }
 
@@ -246,7 +364,7 @@ function _showAnalyserModal(nomBien, { onSave, onIgnore }) {
   document.body.appendChild(overlay);
 }
 
-function _renderRow(r, rank) {
+function _renderRow(r, rank, idx) {
   const cfCls = r.cf_net >= 0 ? 'pos' : 'neg';
   const cfSign = r.cf_net >= 0 ? '+' : '';
   const cfAi = r.cf_apres_impot;
@@ -287,6 +405,8 @@ function _renderRow(r, rank) {
     ? `${r.surface.toFixed(0)} m²${r.surface_source === 'ia' ? '<sup style="color:#C5A059;font-size:9px"> IA</sup>' : ''}`
     : '—';
 
+  const prixM2 = r.surface ? r.prix / r.surface : null;
+
   return `<tr>
     <td style="color:#555;font-size:11px;text-align:center">${rank}</td>
     <td>
@@ -295,16 +415,17 @@ function _renderRow(r, rank) {
       <div style="margin-top:4px">${badges.join('')}</div>
       ${r.resume_ia ? `<div style="font-size:11px;color:#666;font-style:italic;margin-top:3px">${_esc(r.resume_ia)}</div>` : ''}
     </td>
-    <td style="white-space:nowrap">${_fmtEur(r.prix)}</td>
-    <td style="white-space:nowrap">${_fmtEur(r.loyer_estime)}${loyerNote}</td>
-    <td style="white-space:nowrap">${_fmtEur(r.mensualite)}</td>
-    <td style="white-space:nowrap;font-weight:700;color:${r.cf_net >= 0 ? '#4ade80' : '#f87171'}">${cfSign}${_fmtEur(r.cf_net)}</td>
-    <td style="white-space:nowrap;font-weight:700;color:${cfAi != null && cfAi >= 0 ? '#4ade80' : '#f87171'}">${cfAi != null ? cfAiSign + _fmtEur(cfAi) : '—'}</td>
+    <td style="white-space:nowrap;text-align:right">${_fmtEur(r.prix)}</td>
+    <td style="white-space:nowrap;text-align:right">${_fmtEur(r.loyer_estime)}${loyerNote}</td>
+    <td style="white-space:nowrap;text-align:right">${prixM2 != null ? Math.round(prixM2).toLocaleString('fr-FR') + ' €' : '—'}</td>
+    <td style="white-space:nowrap;text-align:right">${_fmtEur(r.mensualite)}</td>
+    <td style="white-space:nowrap;text-align:right;font-weight:700;color:${r.cf_net >= 0 ? '#4ade80' : '#f87171'}">${cfSign}${_fmtEur(r.cf_net)}</td>
+    <td style="white-space:nowrap;text-align:right;font-weight:700;color:${cfAi != null && cfAi >= 0 ? '#4ade80' : '#f87171'}">${cfAi != null ? cfAiSign + _fmtEur(cfAi) : '—'}</td>
     <td style="text-align:center;font-weight:700;color:${dscrColor}">${dscr != null ? dscr.toFixed(2) : '—'}</td>
-    <td style="white-space:nowrap">${r.renta_brute != null ? r.renta_brute.toFixed(1) + ' %' : '—'}</td>
+    <td style="white-space:nowrap;text-align:right">${r.renta_brute != null ? r.renta_brute.toFixed(1) + ' %' : '—'}</td>
     <td>${r.score != null ? `<span class="scanner-score-badge" style="background:${scoreColor}">${r.score}/100 ${scoreTone}</span>` : '—'}</td>
     <td><a href="${_esc(r.url)}" target="_blank" style="color:#C5A059;text-decoration:none;font-size:11px">Voir ↗</a></td>
-    <td><button class="scanner-analyser-btn" data-rank="${rank - 1}" style="cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid #C5A059;background:transparent;color:#C5A059;font-size:11px;white-space:nowrap">→ Analyser</button></td>
+    <td><button class="scanner-analyser-btn" data-rank="${idx}" style="cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid #C5A059;background:transparent;color:#C5A059;font-size:11px;white-space:nowrap">→ Analyser</button></td>
   </tr>`;
 }
 
