@@ -26,6 +26,10 @@
                 <button type="button" id="theme-toggle" class="topbar-btn" aria-label="Basculer thème"></button>
                 <button type="button" id="screen-toggle" class="topbar-btn" aria-label="Mode 2 écrans"></button>
                 <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode tutoriel" aria-pressed="false">Tuto</button>
+                <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
+                    <button type="button" class="mode-toggle__btn" id="mode-btn-guided" data-mode="guided" aria-pressed="false">⚡ Guidé</button>
+                    <button type="button" class="mode-toggle__btn" id="mode-btn-full" data-mode="full" aria-pressed="true">☰ Complet</button>
+                </div>
                 <button type="button" id="profile-trigger" class="topbar-btn" aria-label="Profil du foyer"></button>
             </div>
         </header>
@@ -34,6 +38,7 @@
             <nav class="workspace-tabs" aria-label="Navigation">
                 <button class="workspace-tab is-active" data-target="workspace-panel">Saisie &amp; Analyse</button>
                 <button class="workspace-tab" data-target="collection-panel">Portefeuille</button>
+                <button class="workspace-tab" data-target="scanner-panel">📡 Scanner</button>
             </nav>
             <section class="workspace-panel" aria-label="Espace de travail">
                 <div class="panel-head">
@@ -67,6 +72,18 @@
     </div>
 </div>
 
+
+                        <div id="guided-mode-body" class="guided-body" hidden>
+                            <div class="guided-steps-bar" id="guided-steps-bar">
+                                <!-- injecté par renderGuidedSteps() -->
+                            </div>
+                            <div class="guided-progress" id="guided-progress-outer">
+                                <div class="guided-progress__fill" id="guided-progress-fill" style="width:0%"></div>
+                            </div>
+                            <div class="guided-step-content" id="guided-step-content">
+                                <!-- injecté par renderGuidedStep() -->
+                            </div>
+                        </div>
 
                         <form id="variables-form" class="variables-form">
                             <div class="accord-section" data-priority="optionnel" data-open="false">
@@ -410,6 +427,8 @@
                             <div id="analysis-acquisition-decision"></div>
                         </section>
 
+                        <div id="analysis-cf-waterfall" class="cf-waterfall"></div>
+
                         <div class="analysis-section-badge">② MÉTRIQUES CLÉS</div>
                         <div id="analysis-metrics" class="analysis-grid"></div>
 
@@ -561,6 +580,42 @@
                         <div id="portfolio-table"></div>
                     </section>
                 </div>
+            </section>
+
+            <section id="scanner-panel" style="display:none" aria-label="Scanner LeBonCoin">
+              <!-- Barre de contrôle -->
+              <div id="scanner-controls" class="scanner-controls">
+                <div class="scanner-cp-badge">CP <strong id="scanner-cp">—</strong></div>
+                <button id="btn-scan" class="scanner-btn scanner-btn--primary">▶ Lancer un scan</button>
+                <button id="btn-scan-full" class="scanner-btn scanner-btn--outline">↺ Scan complet</button>
+                <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">🗑 Vider le cache</button>
+                <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
+                  <span id="scanner-status-dot" class="scanner-status-dot"></span>
+                  <span id="scanner-status-label">En attente</span>
+                </div>
+              </div>
+
+              <!-- Barre de progression (masquée par défaut) -->
+              <div id="scanner-progress" class="scanner-progress" style="display:none">
+                <div class="scanner-progress-top">
+                  <span id="scanner-log-line" class="scanner-log-line">—</span>
+                  <span id="scanner-pct">0%</span>
+                </div>
+                <div class="scanner-progress-bar">
+                  <div id="scanner-progress-fill" class="scanner-progress-fill" style="width:0%"></div>
+                </div>
+              </div>
+
+              <!-- Stats -->
+              <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
+
+              <!-- Tableau résultats -->
+              <div id="scanner-results" class="scanner-results-wrap" style="display:none"></div>
+
+              <!-- État vide -->
+              <div id="scanner-empty" class="scanner-empty">
+                <p>Aucun résultat. Lance un scan pour commencer.</p>
+              </div>
             </section>
         </main>
 
