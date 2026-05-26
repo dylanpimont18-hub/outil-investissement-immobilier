@@ -177,6 +177,50 @@ const TUTO_STEPS = [
         fields: []
     }
 ];
+const WIZARD_STEPS = [
+    {
+        num: 1,
+        title: 'Identité du dossier',
+        desc: 'Donnez un nom à votre étude et indiquez la ville du bien.',
+        fields: [
+            { id: 'nom-bien', label: 'Nom du dossier', type: 'text', hint: 'ex : Appart T2 Lyon 7e — un nom pour retrouver ce dossier.' },
+            { id: 'ville', label: 'Ville du bien', type: 'text', hint: 'ex : Lyon' }
+        ]
+    },
+    {
+        num: 2,
+        title: 'Prix & loyer',
+        desc: 'Les deux chiffres qui définissent la rentabilité du bien.',
+        fields: [
+            { id: 'prix', label: 'Prix affiché par le vendeur (€)', type: 'number', hint: 'Prix demandé, avant négociation.' },
+            { id: 'loyer', label: 'Loyer cible mensuel (€)', type: 'number', hint: 'Loyer mensuel hors charges que vous estimez pouvoir obtenir.' },
+            { id: 'nego', label: 'Négociation visée (%)', type: 'number', hint: 'Décote visée sur le prix. 0 si vous gardez le prix affiché.' },
+            { id: 'travaux', label: 'Budget travaux (€)', type: 'number', hint: 'Travaux à intégrer au coût d\'acquisition. 0 si aucun.' }
+        ]
+    },
+    {
+        num: 3,
+        title: 'Financement',
+        desc: 'Les conditions de votre crédit définissent votre mensualité.',
+        fields: [
+            { id: 'apport', label: 'Apport personnel (€)', type: 'number', hint: 'Somme apportée sans emprunt.' },
+            { id: 'taux-input', label: 'Taux d\'intérêt (%)', type: 'number', hint: 'Taux annuel du crédit, hors assurance.' },
+            { id: 'duree', label: 'Durée du prêt (ans)', type: 'number', hint: 'ex : 20' },
+            { id: 'notaire', label: 'Frais de notaire (%)', type: 'number', hint: 'Environ 7–8 % dans l\'ancien.' }
+        ]
+    },
+    {
+        num: 4,
+        title: 'Exploitation & fiscalité',
+        desc: 'Charges et régime fiscal pour un calcul précis.',
+        fields: [
+            { id: 'vacance', label: 'Vacance locative (%)', type: 'number', hint: '5 % = environ 18 jours sans locataire/an.' },
+            { id: 'copro', label: 'Charges copro / mois (€)', type: 'number', hint: 'Part non récupérable sur le locataire.' },
+            { id: 'fonciere', label: 'Taxe foncière / an (€)', type: 'number', hint: 'Demandez l\'avis de taxe au vendeur.' },
+            { id: 'regime', label: 'Régime fiscal', type: 'select', hint: 'Micro-foncier, Foncier réel ou SCI IS.' }
+        ]
+    }
+];
 const REGIME_VALUES = new Set(['micro-foncier', 'reel', 'sci-is']);
 const OWNERSHIP_VALUES = new Set(['candidate', 'owned']);
 const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
@@ -385,6 +429,111 @@ function renderModeSwitch(mode) {
         renderGuidedSteps(state.guidedStepIndex ?? 0);
         renderGuidedStep(state.guidedStepIndex ?? 0);
     }
+}
+
+function renderGuidedSteps(currentIndex) {
+    if (!nodes.guidedStepsBar || !nodes.guidedProgressFill) return;
+
+    const total = WIZARD_STEPS.length;
+    let html = '';
+    for (let i = 0; i < total; i++) {
+        const stepState = i < currentIndex ? 'done' : (i === currentIndex ? 'active' : '');
+        const label = i < currentIndex ? '✓' : String(i + 1);
+        html += `<div class="guided-step-pip ${stepState ? 'guided-step-pip--' + stepState : ''}" aria-label="Étape ${i + 1}">${escapeHtml(label)}</div>`;
+        if (i < total - 1) {
+            html += `<div class="guided-step-line ${i < currentIndex ? 'guided-step-line--done' : ''}"></div>`;
+        }
+    }
+    nodes.guidedStepsBar.innerHTML = html;
+    nodes.guidedProgressFill.style.width = `${(currentIndex / total) * 100}%`;
+}
+
+function renderGuidedStep(index) {
+    if (!nodes.guidedStepContent) return;
+
+    const step = WIZARD_STEPS[index];
+    if (!step) return;
+
+    const total = WIZARD_STEPS.length;
+    const isFirst = index === 0;
+    const isLast = index === total - 1;
+
+    const REGIME_OPTIONS = [
+        { value: 'micro-foncier', label: 'Micro-foncier' },
+        { value: 'reel', label: 'Foncier réel' },
+        { value: 'sci-is', label: "SCI à l'IS" }
+    ];
+
+    const fieldsHtml = step.fields.map(f => {
+        const currentVal = state.variablesData[f.id] ?? VARIABLE_DEFAULTS[f.id] ?? '';
+        let inputHtml;
+        if (f.type === 'select' && f.id === 'regime') {
+            const opts = REGIME_OPTIONS.map(o =>
+                `<option value="${escapeHtml(o.value)}" ${currentVal === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`
+            ).join('');
+            inputHtml = `<select id="guided-field-${escapeHtml(f.id)}" name="${escapeHtml(f.id)}" class="variables-input">${opts}</select>`;
+        } else {
+            inputHtml = `<input id="guided-field-${escapeHtml(f.id)}" name="${escapeHtml(f.id)}" type="${escapeHtml(f.type)}" class="variables-input" value="${escapeHtml(String(currentVal))}">`;
+        }
+        return `
+        <div class="guided-field">
+            <label for="guided-field-${escapeHtml(f.id)}">${escapeHtml(f.label)}</label>
+            ${inputHtml}
+            <span class="guided-field__hint">${escapeHtml(f.hint)}</span>
+        </div>`;
+    }).join('');
+
+    nodes.guidedStepContent.innerHTML = `
+        <div class="guided-step-num">ÉTAPE ${step.num} / ${total}</div>
+        <h3 class="guided-step-title">${escapeHtml(step.title)}</h3>
+        <p class="guided-step-desc">${escapeHtml(step.desc)}</p>
+        ${fieldsHtml}
+        <div class="guided-step-actions">
+            ${!isFirst ? `<button type="button" class="guided-btn-ghost" id="guided-prev">← Retour</button>` : ''}
+            <button type="button" class="guided-btn-gold" id="guided-next">${isLast ? 'Terminer ✓' : 'Suivant →'}</button>
+        </div>
+    `;
+
+    const prevBtn = nodes.guidedStepContent.querySelector('#guided-prev');
+    const nextBtn = nodes.guidedStepContent.querySelector('#guided-next');
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            syncGuidedFieldsToForm();
+            state.guidedStepIndex = Math.max(0, index - 1);
+            renderGuidedSteps(state.guidedStepIndex);
+            renderGuidedStep(state.guidedStepIndex);
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            syncGuidedFieldsToForm();
+            if (isLast) {
+                state.sparkMode = 'full';
+                saveSparkMode('full');
+                renderModeSwitch('full');
+            } else {
+                state.guidedStepIndex = Math.min(total - 1, index + 1);
+                renderGuidedSteps(state.guidedStepIndex);
+                renderGuidedStep(state.guidedStepIndex);
+            }
+        });
+    }
+}
+
+function syncGuidedFieldsToForm() {
+    if (!nodes.variablesForm) return;
+    const guidedInputs = nodes.guidedStepContent
+        ? nodes.guidedStepContent.querySelectorAll('[name]')
+        : [];
+    guidedInputs.forEach(guidedInput => {
+        const formField = nodes.variablesForm.elements.namedItem(guidedInput.name);
+        if (formField) {
+            formField.value = guidedInput.value;
+            formField.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
 }
 
 function loadAssetRecords() {
