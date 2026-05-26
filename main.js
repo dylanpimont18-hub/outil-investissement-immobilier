@@ -2516,9 +2516,7 @@ function bindEvents() {
         render({ syncVariables: false, syncProfile: false });
     });
 
-    document.addEventListener('click', e => {
-        const zoneHead = e.target.closest('.form-zone__head');
-        if (!zoneHead) return;
+    function toggleFormZone(zoneHead) {
         const zone = zoneHead.closest('.form-zone');
         if (!zone) return;
         const isOpen = zone.dataset.open === 'true';
@@ -2526,6 +2524,17 @@ function bindEvents() {
         zoneHead.setAttribute('aria-expanded', String(!isOpen));
         const body = zone.querySelector('.form-zone__body');
         if (body) body.hidden = isOpen;
+    }
+    document.addEventListener('click', e => {
+        const zoneHead = e.target.closest('.form-zone__head');
+        if (zoneHead) toggleFormZone(zoneHead);
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const zoneHead = e.target.closest('.form-zone__head');
+        if (!zoneHead) return;
+        e.preventDefault();
+        toggleFormZone(zoneHead);
     });
 
     nodes.screenToggle.addEventListener('click', handleScreenToggle);
