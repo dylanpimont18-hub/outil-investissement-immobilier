@@ -32,15 +32,20 @@ JSON attendu (toutes les clés sont obligatoires, utilise null si l'info est abs
 {{
   "surface_m2": <nombre ou null>,
   "type_bien": "<appartement|maison|immeuble|autre>",
+  "nb_pieces": <nombre entier T1=1, T2=2… ou null>,
   "travaux": <true|false>,
   "travaux_montant_estime": <montant en euros ou null>,
   "dpe": "<a|b|c|d|e|f|g|null>",
   "immeuble_rapport": <true|false>,
   "deja_loue": <true|false|null>,
+  "loyer_actuel": <loyer mensuel en euros si explicitement mentionné ET bien déjà loué, sinon null>,
   "lots_total": <nombre total de lots si immeuble, sinon null>,
   "lots_loues": <nombre de lots actuellement loués si immeuble, sinon null>,
   "charges_copro_mensuelle": <nombre euros ou null>,
   "taxe_fonciere_annuelle": <nombre euros ou null>,
+  "meuble": <true si meublé mentionné, false si vide/nu mentionné, null si non précisé>,
+  "parking_garage": <true si parking, box ou garage inclus, false sinon>,
+  "chauffage": "<electrique|gaz|fioul|pompe_chaleur|poele|autre|null>",
   "points_forts": ["<point court>"],
   "points_faibles": ["<point court>"],
   "resume": "<phrase 12 mots max>"
@@ -97,17 +102,24 @@ def enrichir(annonce, description=""):
     result["dpe"] = dpe if dpe in (*DPE_OK, "e", "f", "g") else None
     result["dpe_alerte"] = DPE_ALERTE.get(result["dpe"])
 
+    result["nb_pieces"] = data.get("nb_pieces")
     result["travaux"] = bool(data.get("travaux"))
     result["travaux_montant"] = data.get("travaux_montant_estime")
     result["immeuble_rapport"] = bool(data.get("immeuble_rapport"))
 
     deja_loue = data.get("deja_loue")
     result["deja_loue"] = bool(deja_loue) if deja_loue is not None else None
+    result["loyer_actuel"] = data.get("loyer_actuel")
     result["lots_total"] = data.get("lots_total")
     result["lots_loues"] = data.get("lots_loues")
 
     result["charges_copro_annonce"] = data.get("charges_copro_mensuelle")
     result["taxe_fonciere_annonce"] = data.get("taxe_fonciere_annuelle")
+
+    meuble = data.get("meuble")
+    result["meuble"] = bool(meuble) if meuble is not None else None
+    result["parking_garage"] = bool(data.get("parking_garage"))
+    result["chauffage"] = data.get("chauffage")
 
     result["points_forts"] = data.get("points_forts") or []
     result["points_faibles"] = data.get("points_faibles") or []

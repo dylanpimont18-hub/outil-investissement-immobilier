@@ -432,6 +432,14 @@
                                         <span class="status-label">Ville <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Ville où se situe le bien. Utilisée pour contextualiser l'analyse et le rapport.">?</button></span>
                                         <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off">
                                     </label>
+                                    <label class="variables-field" for="type-bien">
+                                        <span class="status-label">Type de bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Type du bien. Influence les valeurs par défaut des seuils de décision et des charges.">?</button></span>
+                                        <select id="type-bien" name="type-bien" class="variables-input">
+                                            <option value="appartement">Appartement</option>
+                                            <option value="maison">Maison</option>
+                                            <option value="immeuble">Immeuble de rapport</option>
+                                        </select>
+                                    </label>
                                     <label class="variables-field" for="statut-bien">
                                         <span class="status-label">Statut <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Candidat = bien en cours d'étude. Acquis = bien déjà dans votre patrimoine.">?</button></span>
                                         <select id="statut-bien" name="statut-bien" class="variables-input">
@@ -654,6 +662,131 @@
 
               <!-- Stats -->
               <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
+
+              <!-- Panel de filtres -->
+              <div id="scanner-filters" class="scanner-filter-panel" style="display:none">
+                <div class="scanner-filter-row">
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">Score</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Excellent 80+</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Bon 60–79</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Neutre 40–59</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Attention 20–39</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Faible &lt;20</span></label>
+                    </div>
+                  </div>
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">Cash-flow</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip"><input type="checkbox" id="filter-cf-positif"><span>CF net positif</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-cf-negatif"><span>CF net négatif</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-cfai-positif"><span>CF après impôt positif</span></label>
+                    </div>
+                  </div>
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">DPE</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip scanner-chip--dpe-a"><input type="checkbox" name="dpe-filter" value="a"><span>A</span></label>
+                      <label class="scanner-chip scanner-chip--dpe-b"><input type="checkbox" name="dpe-filter" value="b"><span>B</span></label>
+                      <label class="scanner-chip scanner-chip--dpe-c"><input type="checkbox" name="dpe-filter" value="c"><span>C</span></label>
+                      <label class="scanner-chip scanner-chip--dpe-d"><input type="checkbox" name="dpe-filter" value="d"><span>D</span></label>
+                      <label class="scanner-chip scanner-chip--dpe-e"><input type="checkbox" name="dpe-filter" value="e"><span>E</span></label>
+                      <label class="scanner-chip scanner-chip--dpe-f"><input type="checkbox" name="dpe-filter" value="f"><span>F</span></label>
+                      <label class="scanner-chip scanner-chip--dpe-g"><input type="checkbox" name="dpe-filter" value="g"><span>G</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-dpe-safe"><span>Sans risque DPE</span></label>
+                    </div>
+                  </div>
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">Type de bien</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip"><input type="checkbox" name="type-filter" value="appartement"><span>Appartement</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="type-filter" value="maison"><span>Maison</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="type-filter" value="immeuble"><span>Immeuble</span></label>
+                    </div>
+                  </div>
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">État</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip"><input type="checkbox" id="filter-deja-loue"><span>Déjà loué</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-travaux"><span>Avec travaux</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-sans-travaux"><span>Sans travaux</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-meuble"><span>Meublé</span></label>
+                    </div>
+                  </div>
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">Source loyer</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip"><input type="checkbox" id="filter-loyer-marche"><span>Données marché</span></label>
+                      <label class="scanner-chip"><input type="checkbox" id="filter-loyer-annonce"><span>Loyer annonce</span></label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Filtres numériques (sliders + inputs) -->
+                <div class="scanner-filter-ranges">
+                  <div style="display:flex;flex-wrap:wrap;gap:16px">
+                    <div class="scanner-range-group" style="flex:1;min-width:200px">
+                      <span class="scanner-filter-title">Prix (€)</span>
+                      <div class="scanner-range-row">
+                        <input type="number" id="prix-min" class="scanner-range-input" placeholder="Min" min="0" step="1000">
+                        <input type="range" id="range-prix-min" class="scanner-range-slider" step="1000">
+                        <span class="scanner-range-sep">–</span>
+                        <input type="range" id="range-prix-max" class="scanner-range-slider" step="1000">
+                        <input type="number" id="prix-max" class="scanner-range-input" placeholder="Max" min="0" step="1000">
+                      </div>
+                    </div>
+                    <div class="scanner-range-group" style="flex:1;min-width:200px">
+                      <span class="scanner-filter-title">Surface (m²)</span>
+                      <div class="scanner-range-row">
+                        <input type="number" id="surface-min" class="scanner-range-input" placeholder="Min" min="0" step="5">
+                        <input type="range" id="range-surface-min" class="scanner-range-slider" step="5">
+                        <span class="scanner-range-sep">–</span>
+                        <input type="range" id="range-surface-max" class="scanner-range-slider" step="5">
+                        <input type="number" id="surface-max" class="scanner-range-input" placeholder="Max" min="0" step="5">
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:16px">
+                    <div class="scanner-range-group" style="flex:1;min-width:160px">
+                      <span class="scanner-filter-title">Renta brute min (%)</span>
+                      <div class="scanner-range-row">
+                        <input type="range" id="range-renta" class="scanner-range-slider" min="0" max="20" step="0.5" value="0">
+                        <input type="number" id="renta-min" class="scanner-range-input" placeholder="0" min="0" max="20" step="0.5">
+                        <span class="scanner-range-unit">%</span>
+                      </div>
+                    </div>
+                    <div class="scanner-range-group" style="flex:1;min-width:160px">
+                      <span class="scanner-filter-title">CF net min (€/mois)</span>
+                      <div class="scanner-range-row">
+                        <input type="range" id="range-cf" class="scanner-range-slider" step="50" value="0">
+                        <input type="number" id="cf-min" class="scanner-range-input" placeholder="0" step="50">
+                        <span class="scanner-range-unit">€</span>
+                      </div>
+                    </div>
+                    <div class="scanner-range-group" style="flex:1;min-width:140px">
+                      <span class="scanner-filter-title">DSCR min</span>
+                      <div class="scanner-range-row">
+                        <input type="range" id="range-dscr" class="scanner-range-slider" min="0" max="2" step="0.05" value="0">
+                        <input type="number" id="dscr-min" class="scanner-range-input" placeholder="0" min="0" max="2" step="0.05">
+                      </div>
+                    </div>
+                    <div class="scanner-range-group" style="flex:1;min-width:140px">
+                      <span class="scanner-filter-title">Score min (/100)</span>
+                      <div class="scanner-range-row">
+                        <input type="range" id="range-score-min" class="scanner-range-slider" min="0" max="100" step="5" value="0">
+                        <input type="number" id="score-min" class="scanner-range-input" placeholder="0" min="0" max="100" step="5">
+                        <span class="scanner-range-unit">/100</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="scanner-filter-footer">
+                  <button id="scanner-filter-reset" class="scanner-btn scanner-btn--ghost" style="font-size:11px;padding:4px 12px">Réinitialiser</button>
+                  <span id="scanner-filter-count" class="scanner-filter-count"></span>
+                </div>
+              </div>
 
               <!-- Tableau résultats -->
               <div id="scanner-results" class="scanner-results-wrap" style="display:none"></div>

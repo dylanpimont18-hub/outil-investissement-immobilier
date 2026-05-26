@@ -23,21 +23,37 @@ def _loyer_fallback(surface, type_bien):
     return min(surface * loyer_m2, loyer_max)
 
 
-def _score(cf_apres_impot, dscr, renta_brute, dpe):
+def _score(cf_apres_impot, dscr, renta_brute, dpe, prix=None, surface=None):
     """Score d'opportunité 0–100."""
-    # CF après impôt (30 pts) : 0 à -300€ → 30 à +300€
+    # CF après impôt (30 pts) : -300€ → 0 pt, +300€ → 30 pts
     cf_score = max(0.0, min(30.0, 15.0 + cf_apres_impot / 20.0))
 
-    # DSCR (25 pts) : 0 à 0.70 → 25 à 1.30
+    # DSCR (25 pts) : 0.70 → 0 pt, 1.30 → 25 pts
     dscr_score = max(0.0, min(25.0, (dscr - 0.70) / 0.60 * 25.0))
 
-    # Renta brute (25 pts) : 0 à 3 % → 25 à 10 %
+    # Renta brute (25 pts) : 3 % → 0 pt, 10 % → 25 pts
     renta_score = max(0.0, min(25.0, (renta_brute - 3.0) / 7.0 * 25.0))
+
+    # Prix au m² (20 pts) — calibré petites villes / Vierzon
+    if prix and surface and surface > 0:
+        prix_m2 = prix / surface
+        if prix_m2 < 800:
+            pm2_score = 20.0
+        elif prix_m2 < 1200:
+            pm2_score = 15.0
+        elif prix_m2 < 1800:
+            pm2_score = 10.0
+        elif prix_m2 < 2500:
+            pm2_score = 5.0
+        else:
+            pm2_score = 0.0
+    else:
+        pm2_score = 0.0
 
     # Pénalité DPE
     dpe_penalty = {"g": 20, "f": 15, "e": 10}.get((dpe or "").lower(), 0)
 
-    return max(0, min(100, round(cf_score + dscr_score + renta_score - dpe_penalty)))
+    return max(0, min(100, round(cf_score + dscr_score + renta_score + pm2_score - dpe_penalty)))
 
 
 def enrichir(annonce, marche=None):
@@ -59,9 +75,12 @@ def enrichir(annonce, marche=None):
 
     annonce["calculable"] = True
 
-    # Loyer : données marché réel → fallback taux fixes
+    # Loyer : loyer annonce (si loué) → données marché réel → fallback taux fixes
     loyer_marche = estimer_loyer(surface, type_bien, marche) if marche else None
-    if loyer_marche:
+    if annonce.get("loyer_actuel") and annonce.get("deja_loue"):
+        loyer = float(annonce["loyer_actuel"])
+        annonce["loyer_source"] = "annonce"
+    elif loyer_marche:
         loyer = float(loyer_marche)
         annonce["loyer_source"] = "marche"
     else:
@@ -88,8 +107,8 @@ def enrichir(annonce, marche=None):
     cf_net = loyer - mensualite - charges_copro - taxe_fonciere - vacance
     renta_brute = (loyer * 12) / prix * 100 if prix > 0 else 0
 
-    # Micro-foncier : abattement 30 %, imposition sur 70 % des loyers
-    impot_mensuel = loyer * 0.70 * (TMI / 100)
+    # Micro-foncier : 70 % imposable × (TMI + prélèvements sociaux 17,2 %)
+    impot_mensuel = loyer * 0.70 * (TMI / 100 + 0.172)
     cf_apres_impot = cf_net - impot_mensuel
 
     # DSCR (Debt Service Coverage Ratio)
@@ -99,7 +118,7 @@ def enrichir(annonce, marche=None):
     renta_nette_nette = (cf_apres_impot * 12) / prix * 100 if prix > 0 else 0
 
     # Score d'opportunité
-    score = _score(cf_apres_impot, dscr, renta_brute, annonce.get("dpe"))
+    score = _score(cf_apres_impot, dscr, renta_brute, annonce.get("dpe"), prix, surface)
 
     annonce["loyer_estime"] = round(loyer, 0)
     annonce["mensualite"] = round(mensualite, 2)

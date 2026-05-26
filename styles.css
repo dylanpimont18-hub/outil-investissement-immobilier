@@ -2517,6 +2517,158 @@ body.tuto-active {
   color: #fff;
   white-space: nowrap;
 }
+.type-badge {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.type-badge--appartement {
+  background: var(--color-neutral-bg, #2d3a4a);
+  color: var(--color-neutral, #8b949e);
+}
+.type-badge--maison {
+  background: rgba(22, 163, 74, 0.15);
+  color: #4ade80;
+}
+.type-badge--immeuble {
+  background: rgba(197, 160, 89, 0.15);
+  color: #C5A059;
+}
+.scanner-filter-panel {
+  background: var(--color-surface, #1a1a2e);
+  border: 1px solid #2a2a45;
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scanner-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.scanner-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.scanner-filter-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #8b949e);
+}
+.scanner-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.scanner-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid #2a2a45;
+  background: #13131f;
+  font-size: 11px;
+  color: var(--text-muted, #8b949e);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  user-select: none;
+}
+.scanner-chip input[type="checkbox"] {
+  display: none;
+}
+.scanner-chip:has(input:checked) {
+  border-color: #C5A059;
+  background: rgba(197, 160, 89, 0.12);
+  color: #C5A059;
+  font-weight: 600;
+}
+.scanner-chip:hover {
+  border-color: #4a4a65;
+  color: var(--text, #e6edf3);
+}
+.scanner-chip--dpe-a:has(input:checked) { border-color:#00a550;background:rgba(0,165,80,.12);color:#00a550; }
+.scanner-chip--dpe-b:has(input:checked) { border-color:#51b845;background:rgba(81,184,69,.12);color:#51b845; }
+.scanner-chip--dpe-c:has(input:checked) { border-color:#c8d200;background:rgba(200,210,0,.12);color:#c8d200; }
+.scanner-chip--dpe-d:has(input:checked) { border-color:#ffcc00;background:rgba(255,204,0,.12);color:#ffcc00; }
+.scanner-chip--dpe-e:has(input:checked) { border-color:#f4a623;background:rgba(244,166,35,.12);color:#f4a623; }
+.scanner-chip--dpe-f:has(input:checked) { border-color:#e3720c;background:rgba(227,114,12,.12);color:#e3720c; }
+.scanner-chip--dpe-g:has(input:checked) { border-color:#cc0000;background:rgba(204,0,0,.12);color:#cc0000; }
+.scanner-filter-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid #2a2a45;
+}
+.scanner-filter-count {
+  font-size: 11px;
+  color: #C5A059;
+  font-weight: 600;
+}
+.scanner-filter-ranges {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2a45;
+  margin-top: 4px;
+}
+.scanner-range-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.scanner-range-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scanner-range-input {
+  width: 72px;
+  background: var(--input-bg, #161b22);
+  border: 1px solid #2a2a45;
+  color: var(--text, #e6edf3);
+  border-radius: 5px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  text-align: right;
+  transition: border-color .15s;
+}
+.scanner-range-input:focus {
+  outline: none;
+  border-color: #C5A059;
+}
+.scanner-range-sep {
+  font-size: 11px;
+  color: var(--text-muted, #8b949e);
+  flex-shrink: 0;
+}
+.scanner-range-slider {
+  flex: 1;
+  min-width: 60px;
+  accent-color: #C5A059;
+  height: 4px;
+  cursor: pointer;
+}
+.scanner-range-unit {
+  font-size: 11px;
+  color: var(--text-muted, #8b949e);
+  flex-shrink: 0;
+}
 .scanner-empty {
   text-align: center;
   padding: 60px 20px;

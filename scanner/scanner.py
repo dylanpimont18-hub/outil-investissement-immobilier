@@ -128,12 +128,16 @@ def main(full: bool = False, send_email: bool = True, progress_callback=None):
 
     positifs = [r for r in resultats if r["cf_net"] > 0]
     dpe_risque = [r for r in resultats if r.get("dpe_alerte")]
+    cf_ai_values = [r["cf_apres_impot"] for r in resultats if r.get("cf_apres_impot") is not None]
+    score_values = [r["score"] for r in resultats if r.get("score") is not None]
     stats = {
         "nouvelles": len(resultats),
         "positifs": len(positifs),
         "pct_positifs": len(positifs) / len(resultats) * 100,
         "meilleur_cf": resultats[0]["cf_net"],
+        "meilleur_cf_apres_impot": max(cf_ai_values) if cf_ai_values else None,
         "meilleur_renta": max(r["renta_brute"] for r in resultats),
+        "score_moyen": round(sum(score_values) / len(score_values)) if score_values else None,
         "dpe_risque": len(dpe_risque),
         "is_first_run": is_first_run,
         "ia_active": ia_active,

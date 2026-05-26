@@ -71,6 +71,47 @@ function _bindButtons() {
     if (!btn) return;
     _analyserBien(_displayedResultats[parseInt(btn.dataset.rank, 10)]);
   });
+
+  // Filtres à cocher — un seul listener sur le panel
+  document.getElementById('scanner-filters')?.addEventListener('change', () => {
+    _updateFilterCount();
+    _applyTable();
+  });
+
+  document.getElementById('scanner-filter-reset')?.addEventListener('click', () => {
+    document.querySelectorAll('#scanner-filters input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    // Remet les sliders à leurs bornes initiales
+    ['range-prix-min','range-surface-min','range-cf','range-renta','range-dscr','range-score-min'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = el.min; }
+    });
+    ['range-prix-max','range-surface-max'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = el.max; }
+    });
+    ['prix-min','surface-min','cf-min','renta-min','dscr-min','score-min'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    ['prix-max','surface-max'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    _updateFilterCount();
+    _applyTable();
+  });
+}
+
+function _updateFilterCount() {
+  let active = document.querySelectorAll('#scanner-filters input[type="checkbox"]:checked').length;
+  // Compte les filtres numériques non nuls
+  const numericIds = ['prix-min','prix-max','surface-min','surface-max','renta-min','cf-min','dscr-min','score-min'];
+  for (const id of numericIds) {
+    const el = document.getElementById(id);
+    if (el && el.value !== '' && parseFloat(el.value) !== 0) active++;
+  }
+  const el = document.getElementById('scanner-filter-count');
+  if (el) el.textContent = active > 0 ? `${active} filtre${active > 1 ? 's' : ''} actif${active > 1 ? 's' : ''}` : '';
 }
 
 async function _startScan(endpoint) {
@@ -138,6 +179,7 @@ async function _loadResults(showEmpty) {
     _renderTable(data.resultats);
     _showEmpty(false);
     document.getElementById('scanner-stats').style.display = '';
+    document.getElementById('scanner-filters').style.display = '';
     document.getElementById('scanner-results').style.display = '';
     if (data.stats?.last_run || data.generated_at) {
       _setStatus('done', 'Dernier scan · ' + _fmtDatetime(data.generated_at));
@@ -178,11 +220,145 @@ function _statCard(val, label, cls) {
 
 function _renderTable(resultats) {
   _allResultats = resultats;
+  _initRangeFilters(resultats);
   _applyTable();
 }
 
+function _initRangeFilters(resultats) {
+  if (!resultats.length) return;
+
+  const prices = resultats.map(r => r.prix).filter(v => v != null);
+  const surfaces = resultats.map(r => r.surface).filter(v => v != null);
+  const cfs = resultats.map(r => r.cf_net).filter(v => v != null);
+
+  const pMin = Math.floor(Math.min(...prices) / 1000) * 1000;
+  const pMax = Math.ceil(Math.max(...prices) / 1000) * 1000;
+  const sMin = Math.floor(Math.min(...surfaces) / 5) * 5;
+  const sMax = Math.ceil(Math.max(...surfaces) / 5) * 5;
+  const cfMin = Math.floor(Math.min(...cfs) / 50) * 50;
+  const cfMax = Math.ceil(Math.max(...cfs) / 50) * 50;
+
+  _setRange('range-prix-min', pMin, pMax, pMin);
+  _setRange('range-prix-max', pMin, pMax, pMax);
+  _setRange('range-surface-min', sMin, sMax, sMin);
+  _setRange('range-surface-max', sMin, sMax, sMax);
+  _setRange('range-cf', cfMin, cfMax, cfMin);
+
+  _syncInputFromRange('range-prix-min', 'prix-min');
+  _syncInputFromRange('range-prix-max', 'prix-max');
+  _syncInputFromRange('range-surface-min', 'surface-min');
+  _syncInputFromRange('range-surface-max', 'surface-max');
+  _syncInputFromRange('range-cf', 'cf-min');
+  _syncInputFromRange('range-renta', 'renta-min');
+  _syncInputFromRange('range-dscr', 'dscr-min');
+  _syncInputFromRange('range-score-min', 'score-min');
+
+  _bindRange('range-prix-min', 'prix-min');
+  _bindRange('range-prix-max', 'prix-max');
+  _bindRange('range-surface-min', 'surface-min');
+  _bindRange('range-surface-max', 'surface-max');
+  _bindRange('range-cf', 'cf-min');
+  _bindRange('range-renta', 'renta-min');
+  _bindRange('range-dscr', 'dscr-min');
+  _bindRange('range-score-min', 'score-min');
+}
+
+function _setRange(id, min, max, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.min = min;
+  el.max = max;
+  el.value = val;
+}
+
+function _syncInputFromRange(rangeId, inputId) {
+  const range = document.getElementById(rangeId);
+  const input = document.getElementById(inputId);
+  if (!range || !input) return;
+  input.value = range.value;
+}
+
+function _bindRange(rangeId, inputId) {
+  const range = document.getElementById(rangeId);
+  const input = document.getElementById(inputId);
+  if (!range || !input) return;
+
+  range.addEventListener('input', () => {
+    input.value = range.value;
+    _applyTable();
+  });
+  input.addEventListener('input', () => {
+    range.value = input.value;
+    _applyTable();
+  });
+}
+
+function _matchFilters(r) {
+  // Chips — Score par bande
+  const activeScores = [...document.querySelectorAll('input[name="score-filter"]:checked')].map(el => el.value);
+  if (activeScores.length > 0) {
+    const band = r.score >= 80 ? 'excellent' : r.score >= 60 ? 'bon' : r.score >= 40 ? 'neutre' : r.score >= 20 ? 'attention' : 'faible';
+    if (!activeScores.includes(band)) return false;
+  }
+
+  // Chips — Cash-flow
+  if (document.getElementById('filter-cf-positif')?.checked && (r.cf_net == null || r.cf_net < 0)) return false;
+  if (document.getElementById('filter-cf-negatif')?.checked && (r.cf_net == null || r.cf_net >= 0)) return false;
+  if (document.getElementById('filter-cfai-positif')?.checked && (r.cf_apres_impot == null || r.cf_apres_impot < 0)) return false;
+
+  // Chips — DPE
+  const activeDpe = [...document.querySelectorAll('input[name="dpe-filter"]:checked')].map(el => el.value);
+  if (activeDpe.length > 0 && !(r.dpe && activeDpe.includes(r.dpe.toLowerCase()))) return false;
+  if (document.getElementById('filter-dpe-safe')?.checked && ['e','f','g'].includes((r.dpe || '').toLowerCase())) return false;
+
+  // Chips — Type de bien
+  const activeTypes = [...document.querySelectorAll('input[name="type-filter"]:checked')].map(el => el.value);
+  if (activeTypes.length > 0 && !(r.type_bien && activeTypes.some(t => r.type_bien.toLowerCase().includes(t)))) return false;
+
+  // Chips — État
+  if (document.getElementById('filter-deja-loue')?.checked && r.deja_loue !== true) return false;
+  if (document.getElementById('filter-travaux')?.checked && !r.travaux) return false;
+  if (document.getElementById('filter-sans-travaux')?.checked && r.travaux) return false;
+  if (document.getElementById('filter-meuble')?.checked && r.meuble !== true) return false;
+
+  // Chips — Source loyer
+  if (document.getElementById('filter-loyer-marche')?.checked && r.loyer_source !== 'marche') return false;
+  if (document.getElementById('filter-loyer-annonce')?.checked && r.loyer_source !== 'annonce') return false;
+
+  // Sliders numériques — Prix
+  const prixMin = parseFloat(document.getElementById('prix-min')?.value);
+  const prixMax = parseFloat(document.getElementById('prix-max')?.value);
+  if (!isNaN(prixMin) && r.prix != null && r.prix < prixMin) return false;
+  if (!isNaN(prixMax) && r.prix != null && r.prix > prixMax) return false;
+
+  // Sliders numériques — Surface
+  const surfaceMin = parseFloat(document.getElementById('surface-min')?.value);
+  const surfaceMax = parseFloat(document.getElementById('surface-max')?.value);
+  if (!isNaN(surfaceMin) && r.surface != null && r.surface < surfaceMin) return false;
+  if (!isNaN(surfaceMax) && r.surface != null && r.surface > surfaceMax) return false;
+
+  // Sliders numériques — Renta brute min
+  const rentaMin = parseFloat(document.getElementById('renta-min')?.value);
+  if (!isNaN(rentaMin) && rentaMin > 0 && (r.renta_brute == null || r.renta_brute < rentaMin)) return false;
+
+  // Sliders numériques — CF net min
+  const cfMin = parseFloat(document.getElementById('cf-min')?.value);
+  if (!isNaN(cfMin) && (r.cf_net == null || r.cf_net < cfMin)) return false;
+
+  // Sliders numériques — DSCR min
+  const dscrMin = parseFloat(document.getElementById('dscr-min')?.value);
+  if (!isNaN(dscrMin) && dscrMin > 0 && (r.dscr == null || r.dscr < dscrMin)) return false;
+
+  // Sliders numériques — Score min
+  const scoreMin = parseFloat(document.getElementById('score-min')?.value);
+  if (!isNaN(scoreMin) && scoreMin > 0 && (r.score == null || r.score < scoreMin)) return false;
+
+  return true;
+}
+
 function _applyTable() {
-  const sorted = [..._allResultats].sort((a, b) => {
+  const filtered = _allResultats.filter(_matchFilters);
+  const sorted = [...filtered].sort((a, b) => {
     const av = _getVal(a, _sortKey);
     const bv = _getVal(b, _sortKey);
     if (av == null && bv == null) return 0;
@@ -193,7 +369,7 @@ function _applyTable() {
 
   _displayedResultats = _displayCount === 'all' ? sorted : sorted.slice(0, _displayCount);
 
-  const total = _allResultats.length;
+  const total = filtered.length;
   const shown = _displayedResultats.length;
   const sortLabel = SORT_COLS.find(c => c.key === _sortKey)?.label ?? _sortKey;
   const dirArrow = _sortDir === -1 ? '↓' : '↑';
@@ -393,11 +569,16 @@ function _renderRow(r, rank, idx) {
     const label = r.travaux_montant ? `Travaux ~${_fmtEur(r.travaux_montant)}` : 'Travaux';
     badges.push(_badge(label, '#7c3aed'));
   }
+  if (r.meuble === true) badges.push(_badge('Meublé', '#6d28d9'));
+  if (r.parking_garage) badges.push(_badge('Parking ✓', '#0369a1'));
+  if (r.chauffage === 'electrique') badges.push(_badge('Chauf. élec.', '#d97706'));
 
   const scoreColor = r.score >= 80 ? '#16a34a' : r.score >= 60 ? '#22c55e' : r.score >= 40 ? '#f59e0b' : r.score >= 20 ? '#e3720c' : '#dc2626';
   const scoreTone = r.score >= 80 ? 'excellent' : r.score >= 60 ? 'positif' : r.score >= 40 ? 'neutre' : r.score >= 20 ? 'watch' : 'négatif';
 
-  const loyerNote = r.loyer_source === 'marche'
+  const loyerNote = r.loyer_source === 'annonce'
+    ? `<br><span style="color:#22d3ee;font-size:10px">annonce</span>`
+    : r.loyer_source === 'marche'
     ? `<br><span style="color:#4ade80;font-size:10px">marché</span>`
     : `<br><span style="color:#f59e0b;font-size:10px">estimé</span>`;
 
@@ -411,7 +592,7 @@ function _renderRow(r, rank, idx) {
     <td style="color:#555;font-size:11px;text-align:center">${rank}</td>
     <td>
       <div style="font-weight:600;font-size:13px;color:#e0ddd6">${_esc(r.titre)}</div>
-      <div style="font-size:11px;color:#555;margin-top:2px">${_esc(r.ville)} · ${surfaceLabel} · ${_esc((r.type_bien || '').charAt(0).toUpperCase() + (r.type_bien || '').slice(1))}</div>
+      <div style="font-size:11px;color:#555;margin-top:2px">${_esc(r.ville)} · ${surfaceLabel}${r.nb_pieces ? ` · T${r.nb_pieces}` : ''} · ${_esc((r.type_bien || '').charAt(0).toUpperCase() + (r.type_bien || '').slice(1))}</div>
       <div style="margin-top:4px">${badges.join('')}</div>
       ${r.resume_ia ? `<div style="font-size:11px;color:#666;font-style:italic;margin-top:3px">${_esc(r.resume_ia)}</div>` : ''}
     </td>
