@@ -146,6 +146,119 @@ function _setCPFilter(cp, commune, label) {
   _applyTable();
 }
 
+function _setScanTarget(cp, commune, label) {
+  _scanTarget = { cp, commune, label };
+  const badge = document.getElementById('scan-target-cp-badge');
+  const reset = document.getElementById('scan-target-cp-reset');
+  if (badge) { badge.textContent = label; badge.style.display = ''; }
+  if (reset) reset.style.display = '';
+  const input = document.getElementById('scan-target-cp-input');
+  if (input) input.value = label;
+  _updateScanButtonsState();
+}
+
+function _updateScanButtonsState() {
+  const canScan = !!_scanTarget && !_scanRunning;
+  ['btn-scan', 'btn-scan-full'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !canScan;
+  });
+  const input = document.getElementById('scan-target-cp-input');
+  const reset = document.getElementById('scan-target-cp-reset');
+  if (input) input.disabled = _scanRunning;
+  if (reset) reset.style.display = (_scanTarget && !_scanRunning) ? '' : 'none';
+}
+
+function _initScanTargetSelector() {
+  const input = document.getElementById('scan-target-cp-input');
+  const dropdown = document.getElementById('scan-target-cp-dropdown');
+  const resetBtn = document.getElementById('scan-target-cp-reset');
+  if (!input) return;
+
+  input.addEventListener('focus', () => _loadCommunesData());
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim();
+    if (val.length < 2 || !_communesData) { dropdown.style.display = 'none'; return; }
+
+    const matches = [];
+    const valLow = val.toLowerCase();
+    for (const [cp, communes] of Object.entries(_communesData)) {
+      if (cp.startsWith(val)) {
+        for (const commune of communes) matches.push({ cp, commune });
+      } else {
+        for (const commune of communes) {
+          if (commune.toLowerCase().includes(valLow)) matches.push({ cp, commune });
+        }
+      }
+    }
+
+    if (!matches.length) { dropdown.style.display = 'none'; return; }
+
+    let html = '';
+    for (const { cp, commune } of matches.slice(0, 30)) {
+      html += `<div class="cp-option" data-cp="${cp}" data-commune="${_esc(commune)}"
+        style="padding:8px 14px;cursor:pointer;font-size:13px">
+        <span style="color:var(--muted);font-size:11px;margin-right:6px">${cp}</span>${_esc(commune)}
+      </div>`;
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+
+    dropdown.querySelectorAll('.cp-option').forEach(el => {
+      el.addEventListener('mouseenter', () => { el.style.background = 'var(--surface-strong)'; });
+      el.addEventListener('mouseleave', () => { el.style.background = ''; });
+      el.addEventListener('click', () => {
+        _setScanTarget(el.dataset.cp, el.dataset.commune, `${el.dataset.cp} — ${el.dataset.commune}`);
+        dropdown.style.display = 'none';
+      });
+    });
+  });
+
+  input.addEventListener('keydown', e => {
+    const options = [...dropdown.querySelectorAll('.cp-option')];
+    const active = dropdown.querySelector('.cp-option--active');
+    const idx = options.indexOf(active);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = options[idx + 1] || options[0];
+      if (active) { active.classList.remove('cp-option--active'); active.style.background = ''; }
+      if (next) { next.classList.add('cp-option--active'); next.style.background = 'var(--surface-strong)'; }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = options[idx - 1] || options[options.length - 1];
+      if (active) { active.classList.remove('cp-option--active'); active.style.background = ''; }
+      if (prev) { prev.classList.add('cp-option--active'); prev.style.background = 'var(--surface-strong)'; }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = active || options[0];
+      if (target) {
+        _setScanTarget(target.dataset.cp, target.dataset.commune, `${target.dataset.cp} — ${target.dataset.commune}`);
+        dropdown.style.display = 'none';
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  resetBtn?.addEventListener('click', () => {
+    _scanTarget = null;
+    input.value = '';
+    const badge = document.getElementById('scan-target-cp-badge');
+    if (badge) badge.style.display = 'none';
+    resetBtn.style.display = 'none';
+    _updateScanButtonsState();
+  });
+}
+
 function _matchCP(r) {
   if (!_cpFilter) return true;
   const cp = (r.code_postal || '');
@@ -160,6 +273,7 @@ function _matchCP(r) {
 let _pollInterval = null;
 let _scanRunning = false;
 let _saveCurrentStudy = null;
+let _scanTarget = null; // { cp, commune, label } — ville cible du prochain scan
 
 // ─── État tableau ─────────────────────────────────────────────────────────────
 let _allResultats = [];
@@ -258,6 +372,7 @@ function _bindButtons() {
   });
 
   _initCPSelector();
+  _initScanTargetSelector();
 
   // Quick filter buttons → ouvrir le panel et scroller vers la section
   function _openFilterAndScroll(sectionIndex) {
@@ -880,10 +995,9 @@ function _setStatus(state, label) {
 }
 
 function _setButtonsDisabled(disabled) {
-  ['btn-scan', 'btn-scan-full', 'btn-clear-cache'].forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) btn.disabled = disabled;
-  });
+  const btn = document.getElementById('btn-clear-cache');
+  if (btn) btn.disabled = disabled;
+  _updateScanButtonsState();
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
