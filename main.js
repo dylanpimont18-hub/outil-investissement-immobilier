@@ -60,7 +60,7 @@ const PROFILE_OPTIONS = [
     {
         key: 'famille',
         label: 'Famille',
-        defaults: { name: 'Famille', income: 98000, adults: 2, children: 2 },
+        defaults: { name: 'Famille', income: 60000, adults: 2, children: 2 },
         note: 'Profil familial pour visualiser clairement la composition du foyer et l effet des parts fiscales.'
     },
     {
@@ -73,6 +73,7 @@ const PROFILE_OPTIONS = [
 
 const VARIABLE_DEFAULTS = {
     'nom-bien': 'Bien à étudier',
+    'type-bien': 'appartement',
     'statut-bien': 'candidate',
     ville: 'Ville non renseignée',
     prix: 107000,
@@ -223,6 +224,7 @@ const WIZARD_STEPS = [
 ];
 const REGIME_VALUES = new Set(['micro-foncier', 'reel', 'sci-is']);
 const OWNERSHIP_VALUES = new Set(['candidate', 'owned']);
+const TYPE_BIEN_VALUES = new Set(['appartement', 'maison', 'immeuble']);
 const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 const COPRO_RISK_VALUES = new Set(['stable', 'medium', 'high']);
 const SOURCE_STATUS_VALUES = new Set(['verified', 'estimated', 'unknown']);
@@ -356,13 +358,13 @@ function loadTheme() {
 }
 
 function loadScreens() {
-    const savedValue = Number.parseInt(localStorage.getItem(STORAGE_KEYS.screens) || '2', 10);
+    const savedValue = Number.parseInt(localStorage.getItem(STORAGE_KEYS.screens) || '1', 10);
     return savedValue === 1 ? 1 : 2;
 }
 
 function loadProfilePreset() {
     const savedProfile = localStorage.getItem(STORAGE_KEYS.profilePreset);
-    return PROFILE_OPTIONS.some(profile => profile.key === savedProfile) ? savedProfile : 'solo';
+    return PROFILE_OPTIONS.some(profile => profile.key === savedProfile) ? savedProfile : 'famille';
 }
 
 function loadProfileConfigured() {
@@ -583,9 +585,22 @@ function sanitizeProfileData(rawProfile) {
     };
 }
 
+function getTypeBienDefaults(type) {
+    if (type === 'maison') return { copro: 0, 'seuil-cf-min': 50, 'seuil-dscr-min': 1.0, 'seuil-vacance-max': 8, 'seuil-effort-max': 10, gestion: 5 };
+    if (type === 'immeuble') return { copro: 0, 'seuil-cf-min': 150, 'seuil-dscr-min': 1.10, 'seuil-vacance-max': 10, 'seuil-effort-max': 12, gestion: 8 };
+    return { copro: 40, 'seuil-cf-min': 0, 'seuil-dscr-min': 1.0, 'seuil-vacance-max': 8, 'seuil-effort-max': 10, gestion: 7 };
+}
+
+function getTypeBienLabel(type) {
+    if (type === 'maison') return 'Maison';
+    if (type === 'immeuble') return 'Immeuble de rapport';
+    return 'Appartement';
+}
+
 function sanitizeVariablesData(rawVariables) {
     return {
         'nom-bien': normalizeLegacyCopy(rawVariables['nom-bien'] || VARIABLE_DEFAULTS['nom-bien']) || VARIABLE_DEFAULTS['nom-bien'],
+        'type-bien': TYPE_BIEN_VALUES.has(rawVariables['type-bien']) ? rawVariables['type-bien'] : 'appartement',
         'statut-bien': OWNERSHIP_VALUES.has(rawVariables['statut-bien']) ? rawVariables['statut-bien'] : 'candidate',
         ville: normalizeLegacyCopy(rawVariables.ville || VARIABLE_DEFAULTS.ville) || VARIABLE_DEFAULTS.ville,
         prix: Math.max(0, Number(rawVariables.prix) || 0),
@@ -1376,6 +1391,7 @@ function buildComparisonTable(items) {
                         <td>
                             <strong>${escapeHtml(item.name)}</strong>
                             <div class="table-subline">${escapeHtml(item.city || 'Ville non renseignée')}</div>
+                            ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
                         </td>
                         <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
                         <td><span class="status-pill status-pill--${item.analysisModel.acquisitionDecision.tone}">${item.analysisModel.acquisitionDecision.label}</span></td>
@@ -1413,6 +1429,7 @@ function buildPortfolioTable(items) {
                         <td>
                             <strong>${escapeHtml(item.name)}</strong>
                             <div class="table-subline">${escapeHtml(item.city || 'Ville non renseignée')} · ${item.analysisModel.decision.label}</div>
+                            ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
                         </td>
                         <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
                         <td><strong class="${item.metrics.cfNetNet >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.metrics.cfNetNet)}</strong></td>
@@ -2562,6 +2579,20 @@ function bindEvents() {
     nodes.profileForm.addEventListener('change', updateProfileFromForm);
     nodes.variablesForm.addEventListener('input', updateVariablesFromForm);
     nodes.variablesForm.addEventListener('change', updateVariablesFromForm);
+
+    document.getElementById('type-bien')?.addEventListener('change', e => {
+        const newType = e.target.value;
+        const isVirgin = state.variablesData.prix === VARIABLE_DEFAULTS.prix && state.variablesData.loyer === VARIABLE_DEFAULTS.loyer;
+        if (!isVirgin && !confirm(`Changer le type réinitialisera les seuils recommandés. Continuer ?`)) {
+            e.target.value = state.variablesData['type-bien'];
+            return;
+        }
+        const defaults = getTypeBienDefaults(newType);
+        for (const [key, val] of Object.entries(defaults)) {
+            const field = nodes.variablesForm.elements.namedItem(key);
+            if (field) field.value = String(val);
+        }
+    });
     getDecisionJournalFields().thesisField?.addEventListener('blur', () => {
         getDecisionJournalFields().thesisField.dataset.touched = 'true';
         syncDecisionJournalValidity();

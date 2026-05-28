@@ -3,7 +3,7 @@ build/
 dist/
 
 # Secrets locaux
-scanner/config.py
+scraper/config.py
 
 # Python
 __pycache__/

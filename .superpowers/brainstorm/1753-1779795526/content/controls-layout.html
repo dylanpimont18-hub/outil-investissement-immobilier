@@ -1,0 +1,81 @@
+<h2>Disposition des contrôles de tri et d'affichage</h2>
+<p class="subtitle">Comment organiser les options au-dessus du tableau ?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Barre compacte — tout sur une ligne</h3>
+      <p>Les 3 contrôles (trier par / ordre / afficher) sont sur une même ligne, côte à côte avec le compteur. Économise l'espace vertical.</p>
+      <div style="margin-top:12px;padding:10px 14px;background:#0d1117;border-radius:8px;border:1px solid #21262d;font-size:12px;font-family:monospace">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="color:#8b949e;font-size:11px">48 opportunités</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+            <span style="color:#8b949e;font-size:11px">Trier par</span>
+            <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:3px 6px;font-size:11px"><option>CF net ↓</option></select>
+            <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:3px 6px;font-size:11px"><option>20 biens</option></select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Barre étendue avec labels clairs</h3>
+      <p>Chaque contrôle a un label au-dessus, séparés visuellement. Plus lisible, occupe 2 lignes. Ordre tri (↑↓) intégré dans le select.</p>
+      <div style="margin-top:12px;padding:12px 14px;background:#0d1117;border-radius:8px;border:1px solid #21262d;font-size:12px;font-family:monospace">
+        <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Trier par</div>
+            <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:4px 8px;font-size:12px"><option>CF net</option></select>
+          </div>
+          <div>
+            <div style="color:#8b949e;font-size:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Ordre</div>
+            <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:4px 8px;font-size:12px"><option>↓ Décroissant</option></select>
+          </div>
+          <div style="margin-left:auto">
+            <div style="color:#8b949e;font-size:10px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Afficher</div>
+            <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:4px 8px;font-size:12px"><option>20 biens</option></select>
+          </div>
+        </div>
+        <div style="margin-top:8px;color:#8b949e;font-size:11px">48 biens au total</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>En-têtes de colonnes cliquables + selector d'affichage</h3>
+      <p>Clic sur l'en-tête de colonne pour trier (toggle ↑↓), et un unique selecteur "Afficher N biens" en haut à droite. Plus naturel pour les tableaux.</p>
+      <div style="margin-top:12px;padding:10px 14px;background:#0d1117;border-radius:8px;border:1px solid #21262d;font-size:12px;font-family:monospace">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="color:#8b949e;font-size:11px">48 biens · triés par CF net ↓</span>
+          <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:3px 8px;font-size:11px"><option>Afficher : 20</option></select>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <tr style="color:#8b949e;border-bottom:1px solid #21262d">
+            <th style="padding:4px 6px;text-align:left;cursor:pointer;color:#e6edf3"># <span style="font-size:9px">↕</span></th>
+            <th style="padding:4px 6px;text-align:left;cursor:pointer">Bien</th>
+            <th style="padding:4px 6px;cursor:pointer">Prix <span style="font-size:9px">↕</span></th>
+            <th style="padding:4px 6px;cursor:pointer">Loyer <span style="font-size:9px">↕</span></th>
+            <th style="padding:4px 6px;cursor:pointer;color:#C5A059;border-bottom:2px solid #C5A059">CF net ↓</th>
+            <th style="padding:4px 6px;cursor:pointer">CF/impôt <span style="font-size:9px">↕</span></th>
+            <th style="padding:4px 6px;cursor:pointer">Score <span style="font-size:9px">↕</span></th>
+          </tr>
+          <tr style="border-bottom:1px solid #161b22;color:#e6edf3">
+            <td style="padding:4px 6px;color:#555;text-align:center">1</td>
+            <td style="padding:4px 6px">Studio Paris 11e</td>
+            <td style="padding:4px 6px;text-align:right">180 000 €</td>
+            <td style="padding:4px 6px;text-align:right">850 €</td>
+            <td style="padding:4px 6px;text-align:right;color:#4ade80;font-weight:700">+120 €</td>
+            <td style="padding:4px 6px;text-align:right;color:#4ade80">+85 €</td>
+            <td style="padding:4px 6px;text-align:center">72/100</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

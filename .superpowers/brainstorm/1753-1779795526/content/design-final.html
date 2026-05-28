@@ -1,0 +1,154 @@
+<h2>Design final — Tableau scanner avec tri et affichage</h2>
+<p class="subtitle">En-têtes cliquables · Sélecteur combiné · Toutes les annonces</p>
+
+<div class="mockup">
+  <div class="mockup-header">Aperçu du tableau scanner</div>
+  <div class="mockup-body" style="padding:0;overflow:hidden">
+
+    <!-- Header bar -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #21262d;background:#0d1117">
+      <span style="font-size:12px;color:#8b949e">
+        <span style="color:#e6edf3;font-weight:600">20</span> / 48 biens affichés — triés par <span style="color:#C5A059">CF net ↓</span>
+      </span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:#8b949e">Afficher :</span>
+        <select style="background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:5px;padding:3px 8px;font-size:12px">
+          <option>20 biens</option>
+          <option>50 biens</option>
+          <option>100 biens</option>
+          <option>Tout (48)</option>
+          <option>Personnalisé…</option>
+        </select>
+        <!-- s'affiche quand "Personnalisé" sélectionné -->
+        <input type="number" value="20" style="width:60px;background:#161b22;border:1px solid #C5A059;color:#e6edf3;border-radius:5px;padding:3px 6px;font-size:12px" />
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#161b22;border-bottom:1px solid #21262d">
+            <th style="padding:8px 10px;text-align:center;color:#8b949e;font-weight:500;width:30px">#</th>
+            <th style="padding:8px 10px;text-align:left;color:#8b949e;font-weight:500;min-width:180px">Bien</th>
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#8b949e;font-weight:500;white-space:nowrap;user-select:none">
+              Prix <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#8b949e;font-weight:500;white-space:nowrap">
+              Loyer <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#8b949e;font-weight:500;white-space:nowrap">
+              Prix/m² <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#8b949e;font-weight:500;white-space:nowrap">
+              Mensualité <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <!-- Colonne active = CF net -->
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#C5A059;font-weight:600;white-space:nowrap;border-bottom:2px solid #C5A059">
+              CF net ↓
+            </th>
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#8b949e;font-weight:500;white-space:nowrap">
+              CF/impôt <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;text-align:center;cursor:pointer;color:#8b949e;font-weight:500">
+              DSCR <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;text-align:right;cursor:pointer;color:#8b949e;font-weight:500;white-space:nowrap">
+              Renta brute <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;text-align:center;cursor:pointer;color:#8b949e;font-weight:500">
+              Score <span style="opacity:.5;font-size:10px">↕</span>
+            </th>
+            <th style="padding:8px 10px;color:#8b949e;font-weight:500">Lien</th>
+            <th style="padding:8px 10px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Row 1 -->
+          <tr style="border-bottom:1px solid #161b22">
+            <td style="padding:7px 10px;text-align:center;color:#555;font-size:11px">1</td>
+            <td style="padding:7px 10px">
+              <div style="font-weight:600;font-size:12px;color:#e0ddd6">T2 Roubaix — 45m²</div>
+              <div style="font-size:11px;color:#555">Roubaix · 45 m² · Appartement</div>
+              <div style="margin-top:3px">
+                <span style="background:#16a34a22;color:#16a34a;border:1px solid #16a34a44;border-radius:4px;padding:1px 5px;font-size:10px">DPE C</span>
+                <span style="background:#7c3aed22;color:#9f7aea;border:1px solid #7c3aed44;border-radius:4px;padding:1px 5px;font-size:10px;margin-left:3px">Travaux ~8 000 €</span>
+              </div>
+            </td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">89 000 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">620 €<br><span style="color:#4ade80;font-size:10px">marché</span></td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">1 978 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">387 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;font-weight:700;color:#4ade80">+185 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;font-weight:700;color:#4ade80">+142 €</td>
+            <td style="padding:7px 10px;text-align:center;font-weight:700;color:#4ade80">1.48</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap">8.3 %</td>
+            <td style="padding:7px 10px;text-align:center"><span style="background:#16a34a;color:#fff;border-radius:4px;padding:2px 6px;font-size:11px">78/100</span></td>
+            <td style="padding:7px 10px"><a style="color:#C5A059;font-size:11px;text-decoration:none">Voir ↗</a></td>
+            <td style="padding:7px 10px"><button style="padding:3px 8px;border-radius:5px;border:1px solid #C5A059;background:transparent;color:#C5A059;font-size:11px;cursor:pointer">→ Analyser</button></td>
+          </tr>
+          <!-- Row 2 -->
+          <tr style="border-bottom:1px solid #161b22;background:#0d1117">
+            <td style="padding:7px 10px;text-align:center;color:#555;font-size:11px">2</td>
+            <td style="padding:7px 10px">
+              <div style="font-weight:600;font-size:12px;color:#e0ddd6">Studio Lens — 28m²</div>
+              <div style="font-size:11px;color:#555">Lens · 28 m² · Appartement</div>
+              <div style="margin-top:3px">
+                <span style="background:#ffcc0022;color:#ffcc00;border:1px solid #ffcc0044;border-radius:4px;padding:1px 5px;font-size:10px">DPE D</span>
+              </div>
+            </td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">52 000 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">430 €<br><span style="color:#4ade80;font-size:10px">marché</span></td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">1 857 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">229 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;font-weight:700;color:#4ade80">+124 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;font-weight:700;color:#4ade80">+88 €</td>
+            <td style="padding:7px 10px;text-align:center;font-weight:700;color:#4ade80">1.54</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap">9.9 %</td>
+            <td style="padding:7px 10px;text-align:center"><span style="background:#22c55e;color:#fff;border-radius:4px;padding:2px 6px;font-size:11px">65/100</span></td>
+            <td style="padding:7px 10px"><a style="color:#C5A059;font-size:11px;text-decoration:none">Voir ↗</a></td>
+            <td style="padding:7px 10px"><button style="padding:3px 8px;border-radius:5px;border:1px solid #C5A059;background:transparent;color:#C5A059;font-size:11px;cursor:pointer">→ Analyser</button></td>
+          </tr>
+          <!-- Row 3 négative -->
+          <tr style="border-bottom:1px solid #161b22">
+            <td style="padding:7px 10px;text-align:center;color:#555;font-size:11px">3</td>
+            <td style="padding:7px 10px">
+              <div style="font-weight:600;font-size:12px;color:#e0ddd6">Maison Béthune — 90m²</div>
+              <div style="font-size:11px;color:#555">Béthune · 90 m² · Maison</div>
+              <div style="margin-top:3px">
+                <span style="background:#e3720c22;color:#e3720c;border:1px solid #e3720c44;border-radius:4px;padding:1px 5px;font-size:10px">RISQUE 2028</span>
+              </div>
+            </td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">148 000 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">780 €<br><span style="color:#f59e0b;font-size:10px">estimé</span></td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">1 644 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;color:#e6edf3">644 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;font-weight:700;color:#f87171">−38 €</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap;font-weight:700;color:#f87171">−72 €</td>
+            <td style="padding:7px 10px;text-align:center;font-weight:700;color:#f87171">0.94</td>
+            <td style="padding:7px 10px;text-align:right;white-space:nowrap">6.3 %</td>
+            <td style="padding:7px 10px;text-align:center"><span style="background:#e3720c;color:#fff;border-radius:4px;padding:2px 6px;font-size:11px">31/100</span></td>
+            <td style="padding:7px 10px"><a style="color:#C5A059;font-size:11px;text-decoration:none">Voir ↗</a></td>
+            <td style="padding:7px 10px"><button style="padding:3px 8px;border-radius:5px;border:1px solid #C5A059;background:transparent;color:#C5A059;font-size:11px;cursor:pointer">→ Analyser</button></td>
+          </tr>
+          <tr>
+            <td colspan="13" style="padding:8px 10px;text-align:center;color:#555;font-size:11px;font-style:italic">… 17 autres biens …</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px">
+  <h3>Comportement des colonnes triables</h3>
+  <ul style="color:#8b949e;font-size:13px;line-height:1.8">
+    <li>Clic sur un en-tête → tri décroissant par défaut (sauf Prix/Mensualité = croissant)</li>
+    <li>2e clic → inverse l'ordre (↑ / ↓)</li>
+    <li>Colonne active mise en surbrillance dorée avec flèche directionnelle</li>
+    <li>Colonnes triables : Prix · Loyer · Prix/m² · Mensualité · CF net · CF après impôt · DSCR · Renta brute · Score</li>
+    <li>Option "Tout (N)" dans le select affiche la totalité des résultats</li>
+    <li>Option "Personnalisé…" ouvre un champ numérique inline</li>
+  </ul>
+</div>

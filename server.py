@@ -3,15 +3,14 @@ import os
 import sys
 import threading
 from datetime import datetime
+from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__)
 
-SCANNER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scanner")
+SCRAPER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scraper")
 STATIC_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_FILE = os.path.join(SCANNER_DIR, "results.json")
-CACHE_FILE = os.path.join(SCANNER_DIR, "cache.json")
 
 _lock = threading.Lock()
 scan_state = {
@@ -45,22 +44,94 @@ def _update_state(running=None, progress=None, log=None, error=None, finished=Fa
 
 
 def _run_scanner(full: bool):
-    if SCANNER_DIR not in sys.path:
-        sys.path.insert(0, SCANNER_DIR)
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
 
     try:
         import importlib
-        import scanner as scanner_mod
-        importlib.reload(scanner_mod)
+        import main as scraper_main
+        importlib.reload(scraper_main)
+
+        # Patch DB path to scraper dir
+        import db as scraper_db
+        scraper_db.DB_PATH = Path(SCRAPER_DIR) / "biens.db"
+
+        if full:
+            db_path = Path(SCRAPER_DIR) / "biens.db"
+            if db_path.exists():
+                db_path.unlink()
+            _update_state(log="Base de données réinitialisée.")
 
         def progress_callback(pct: int, msg: str):
             _update_state(progress=pct, log=msg)
 
         _update_state(running=True, progress=0, log="Scan lancé…", error=None)
-        scanner_mod.main(full=full, send_email=True, progress_callback=progress_callback)
+        scraper_main.main(progress_callback=progress_callback)
         _update_state(finished=True)
     except Exception as e:
         _update_state(log=f"ERREUR : {e}", error=str(e), finished=True)
+
+
+def _read_results():
+    """Lit la base SQLite du scraper et retourne le JSON attendu par le frontend."""
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+
+    import db as scraper_db
+    db_path = Path(SCRAPER_DIR) / "biens.db"
+    if not db_path.exists():
+        return None
+
+    conn = scraper_db.get_connection(db_path)
+    try:
+        rows = conn.execute("""
+            SELECT
+                b.prix, b.surface, b.type_bien, b.ville, b.code_postal,
+                b.dpe, b.titre, b.url, b.site, b.date_derniere_vue,
+                a.cf_net, a.cf_apres_impot, a.renta_brute, a.renta_nette_nette,
+                a.dscr, a.score, a.loyer_estime, a.mensualite,
+                a.resume_ia, a.points_forts, a.points_faibles,
+                a.nb_pieces, a.travaux, a.travaux_montant,
+                a.immeuble_rapport, a.deja_loue, a.loyer_actuel,
+                a.meuble, a.parking_garage, a.chauffage,
+                a.date_enrichissement
+            FROM biens b
+            JOIN annonces a ON a.bien_id = b.id
+            ORDER BY a.score DESC NULLS LAST
+        """).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return None
+
+    resultats = [dict(r) for r in rows]
+
+    cfs     = [r["cf_net"] for r in resultats if r.get("cf_net") is not None]
+    cfs_ai  = [r["cf_apres_impot"] for r in resultats if r.get("cf_apres_impot") is not None]
+    rentas  = [r["renta_brute"] for r in resultats if r.get("renta_brute") is not None]
+    scores  = [r["score"] for r in resultats if r.get("score") is not None]
+    dpes_risque = sum(1 for r in resultats if (r.get("dpe") or "").lower() in ("f", "g"))
+
+    positifs = [r for r in resultats if (r.get("cf_net") or 0) > 0]
+    n = len(resultats)
+
+    stats = {
+        "nouvelles":             n,
+        "positifs":              len(positifs),
+        "pct_positifs":          round(len(positifs) / n * 100, 1) if n else 0,
+        "meilleur_cf":           max(cfs) if cfs else None,
+        "meilleur_cf_apres_impot": max(cfs_ai) if cfs_ai else None,
+        "meilleur_renta":        max(rentas) if rentas else None,
+        "score_moyen":           round(sum(scores) / len(scores)) if scores else None,
+        "dpe_risque":            dpes_risque if dpes_risque else None,
+    }
+
+    return {
+        "resultats":    resultats,
+        "stats":        stats,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+    }
 
 
 @app.after_request
@@ -89,12 +160,9 @@ def api_scan_full():
             return jsonify({"error": "scan_running"}), 409
         scan_state["logs"] = []
 
-    if os.path.exists(CACHE_FILE):
-        os.remove(CACHE_FILE)
-
     t = threading.Thread(target=_run_scanner, args=(True,), daemon=True)
     t.start()
-    return jsonify({"started": True, "cache_cleared": True})
+    return jsonify({"started": True, "db_cleared": True})
 
 
 @app.route("/api/status", methods=["GET"])
@@ -107,10 +175,9 @@ def api_status():
 
 @app.route("/api/results", methods=["GET"])
 def api_results():
-    if not os.path.exists(RESULTS_FILE):
+    data = _read_results()
+    if data is None:
         return jsonify({"results": None})
-    with open(RESULTS_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
     return jsonify(data)
 
 

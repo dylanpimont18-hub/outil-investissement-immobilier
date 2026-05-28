@@ -384,16 +384,16 @@ function _applyTable() {
   ].join('');
 
   const customInput = (isCustom || false)
-    ? `<input id="scanner-count-custom" type="number" min="1" max="${total}" value="${_displayCount}" style="width:60px;background:var(--input-bg,#161b22);border:1px solid #C5A059;color:var(--text,#e6edf3);border-radius:5px;padding:3px 6px;font-size:12px">`
-    : `<input id="scanner-count-custom" type="number" min="1" max="${total}" value="${_displayCount}" style="width:60px;background:var(--input-bg,#161b22);border:1px solid #C5A059;color:var(--text,#e6edf3);border-radius:5px;padding:3px 6px;font-size:12px;display:none">`;
+    ? `<input id="scanner-count-custom" type="number" min="1" max="${total}" value="${_displayCount}" style="width:60px;background:var(--surface-strong);border:1px solid var(--accent-gold);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px">`
+    : `<input id="scanner-count-custom" type="number" min="1" max="${total}" value="${_displayCount}" style="width:60px;background:var(--surface-strong);border:1px solid var(--accent-gold);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px;display:none">`;
 
   // En-têtes triables
   const thSortable = (key, label) => {
     const active = key === _sortKey;
     const arrow = active ? (` ${dirArrow}`) : ' <span style="opacity:.35;font-size:10px">↕</span>';
     const style = active
-      ? `color:#C5A059;font-weight:600;border-bottom:2px solid #C5A059;cursor:pointer;white-space:nowrap;padding:8px 10px;text-align:right`
-      : `cursor:pointer;white-space:nowrap;padding:8px 10px;text-align:right;color:var(--text-muted,#8b949e);font-weight:500`;
+      ? `color:var(--accent-gold);font-weight:600;border-bottom:2px solid var(--accent-gold);cursor:pointer;white-space:nowrap;padding:8px 10px;text-align:right`
+      : `cursor:pointer;white-space:nowrap;padding:8px 10px;text-align:right;color:var(--muted);font-weight:500`;
     return `<th data-sort="${key}" style="${style}">${label}${arrow}</th>`;
   };
 
@@ -402,12 +402,12 @@ function _applyTable() {
   const container = document.getElementById('scanner-results');
   container.innerHTML = `
     <div class="scanner-results-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <span style="font-size:12px;color:var(--text-muted,#8b949e)">
-        <span style="color:var(--text,#e6edf3);font-weight:600">${shown}</span>${shown < total ? ` / ${total}` : ''} biens — triés par <span style="color:#C5A059">${sortLabel} ${dirArrow}</span>
+      <span style="font-size:12px;color:var(--muted)">
+        <span style="color:var(--text);font-weight:600">${shown}</span>${shown < total ? ` / ${total}` : ''} biens — triés par <span style="color:var(--accent-gold)">${sortLabel} ${dirArrow}</span>
       </span>
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:11px;color:var(--text-muted,#8b949e)">Afficher :</span>
-        <select id="scanner-count-select" style="background:var(--input-bg,#161b22);border:1px solid var(--border,#30363d);color:var(--text,#e6edf3);border-radius:5px;padding:3px 8px;font-size:12px">${countOptions}</select>
+        <span style="font-size:11px;color:var(--muted)">Afficher :</span>
+        <select id="scanner-count-select" style="background:var(--surface-strong);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 8px;font-size:12px">${countOptions}</select>
         ${customInput}
       </div>
     </div>
@@ -591,10 +591,10 @@ function _renderRow(r, rank, idx) {
   return `<tr>
     <td style="color:#555;font-size:11px;text-align:center">${rank}</td>
     <td>
-      <div style="font-weight:600;font-size:13px;color:#e0ddd6">${_esc(r.titre)}</div>
-      <div style="font-size:11px;color:#555;margin-top:2px">${_esc(r.ville)} · ${surfaceLabel}${r.nb_pieces ? ` · T${r.nb_pieces}` : ''} · ${_esc((r.type_bien || '').charAt(0).toUpperCase() + (r.type_bien || '').slice(1))}</div>
+      <div style="font-weight:600;font-size:13px;color:var(--text)">${_esc(r.titre)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${_esc(r.ville)} · ${surfaceLabel}${r.nb_pieces ? ` · T${r.nb_pieces}` : ''} · ${_esc((r.type_bien || '').charAt(0).toUpperCase() + (r.type_bien || '').slice(1))}</div>
       <div style="margin-top:4px">${badges.join('')}</div>
-      ${r.resume_ia ? `<div style="font-size:11px;color:#666;font-style:italic;margin-top:3px">${_esc(r.resume_ia)}</div>` : ''}
+      ${r.resume_ia ? `<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:3px">${_esc(r.resume_ia)}</div>` : ''}
     </td>
     <td style="white-space:nowrap;text-align:right">${_fmtEur(r.prix)}</td>
     <td style="white-space:nowrap;text-align:right">${_fmtEur(r.loyer_estime)}${loyerNote}</td>

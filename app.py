@@ -21,16 +21,14 @@ os.chdir(BASE_DIR)
 # On patche les variables de module AVANT que Flask utilise les routes,
 # car Python résout les noms globaux à l'appel des fonctions, pas à leur définition.
 sys.path.insert(0, BASE_DIR)
-sys.path.insert(0, os.path.join(BASE_DIR, 'scanner'))
+sys.path.insert(0, os.path.join(BASE_DIR, 'scraper'))
 
 import server as _srv
 _srv.STATIC_DIR  = BASE_DIR
-_srv.SCANNER_DIR = os.path.join(BASE_DIR, 'scanner')
-_srv.RESULTS_FILE = os.path.join(BASE_DIR, 'scanner', 'results.json')
-_srv.CACHE_FILE   = os.path.join(BASE_DIR, 'scanner', 'cache.json')
+_srv.SCRAPER_DIR = os.path.join(BASE_DIR, 'scraper')
 
-# Crée le dossier scanner si absent (première exécution)
-os.makedirs(_srv.SCANNER_DIR, exist_ok=True)
+# Crée le dossier scraper si absent (première exécution)
+os.makedirs(_srv.SCRAPER_DIR, exist_ok=True)
 
 PORT = 8080
 

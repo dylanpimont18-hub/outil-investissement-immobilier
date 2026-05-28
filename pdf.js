@@ -1593,6 +1593,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
           <div class="hero-meta">
             <span>${escapeDecisionPdfHtml(variablesData.ville || 'Ville non renseignee')}</span>
             <span>${escapeDecisionPdfHtml(variablesData['statut-bien'] === 'owned' ? 'Bien deja detenu' : 'Opportunite en etude')}</span>
+            <span>${escapeDecisionPdfHtml(variablesData['type-bien'] === 'maison' ? 'Maison' : variablesData['type-bien'] === 'immeuble' ? 'Immeuble de rapport' : 'Appartement')}</span>
             <span>Genere le ${escapeDecisionPdfHtml(generatedOn)}</span>
           </div>
           <p class="summary">${escapeDecisionPdfHtml(acquisitionDecision.summary)}</p>

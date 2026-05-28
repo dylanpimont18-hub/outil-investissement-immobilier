@@ -5,7 +5,7 @@ webview_datas, webview_binaries, webview_hiddenimports = collect_all('webview')
 
 a = Analysis(
     ['app.py'],
-    pathex=['.', 'scanner'],
+    pathex=['.', 'scraper'],
     binaries=webview_binaries,
     datas=webview_datas,
     hiddenimports=[
@@ -13,9 +13,12 @@ a = Analysis(
         'flask', 'jinja2', 'jinja2.ext', 'markupsafe', 'werkzeug',
         'werkzeug.routing', 'werkzeug.serving', 'werkzeug.middleware',
         'werkzeug.middleware.proxy_fix',
-        # Scanner Python
-        'scanner', 'leboncoin', 'marche_locatif', 'ai_enrichir',
-        'calculs', 'email_report', 'config',
+        # Scraper multi-sites
+        'main', 'db', 'filtrage', 'fingerprint', 'ia', 'calculs', 'utils',
+        'scrapers', 'scrapers.base', 'scrapers.leboncoin', 'scrapers.pap',
+        'scrapers.seloger', 'scrapers.logicimmo', 'scrapers.bienici',
+        'scrapers.orpi', 'scrapers.century21', 'scrapers.laforet',
+        'scrapers.notaires', 'scrapers.bellesdemeures',
         # Anthropic SDK
         'anthropic', 'httpx', 'httpcore', 'anyio', 'sniffio',
         'certifi', 'charset_normalizer', 'distro',
@@ -23,10 +26,14 @@ a = Analysis(
         'pystray', 'pystray._win32',
         # PIL
         'PIL', 'PIL.Image', 'PIL.PngImagePlugin', 'PIL.JpegImagePlugin',
+        # HTML parsing
+        'bs4', 'lxml', 'lxml.etree', 'lxml.html',
         # Curl / réseau
         'curl_cffi', 'curl_cffi.requests',
         # Email
         'smtplib', 'email.mime.multipart', 'email.mime.text',
+        # SQLite
+        'sqlite3',
         # WebView
         *webview_hiddenimports,
         *collect_submodules('webview'),
@@ -50,7 +57,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=False,          # pas de fenêtre terminal
+    console=False,
     disable_windowed_traceback=False,
     icon='spark.ico',
 )

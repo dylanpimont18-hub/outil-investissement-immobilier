@@ -1637,6 +1637,7 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
             city: asset.variablesData['ville'] || 'Ville non renseignée',
             status: asset.variablesData['statut-bien'] || 'candidate',
             statusLabel: (asset.variablesData['statut-bien'] || 'candidate') === 'owned' ? 'Déjà au portefeuille' : 'À étudier',
+            typeBien: asset.variablesData['type-bien'] || 'appartement',
             analysisModel,
             metrics: analysisModel.metrics,
             model,
