@@ -183,6 +183,7 @@ def enrichir(annonce: dict, conn=None) -> dict:
     annonce["vacance"]              = round(vacance, 2)
     annonce["cf_net"]               = round(cf_net, 2)
     annonce["cf_apres_impot"]       = round(cf_apres_impot, 2)
+    annonce["cf_apres_impot_micro"] = cf_micro
     annonce["cf_apres_impot_reel"]  = cf_reel
     annonce["cf_apres_impot_sci"]   = cf_sci
     annonce["regime_optimal"]       = regime_optimal

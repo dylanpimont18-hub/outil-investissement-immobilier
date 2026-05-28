@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS annonces (
     mensualite            REAL,
     cf_net                REAL,
     cf_apres_impot        REAL,
+    cf_apres_impot_micro  REAL,
     cf_apres_impot_reel   REAL,
     cf_apres_impot_sci    REAL,
     regime_optimal        TEXT,
@@ -96,10 +97,11 @@ CREATE INDEX IF NOT EXISTS idx_loyers_marche     ON loyers_marche(ville, type_bi
 """
 
 _MIGRATIONS = [
-    "ALTER TABLE annonces ADD COLUMN cf_apres_impot_reel REAL",
-    "ALTER TABLE annonces ADD COLUMN cf_apres_impot_sci  REAL",
-    "ALTER TABLE annonces ADD COLUMN regime_optimal      TEXT",
-    "ALTER TABLE annonces ADD COLUMN loyer_source        TEXT",
+    "ALTER TABLE annonces ADD COLUMN cf_apres_impot_reel  REAL",
+    "ALTER TABLE annonces ADD COLUMN cf_apres_impot_sci   REAL",
+    "ALTER TABLE annonces ADD COLUMN regime_optimal       TEXT",
+    "ALTER TABLE annonces ADD COLUMN loyer_source         TEXT",
+    "ALTER TABLE annonces ADD COLUMN cf_apres_impot_micro REAL",
 ]
 
 

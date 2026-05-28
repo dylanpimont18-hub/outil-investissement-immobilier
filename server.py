@@ -90,7 +90,7 @@ def _read_results():
                 b.id AS bien_id,
                 b.prix, b.surface, b.type_bien, b.ville, b.code_postal,
                 b.dpe, b.titre, b.url, b.site, b.date_derniere_vue,
-                a.cf_net, a.cf_apres_impot,
+                a.cf_net, a.cf_apres_impot, a.cf_apres_impot_micro,
                 a.cf_apres_impot_reel, a.cf_apres_impot_sci,
                 a.regime_optimal, a.loyer_source,
                 a.renta_brute, a.renta_nette_nette,
@@ -256,6 +256,7 @@ def api_geocode_batch():
     Utilise le cache SQLite (table geocodes). Rate-limit : 1 req/s.
     """
     items = request.json or []
+    items = items[:30]  # limit per call to prevent blocking too long
     db_path = Path(SCRAPER_DIR) / "biens.db"
     if not db_path.exists():
         return jsonify({})
@@ -315,4 +316,4 @@ def api_geocode_batch():
 
 if __name__ == "__main__":
     print("Spark Investissement — http://localhost:8080")
-    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False, threaded=True)

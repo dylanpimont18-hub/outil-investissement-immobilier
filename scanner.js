@@ -875,7 +875,7 @@ function _renderDetailContent(r) {
   // 3 régimes fiscaux
   // cf_apres_impot = le meilleur régime; cf_apres_impot_reel et cf_apres_impot_sci sont les valeurs individuelles
   // Pour micro: on déduit depuis regime_optimal
-  const cfMicroVal = r.regime_optimal === 'micro' ? r.cf_apres_impot : null;
+  const cfMicroVal = r.cf_apres_impot_micro ?? (r.regime_optimal === 'micro' ? r.cf_apres_impot : null);
   const regimes = [
     { id: 'micro',  label: 'Micro-foncier', cf: cfMicroVal,           note: 'Abattement 30 %' },
     { id: 'reel',   label: 'Réel foncier',  cf: r.cf_apres_impot_reel, note: 'Déduction charges réelles' },
@@ -1071,7 +1071,7 @@ async function _renderMap(resultats) {
         <div style="margin:6px 0;font-size:13px"><strong>${r.prix ? r.prix.toLocaleString('fr-FR') + ' €' : '—'}</strong></div>
         <div style="font-size:12px">CF : <strong style="color:${r.cf_apres_impot >= 0 ? 'green' : 'red'}">${cfStr}</strong></div>
         <div style="font-size:12px">Score : <strong>${r.score ?? '—'}/100</strong></div>
-        <button onclick="window._openDrawerFromMap(${resultats.indexOf(r)})"
+        <button onclick="window._openDrawerFromMap('${_esc(r.url)}')"
           style="margin-top:8px;width:100%;padding:5px;border-radius:5px;border:1px solid #C5A059;background:transparent;color:#C5A059;cursor:pointer;font-size:12px">
           Voir le détail →
         </button>
@@ -1091,8 +1091,10 @@ async function _renderMap(resultats) {
 }
 
 // Accessible depuis le popup Leaflet (contexte global)
-window._openDrawerFromMap = function(idx) {
-  if (_displayedResultats[idx]) _openDrawer(_displayedResultats[idx]);
+window._openDrawerFromMap = function(url) {
+  const r = _displayedResultats.find(x => x.url === url)
+         || _allResultats.find(x => x.url === url);
+  if (r) _openDrawer(r);
 };
 
 async function _loadPriceHistory(url, container) {
