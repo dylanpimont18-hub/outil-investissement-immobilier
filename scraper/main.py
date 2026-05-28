@@ -62,16 +62,18 @@ def _afficher_resume(toutes_nouvelles: list[dict]):
     _log("─" * 60)
 
 
-def main(progress_callback=None):
+def main(progress_callback=None, villes_override=None):
     def _emit(pct: int, msg: str):
         _log(msg)
         if progress_callback:
             progress_callback(pct, msg)
 
+    villes = villes_override if villes_override else VILLES
+
     _emit(0, "=" * 60)
     _emit(0, "SCRAPER IMMOBILIER — Centre-Val de Loire")
     _emit(0, f"Scrapers actifs : {', '.join(SCRAPERS_ACTIFS)}")
-    _emit(0, f"Villes cibles   : {len(VILLES)}")
+    _emit(0, f"Villes cibles   : {len(villes)}")
     _emit(0, "=" * 60)
 
     # ── 1. Base de données ────────────────────────────────────────────────────
@@ -103,7 +105,7 @@ def main(progress_callback=None):
         _emit(pct_scrape, f"Scraping {nom_scraper}…")
         try:
             scraper  = ScraperClass()
-            annonces = scraper.fetch_all(VILLES)
+            annonces = scraper.fetch_all(villes)
         except Exception as e:
             _emit(pct_scrape, f"  [{nom_scraper}] ERREUR : {e}")
             annonces = []
