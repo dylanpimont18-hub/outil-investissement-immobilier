@@ -889,5 +889,12 @@
     </div>
 
     <script type="module" src="main.js"></script>
+
+<!-- Drawer détail bien -->
+<div id="detail-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500" aria-hidden="true"></div>
+<aside id="detail-drawer" role="complementary" aria-label="Détail du bien"
+  style="display:none;position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);background:var(--surface);border-left:1px solid var(--border);z-index:501;overflow-y:auto;box-shadow:-8px 0 32px rgba(0,0,0,0.3);transition:transform .25s ease">
+  <div id="detail-content" style="padding:24px"></div>
+</aside>
 </body>
 </html>

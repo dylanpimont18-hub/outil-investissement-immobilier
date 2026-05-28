@@ -567,6 +567,15 @@ function _applyTable() {
     });
   });
 
+  // Clic ligne → drawer détail
+  container.querySelectorAll('tbody tr').forEach(tr => {
+    tr.addEventListener('click', e => {
+      if (e.target.closest('button, a')) return;
+      const idx = parseInt(tr.dataset.rank, 10);
+      if (!isNaN(idx)) _openDrawer(_displayedResultats[idx]);
+    });
+  });
+
   // Sélecteur d'affichage
   document.getElementById('scanner-count-select')?.addEventListener('change', e => {
     const v = e.target.value;
@@ -708,7 +717,7 @@ function _renderRow(r, rank, idx) {
 
   const prixM2 = r.surface ? r.prix / r.surface : null;
 
-  return `<tr>
+  return `<tr style="cursor:pointer" data-rank="${idx}">
     <td style="color:#555;font-size:11px;text-align:center">${rank}</td>
     <td>
       <div style="font-weight:600;font-size:13px;color:var(--text)">${_esc(r.titre)}</div>
@@ -800,4 +809,185 @@ function _badge(label, bg, border = 'none') {
 function _esc(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Panneau de détail (drawer) ───────────────────────────────────────────────
+
+function _openDrawer(r) {
+  const overlay = document.getElementById('detail-overlay');
+  const drawer  = document.getElementById('detail-drawer');
+  const content = document.getElementById('detail-content');
+  if (!drawer || !content) return;
+
+  content.innerHTML = _renderDetailContent(r);
+  overlay.style.display = 'block';
+  drawer.style.display  = 'block';
+  requestAnimationFrame(() => drawer.style.transform = 'translateX(0)');
+
+  overlay.onclick = _closeDrawer;
+  content.querySelector('#detail-close')?.addEventListener('click', _closeDrawer);
+  content.querySelector('#detail-analyser-btn')?.addEventListener('click', () => {
+    _closeDrawer();
+    _analyserBien(r);
+  });
+
+  // Charger l'historique des prix
+  _loadPriceHistory(r.url, content.querySelector('#detail-historique'));
+}
+
+function _closeDrawer() {
+  const overlay = document.getElementById('detail-overlay');
+  const drawer  = document.getElementById('detail-drawer');
+  if (overlay) overlay.style.display = 'none';
+  if (drawer)  drawer.style.display  = 'none';
+}
+
+function _renderDetailContent(r) {
+  const dpe = (r.dpe || '').toLowerCase();
+  const dpeColors = { a:'#00a550',b:'#51b845',c:'#c8d200',d:'#ffcc00',e:'#f4a623',f:'#e3720c',g:'#cc0000' };
+  const dpeColor  = dpeColors[dpe] || 'var(--muted)';
+  const dpeAlerte = r.dpe_alerte ? `<span style="background:${dpeColor}22;color:${dpeColor};border:1px solid ${dpeColor}44;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600">${_esc(r.dpe_alerte[0])}</span>` : '';
+
+  const loyerSourceLabel = r.loyer_source === 'annonce' ? 'loyer de l\'annonce'
+    : r.loyer_source === 'marche' ? `loyer médian marché${r.loyer_marche_ref ? ` (${r.loyer_marche_ref} annonces ref.)` : ''}`
+    : 'loyer estimé (taux fixe)';
+  const loyerSourceColor = r.loyer_source === 'annonce' ? '#22d3ee' : r.loyer_source === 'marche' ? '#4ade80' : '#f59e0b';
+
+  const prixM2 = r.surface ? Math.round(r.prix / r.surface) : null;
+
+  // 3 régimes fiscaux
+  // cf_apres_impot = le meilleur régime; cf_apres_impot_reel et cf_apres_impot_sci sont les valeurs individuelles
+  // Pour micro: on déduit depuis regime_optimal
+  const cfMicroVal = r.regime_optimal === 'micro' ? r.cf_apres_impot : null;
+  const regimes = [
+    { id: 'micro',  label: 'Micro-foncier', cf: cfMicroVal,           note: 'Abattement 30 %' },
+    { id: 'reel',   label: 'Réel foncier',  cf: r.cf_apres_impot_reel, note: 'Déduction charges réelles' },
+    { id: 'sci_is', label: 'SCI à l\'IS',   cf: r.cf_apres_impot_sci,  note: 'IS 15 % + amortissement' },
+  ];
+  const regimeHtml = regimes.map(reg => {
+    const isOptimal = r.regime_optimal === reg.id;
+    const cf = reg.cf;
+    const cfStr = cf != null ? `${cf >= 0 ? '+' : ''}${_fmtEur(cf)}` : '—';
+    const cfColor = cf != null && cf >= 0 ? '#4ade80' : '#f87171';
+    return `
+      <div style="flex:1;padding:12px;border-radius:8px;border:${isOptimal ? '2px solid var(--accent-gold,#C5A059)' : '1px solid var(--border)'};background:${isOptimal ? 'var(--accent-gold,#C5A059)11' : 'var(--surface-strong)'}">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${_esc(reg.label)}</div>
+        <div style="font-size:16px;font-weight:700;color:${cfColor}">${cfStr}<span style="font-size:11px;font-weight:400;color:var(--muted)">/mois</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">${_esc(reg.note)}</div>
+        ${isOptimal ? '<div style="margin-top:6px;font-size:10px;font-weight:700;color:var(--accent-gold,#C5A059)">★ MEILLEUR RÉGIME</div>' : ''}
+      </div>`;
+  }).join('');
+
+  // Points forts / faibles
+  const ptsForts   = (r.points_forts  || []);
+  const ptsFaibles = (r.points_faibles || []);
+  const ptsFortHtml  = ptsForts.length  ? ptsForts.map(p  => `<li style="color:#4ade80">+ ${_esc(p)}</li>`).join('')  : '<li style="color:var(--muted)">—</li>';
+  const ptsFaibleHtml= ptsFaibles.length? ptsFaibles.map(p => `<li style="color:#f87171">- ${_esc(p)}</li>`).join(''): '<li style="color:var(--muted)">—</li>';
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:16px">
+      <div style="flex:1">
+        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px">${_esc(r.titre)}</h2>
+        <div style="font-size:12px;color:var(--muted)">${_esc(r.ville)} · ${r.surface ? r.surface.toFixed(0) + ' m²' : '—'}${r.nb_pieces ? ' · T' + r.nb_pieces : ''} · ${_esc((r.type_bien || '').charAt(0).toUpperCase() + (r.type_bien || '').slice(1))} · <span style="color:var(--muted)">${_esc(r.site)}</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${dpeAlerte}
+        <button id="detail-close" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">×</button>
+      </div>
+    </div>
+
+    <!-- Métriques clés -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+      ${_detailCard(_fmtEur(r.prix), 'Prix')}
+      ${_detailCard(_fmtEur(r.loyer_estime) + '/mois', 'Loyer', loyerSourceLabel, loyerSourceColor)}
+      ${_detailCard(_fmtEur(r.mensualite) + '/mois', 'Mensualité crédit')}
+      ${_detailCard(r.renta_brute != null ? r.renta_brute.toFixed(1) + ' %' : '—', 'Renta brute')}
+      ${_detailCard(r.dscr != null ? r.dscr.toFixed(2) : '—', 'DSCR')}
+      ${_detailCard(prixM2 != null ? prixM2.toLocaleString('fr-FR') + ' €/m²' : '—', 'Prix/m²')}
+    </div>
+
+    <!-- 3 régimes -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Comparaison régimes fiscaux</div>
+      <div style="display:flex;gap:8px">${regimeHtml}</div>
+    </div>
+
+    <!-- Infos IA -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Informations IA</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:12px">
+        ${_detailInfo('Travaux', r.travaux ? (r.travaux_montant ? '~' + _fmtEur(r.travaux_montant) : 'Oui') : 'Non')}
+        ${_detailInfo('Chauffage', r.chauffage || '—')}
+        ${_detailInfo('Meublé', r.meuble === true ? 'Oui' : r.meuble === false ? 'Non' : '—')}
+        ${_detailInfo('Parking', r.parking_garage ? 'Oui' : 'Non')}
+        ${r.immeuble_rapport && r.lots_total ? _detailInfo('Lots', `${r.lots_loues ?? '?'}/${r.lots_total} loués`) : ''}
+        ${_detailInfo('Déjà loué', r.deja_loue === true ? 'Oui' : r.deja_loue === false ? 'Non' : '—')}
+      </div>
+      ${r.resume_ia ? `<div style="margin-top:8px;font-size:12px;color:var(--muted);font-style:italic;padding:8px;background:var(--surface-strong);border-radius:6px">"${_esc(r.resume_ia)}"</div>` : ''}
+    </div>
+
+    <!-- Points forts / faibles -->
+    ${ptsForts.length || ptsFaibles.length ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Points forts</div>
+        <ul style="margin:0;padding:0 0 0 14px;font-size:12px;line-height:1.7">${ptsFortHtml}</ul>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Points faibles</div>
+        <ul style="margin:0;padding:0 0 0 14px;font-size:12px;line-height:1.7">${ptsFaibleHtml}</ul>
+      </div>
+    </div>` : ''}
+
+    <!-- Historique des prix (chargé async) -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Historique des prix</div>
+      <div id="detail-historique" style="font-size:12px;color:var(--muted)">Chargement…</div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button id="detail-analyser-btn" style="flex:1;padding:10px 16px;border-radius:8px;border:none;background:var(--accent-gold,#C5A059);color:#111;font-weight:600;cursor:pointer;font-size:13px">→ Analyser</button>
+      <a href="${_esc(r.url)}" target="_blank" style="flex:1;padding:10px 16px;border-radius:8px;border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:13px;text-align:center">Voir l'annonce ↗</a>
+    </div>`;
+}
+
+function _detailCard(val, label, note = '', noteColor = 'var(--muted)') {
+  return `<div style="background:var(--surface-strong);border-radius:8px;padding:10px;text-align:center">
+    <div style="font-size:14px;font-weight:700">${val}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:2px">${_esc(label)}</div>
+    ${note ? `<div style="font-size:10px;color:${noteColor};margin-top:2px">${_esc(note)}</div>` : ''}
+  </div>`;
+}
+
+function _detailInfo(label, val) {
+  return `<div style="display:flex;justify-content:space-between;padding:4px 8px;background:var(--surface-strong);border-radius:6px">
+    <span style="color:var(--muted)">${_esc(label)}</span>
+    <span style="font-weight:600">${_esc(String(val))}</span>
+  </div>`;
+}
+
+async function _loadPriceHistory(url, container) {
+  if (!container) return;
+  try {
+    const resp = await fetch('/api/bien/historique?url=' + encodeURIComponent(url));
+    const data = await resp.json();
+    if (!data.length) {
+      container.textContent = 'Aucune variation de prix enregistrée.';
+      return;
+    }
+    container.innerHTML = data.map((h, i) => {
+      const diff = h.prix_nouveau - h.prix_ancien;
+      const diffStr = diff < 0
+        ? `<span style="color:#4ade80">${diff.toLocaleString('fr-FR')} €</span>`
+        : `<span style="color:#f87171">+${diff.toLocaleString('fr-FR')} €</span>`;
+      const isLast = i === data.length - 1;
+      return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:${isLast ? 'none' : '1px solid var(--border)'}">
+        <span style="color:var(--muted)">${new Date(h.date_changement).toLocaleDateString('fr-FR')}</span>
+        <span>${h.prix_nouveau.toLocaleString('fr-FR')} € ${diffStr}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.textContent = 'Erreur chargement historique.';
+  }
 }
