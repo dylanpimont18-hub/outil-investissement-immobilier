@@ -33,12 +33,15 @@ function _initCPSelector() {
     const val = input.value.trim();
     if (val.length < 2 || !_communesData) { dropdown.style.display = 'none'; return; }
 
-    // Trouver les communes correspondantes
+    // Trouver les communes correspondantes (par CP ou par nom de commune)
     const matches = [];
+    const valLow = val.toLowerCase();
     for (const [cp, communes] of Object.entries(_communesData)) {
       if (cp.startsWith(val)) {
+        for (const commune of communes) matches.push({ cp, commune });
+      } else {
         for (const commune of communes) {
-          matches.push({ cp, commune });
+          if (commune.toLowerCase().includes(valLow)) matches.push({ cp, commune });
         }
       }
     }
@@ -75,7 +78,10 @@ function _initCPSelector() {
     dropdown.style.display = 'block';
 
     dropdown.querySelectorAll('.cp-option').forEach(el => {
-      el.addEventListener('mouseenter', () => el.style.background = 'var(--surface-strong)');
+      el.addEventListener('mouseenter', () => {
+        dropdown.querySelectorAll('.cp-option--active').forEach(a => { a.classList.remove('cp-option--active'); a.style.background = ''; });
+        el.style.background = 'var(--surface-strong)';
+      });
       el.addEventListener('mouseleave', () => el.style.background = '');
       el.addEventListener('click', () => {
         const cp = el.dataset.cp;
@@ -84,6 +90,35 @@ function _initCPSelector() {
         dropdown.style.display = 'none';
       });
     });
+  });
+
+  input.addEventListener('keydown', e => {
+    const options = [...dropdown.querySelectorAll('.cp-option')];
+    const active = dropdown.querySelector('.cp-option--active');
+    const idx = options.indexOf(active);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = options[idx + 1] || options[0];
+      if (active) active.classList.remove('cp-option--active');
+      if (next) { next.classList.add('cp-option--active'); next.style.background = 'var(--surface-strong)'; }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = options[idx - 1] || options[options.length - 1];
+      if (active) active.classList.remove('cp-option--active');
+      if (prev) { prev.classList.add('cp-option--active'); prev.style.background = 'var(--surface-strong)'; }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = active || options[0];
+      if (target) {
+        const cp = target.dataset.cp;
+        const commune = target.dataset.commune;
+        _setCPFilter(cp, commune === '__all__' ? null : commune, commune === '__all__' ? `${cp}… (toutes)` : `${cp} — ${commune}`);
+        dropdown.style.display = 'none';
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.style.display = 'none';
+    }
   });
 
   document.addEventListener('click', e => {
@@ -217,7 +252,30 @@ function _bindButtons() {
     _applyTable();
   });
 
+  // Bouton "Voir les annonces"
+  document.getElementById('btn-voir-resultats')?.addEventListener('click', () => {
+    document.getElementById('scanner-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
   _initCPSelector();
+
+  // Quick filter buttons → ouvrir le panel et scroller vers la section
+  function _openFilterAndScroll(sectionIndex) {
+    const sidebar = document.getElementById('scanner-filters');
+    if (!sidebar) return;
+    const sections = sidebar.querySelectorAll('.scanner-filter-section');
+    if (sections[sectionIndex]) {
+      setTimeout(() => sections[sectionIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
+  }
+  // Budget → section BUDGET ET SURFACE (index 4)
+  document.getElementById('qf-budget-btn')?.addEventListener('click', () => _openFilterAndScroll(4));
+  // Nb de pièces → section À PROPOS DU BIEN (index 0)
+  document.getElementById('qf-pieces-btn')?.addEventListener('click', () => _openFilterAndScroll(0));
+  // Surface → section BUDGET ET SURFACE (index 4)
+  document.getElementById('qf-surface-btn')?.addEventListener('click', () => _openFilterAndScroll(4));
+  // Type de bien → section TYPE ET ÉTAT (index 2)
+  document.getElementById('qf-type-btn')?.addEventListener('click', () => _openFilterAndScroll(2));
 
   document.getElementById('tab-tableau')?.addEventListener('click', () => {
     document.getElementById('scanner-map-container').style.display = 'none';
@@ -244,8 +302,21 @@ function _updateFilterCount() {
     const el = document.getElementById(id);
     if (el && el.value !== '' && parseFloat(el.value) !== 0) active++;
   }
-  const el = document.getElementById('scanner-filter-count');
-  if (el) el.textContent = active > 0 ? `${active} filtre${active > 1 ? 's' : ''} actif${active > 1 ? 's' : ''}` : '';
+  // Label dans le panel
+  const countEl = document.getElementById('scanner-filter-count');
+  if (countEl) countEl.textContent = active > 0 ? `${active} filtre${active > 1 ? 's' : ''} actif${active > 1 ? 's' : ''}` : '';
+  // Badge dans la barre de recherche
+  const badge = document.getElementById('scanner-filter-count-badge');
+  if (badge) {
+    badge.textContent = active > 0 ? active : '';
+    badge.style.display = active > 0 ? '' : 'none';
+  }
+  // Résultat count dans le bouton "Voir les annonces"
+  const resultCount = document.getElementById('filter-result-count');
+  if (resultCount) {
+    const total = _allResultats.filter(_matchFilters).length;
+    resultCount.textContent = total;
+  }
 }
 
 async function _startScan(endpoint) {
@@ -313,12 +384,16 @@ async function _loadResults(showEmpty) {
     _renderTable(data.resultats);
     _showEmpty(false);
     document.getElementById('scanner-stats').style.display = '';
-    document.getElementById('scanner-filters').style.display = '';
     document.getElementById('scanner-results').style.display = '';
     document.getElementById('scanner-view-tabs')?.style.setProperty('display', 'flex');
-    document.getElementById('scanner-cp-wrapper')?.style.setProperty('display', '');
+    document.getElementById('scanner-search-bar')?.style.setProperty('display', '');
+    document.getElementById('scanner-content-layout')?.style.setProperty('display', 'flex');
     if (data.stats?.last_run || data.generated_at) {
       _setStatus('done', 'Dernier scan · ' + _fmtDatetime(data.generated_at));
+    }
+    const headerSub = document.getElementById('scanner-header-sub');
+    if (headerSub && data.generated_at) {
+      headerSub.textContent = 'Centre-Val de Loire · Dernier scan : ' + _fmtDatetime(data.generated_at);
     }
   } catch (e) {
     if (showEmpty) _showEmpty(true);
@@ -461,6 +536,17 @@ function _matchFilters(r) {
   // Chips — Source loyer
   if (document.getElementById('filter-loyer-marche')?.checked && r.loyer_source !== 'marche') return false;
   if (document.getElementById('filter-loyer-annonce')?.checked && r.loyer_source !== 'annonce') return false;
+
+  // Chips — Nb de pièces
+  const activePieces = [...document.querySelectorAll('input[name="pieces-filter"]:checked')].map(el => parseInt(el.value, 10));
+  if (activePieces.length > 0) {
+    const p = r.nb_pieces != null ? r.nb_pieces : null;
+    const match = activePieces.some(v => v === 5 ? p != null && p >= 5 : p === v);
+    if (!match) return false;
+  }
+
+  // Chips — Parking / Garage
+  if (document.getElementById('filter-parking')?.checked && !r.parking_garage) return false;
 
   // Sliders numériques — Prix
   const prixMin = parseFloat(document.getElementById('prix-min')?.value);
