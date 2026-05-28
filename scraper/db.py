@@ -126,5 +126,6 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         try:
             conn.execute(sql)
             conn.commit()
-        except Exception:
-            pass  # colonne déjà présente
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e):
+                raise
