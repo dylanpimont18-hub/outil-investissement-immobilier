@@ -435,9 +435,13 @@ function _updateFilterCount() {
 }
 
 async function _startScan(endpoint) {
-  if (_scanRunning) return;
+  if (_scanRunning || !_scanTarget) return;
   try {
-    const resp = await fetch(endpoint, { method: 'POST' });
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code_postal: _scanTarget.cp, ville: _scanTarget.commune }),
+    });
     if (resp.status === 409) { alert('Un scan est déjà en cours.'); return; }
     if (!resp.ok) throw new Error(await resp.text());
     _scanRunning = true;
@@ -477,6 +481,9 @@ async function _pollStatus() {
         _setStatus('done', 'Terminé · ' + _fmtDatetime(data.last_run));
         _showProgress(false);
         await _loadResults(true);
+        if (_scanTarget) {
+          _setCPFilter(_scanTarget.cp, _scanTarget.commune, _scanTarget.label);
+        }
       }
     }
   } catch (e) {
