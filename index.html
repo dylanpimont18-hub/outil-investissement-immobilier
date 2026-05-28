@@ -668,22 +668,7 @@
                 </div>
               </div>
 
-              <!-- Onglets Tableau / Carte -->
-              <div id="scanner-view-tabs" style="display:none;margin-bottom:12px;gap:8px">
-                <button id="tab-tableau" style="padding:6px 18px;border-radius:6px;border:1px solid var(--accent-gold,#C5A059);background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);font-size:13px;cursor:pointer;font-weight:600">Tableau</button>
-                <button id="tab-carte"   style="padding:6px 18px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer">Carte</button>
-              </div>
-
-              <!-- Conteneur carte -->
-              <div id="scanner-map-container" style="display:none;border-radius:12px;overflow:hidden;border:1px solid var(--border)">
-                <div id="scanner-map" style="height:500px;width:100%"></div>
-                <div id="scanner-map-offline" style="display:none;padding:12px;text-align:center;font-size:12px;color:var(--muted)">
-                  Tuiles de carte indisponibles (connexion internet requise pour la carte).
-                </div>
-                <div id="scanner-map-unloc" style="padding:8px 14px;font-size:12px;color:var(--muted);background:var(--surface-strong)"></div>
-              </div>
-
-              <!-- Stats -->
+              <!-- Stats — pleine largeur -->
               <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
 
               <!-- Zone C : Barre de recherche -->
@@ -707,14 +692,15 @@
                 </button>
               </div>
 
-              <!-- Panel critères avancés (SeLoger-style) -->
-              <div id="scanner-filters" class="scanner-filter-panel" style="display:none">
+              <!-- Content layout (sidebar + main area) -->
+              <div id="scanner-content-layout" class="scanner-content-layout" style="display:none">
 
-                <!-- En-tête panel -->
-                <div class="scanner-filter-panel-header">
-                  <button id="btn-hide-filters" class="scanner-filter-hide-btn">
-                    <span class="scanner-filter-hide-icon">×</span> Masquer les critères
-                  </button>
+              <!-- Sidebar filtres -->
+              <aside id="scanner-filters" class="scanner-filter-sidebar">
+
+                <!-- En-tête sidebar -->
+                <div class="scanner-sidebar-header">
+                  <span class="scanner-sidebar-title">Filtres</span>
                   <span id="scanner-filter-count" class="scanner-filter-count"></span>
                 </div>
 
@@ -883,10 +869,30 @@
                     VOIR LES ANNONCES (<span id="filter-result-count">—</span>)
                   </button>
                 </div>
+              </aside>
+
+              <!-- Zone principale -->
+              <div class="scanner-main-area">
+                <!-- Onglets Tableau / Carte -->
+                <div id="scanner-view-tabs" style="display:none;margin:12px 16px;gap:8px">
+                  <button id="tab-tableau" style="padding:6px 18px;border-radius:6px;border:1px solid var(--accent-gold,#C5A059);background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);font-size:13px;cursor:pointer;font-weight:600">Tableau</button>
+                  <button id="tab-carte"   style="padding:6px 18px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer">Carte</button>
+                </div>
+
+                <!-- Conteneur carte -->
+                <div id="scanner-map-container" style="display:none;margin:0 16px;border-radius:12px;overflow:hidden;border:1px solid var(--border)">
+                  <div id="scanner-map" style="height:500px;width:100%"></div>
+                  <div id="scanner-map-offline" style="display:none;padding:12px;text-align:center;font-size:12px;color:var(--muted)">
+                    Tuiles de carte indisponibles (connexion internet requise pour la carte).
+                  </div>
+                  <div id="scanner-map-unloc" style="padding:8px 14px;font-size:12px;color:var(--muted);background:var(--surface-strong)"></div>
+                </div>
+
+                <!-- Tableau résultats -->
+                <div id="scanner-results" class="scanner-results-wrap" style="display:none"></div>
               </div>
 
-              <!-- Tableau résultats -->
-              <div id="scanner-results" class="scanner-results-wrap" style="display:none"></div>
+              </div><!-- /#scanner-content-layout -->
 
               <!-- État vide -->
               <div id="scanner-empty" class="scanner-empty">
