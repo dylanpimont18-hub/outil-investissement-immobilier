@@ -1,6 +1,7 @@
 # Build artifacts
 build/
 dist/
+Spark/
 
 # Secrets locaux
 scraper/config.py
