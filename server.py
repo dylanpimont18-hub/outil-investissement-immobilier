@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -86,9 +87,13 @@ def _read_results():
     try:
         rows = conn.execute("""
             SELECT
+                b.id AS bien_id,
                 b.prix, b.surface, b.type_bien, b.ville, b.code_postal,
                 b.dpe, b.titre, b.url, b.site, b.date_derniere_vue,
-                a.cf_net, a.cf_apres_impot, a.renta_brute, a.renta_nette_nette,
+                a.cf_net, a.cf_apres_impot,
+                a.cf_apres_impot_reel, a.cf_apres_impot_sci,
+                a.regime_optimal, a.loyer_source,
+                a.renta_brute, a.renta_nette_nette,
                 a.dscr, a.score, a.loyer_estime, a.mensualite,
                 a.resume_ia, a.points_forts, a.points_faibles,
                 a.nb_pieces, a.travaux, a.travaux_montant,
@@ -189,6 +194,123 @@ def index():
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)
+
+
+@app.route("/api/communes")
+def api_communes():
+    """Retourne les communes pour un préfixe CP (ex: ?cp=181)."""
+    cp_prefix = request.args.get("cp", "").strip()
+    if len(cp_prefix) < 2:
+        return jsonify([])
+
+    communes_path = Path(STATIC_DIR) / "data" / "communes_centre_val.json"
+    if not communes_path.exists():
+        return jsonify([])
+
+    with open(communes_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    result = []
+    for cp, communes in data.items():
+        if cp.startswith(cp_prefix):
+            for commune in communes:
+                result.append({"cp": cp, "commune": commune})
+
+    result.sort(key=lambda x: (x["cp"], x["commune"]))
+    return jsonify(result)
+
+
+@app.route("/api/bien/historique")
+def api_bien_historique():
+    """Retourne l'historique des prix d'un bien par son URL."""
+    url_bien = request.args.get("url", "")
+    if not url_bien:
+        return jsonify([])
+
+    db_path = Path(SCRAPER_DIR) / "biens.db"
+    if not db_path.exists():
+        return jsonify([])
+
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+    import db as scraper_db
+    conn = scraper_db.get_connection(db_path)
+    try:
+        row = conn.execute("SELECT id FROM biens WHERE url = ?", (url_bien,)).fetchone()
+        if not row:
+            return jsonify([])
+        rows = conn.execute("""
+            SELECT prix_ancien, prix_nouveau, date_changement
+            FROM historique_prix WHERE bien_id = ?
+            ORDER BY date_changement ASC
+        """, (row["id"],)).fetchall()
+        return jsonify([dict(r) for r in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/api/geocode/batch", methods=["POST"])
+def api_geocode_batch():
+    """
+    Géocode une liste de {ville, code_postal} via Nominatim.
+    Utilise le cache SQLite (table geocodes). Rate-limit : 1 req/s.
+    """
+    items = request.json or []
+    db_path = Path(SCRAPER_DIR) / "biens.db"
+    if not db_path.exists():
+        return jsonify({})
+
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+    import db as scraper_db
+    import requests as req_lib
+    conn = scraper_db.get_connection(db_path)
+
+    result = {}
+    try:
+        for item in items:
+            ville = item.get("ville", "")
+            cp    = item.get("code_postal", "")
+            key   = f"{ville}|{cp}"
+
+            cached = conn.execute(
+                "SELECT lat, lng FROM geocodes WHERE ville = ? AND code_postal = ?",
+                (ville, cp)
+            ).fetchone()
+            if cached:
+                result[key] = {"lat": cached["lat"], "lng": cached["lng"]} if cached["lat"] else None
+                continue
+
+            try:
+                resp = req_lib.get(
+                    "https://nominatim.openstreetmap.org/search",
+                    params={"q": f"{ville}, {cp}, France", "format": "json", "limit": 1},
+                    headers={"User-Agent": "SparkInvestissement/1.0 (contact@spark.local)"},
+                    timeout=5,
+                )
+                data = resp.json()
+                if data:
+                    lat = float(data[0]["lat"])
+                    lng = float(data[0]["lon"])
+                    conn.execute(
+                        "INSERT OR REPLACE INTO geocodes (ville, code_postal, lat, lng) VALUES (?, ?, ?, ?)",
+                        (ville, cp, lat, lng)
+                    )
+                    result[key] = {"lat": lat, "lng": lng}
+                else:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO geocodes (ville, code_postal, lat, lng) VALUES (?, ?, NULL, NULL)",
+                        (ville, cp)
+                    )
+                    result[key] = None
+                conn.commit()
+                time.sleep(1)
+            except Exception:
+                result[key] = None
+    finally:
+        conn.close()
+
+    return jsonify(result)
 
 
 if __name__ == "__main__":

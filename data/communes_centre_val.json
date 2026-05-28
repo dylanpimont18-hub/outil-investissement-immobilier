@@ -1,0 +1,2245 @@
+{
+  "18000": [
+    "Bourges"
+  ],
+  "18100": [
+    "Méry-sur-Cher",
+    "Saint-Georges-sur-la-Prée",
+    "Saint-Hilaire-de-Court",
+    "Thénioux",
+    "Vierzon"
+  ],
+  "18110": [
+    "Allogny",
+    "Fussy",
+    "Pigny",
+    "Quantilly",
+    "Saint-Georges-sur-Moulon",
+    "Saint-Martin-d'Auxigny",
+    "Saint-Palais",
+    "Saint-Éloy-de-Gy",
+    "Vasselay",
+    "Vignoux-sous-les-Aix"
+  ],
+  "18120": [
+    "Brinay",
+    "Cerbois",
+    "Chéry",
+    "Lazenay",
+    "Limeux",
+    "Lury-sur-Arnon",
+    "Massay",
+    "Méreau",
+    "Preuilly",
+    "Quincy"
+  ],
+  "18130": [
+    "Bussy",
+    "Chalivoy-Milon",
+    "Cogny",
+    "Contres",
+    "Dun-sur-Auron",
+    "Jussy-Champagne",
+    "Lantan",
+    "Osmery",
+    "Parnay",
+    "Raymond",
+    "Saint-Denis-de-Palin",
+    "Vornay"
+  ],
+  "18140": [
+    "Argenvières",
+    "Charentonnay",
+    "Chaumoux-Marcilly",
+    "Couy",
+    "Garigny",
+    "Groises",
+    "Herry",
+    "Jussy-le-Chaudrier",
+    "La Chapelle-Montlinard",
+    "Lugny-Champagne",
+    "Précy",
+    "Saint-Léger-le-Petit",
+    "Saint-Martin-des-Champs",
+    "Sancergues",
+    "Sévry"
+  ],
+  "18150": [
+    "Apremont-sur-Allier",
+    "Cuffy",
+    "Germigny-l'Exempt",
+    "La Chapelle-Hugon",
+    "La Guerche-sur-l'Aubois",
+    "Le Chautay"
+  ],
+  "18160": [
+    "Chezal-Benoît",
+    "Ineuil",
+    "La Celle-Condé",
+    "Lignières",
+    "Montlouis",
+    "Saint-Baudel",
+    "Saint-Hilaire-en-Lignières",
+    "Touchay",
+    "Villecelin"
+  ],
+  "18170": [
+    "Ardenais",
+    "Ids-Saint-Roch",
+    "Le Châtelet",
+    "Loye-sur-Arnon",
+    "Maisonnais",
+    "Marçais",
+    "Morlac",
+    "Rezay",
+    "Saint-Pierre-les-Bois"
+  ],
+  "18190": [
+    "Chambon",
+    "Chavannes",
+    "Châteauneuf-sur-Cher",
+    "Corquoy",
+    "Crézançay-sur-Cher",
+    "Saint-Loup-des-Chaumes",
+    "Saint-Symphorien",
+    "Serruelles",
+    "Uzay-le-Venon",
+    "Vallenay",
+    "Venesmes"
+  ],
+  "18200": [
+    "Ainay-le-Vieil",
+    "Arcomps",
+    "Arpheuilles",
+    "Bouzais",
+    "Bruère-Allichamps",
+    "Colombiers",
+    "Drevant",
+    "Farges-Allichamps",
+    "La Celle",
+    "La Groutte",
+    "La Perche",
+    "Meillant",
+    "Nozières",
+    "Orcenais",
+    "Orval",
+    "Saint-Amand-Montrond",
+    "Saint-Georges-de-Poisieux"
+  ],
+  "18210": [
+    "Bannegon",
+    "Bessais-le-Fromental",
+    "Charenton-du-Cher",
+    "Coust",
+    "Le Pondy",
+    "Saint-Pierre-les-Étieux",
+    "Thaumiers",
+    "Vernais",
+    "Verneuil"
+  ],
+  "18220": [
+    "Aubinges",
+    "Azy",
+    "Brécy",
+    "Les Aix-d'Angillon",
+    "Morogues",
+    "Parassy",
+    "Rians",
+    "Saint-Céols",
+    "Sainte-Solange",
+    "Soulangis"
+  ],
+  "18230": [
+    "Saint-Doulchard"
+  ],
+  "18240": [
+    "Belleville-sur-Loire",
+    "Boulleret",
+    "Léré",
+    "Sainte-Gemme-en-Sancerrois",
+    "Santranges",
+    "Savigny-en-Sancerre",
+    "Sury-près-Léré"
+  ],
+  "18250": [
+    "Achères",
+    "Henrichemont",
+    "Humbligny",
+    "La Chapelotte",
+    "Montigny",
+    "Neuilly-en-Sancerre",
+    "Neuvy-Deux-Clochers"
+  ],
+  "18260": [
+    "Assigny",
+    "Barlieu",
+    "Concressault",
+    "Dampierre-en-Crot",
+    "Jars",
+    "Le Noyer",
+    "Subligny",
+    "Sury-ès-Bois",
+    "Thou",
+    "Vailly-sur-Sauldre",
+    "Villegenon"
+  ],
+  "18270": [
+    "Culan",
+    "Reigny",
+    "Saint-Christophe-le-Chaudry",
+    "Saint-Maur",
+    "Sidiailles"
+  ],
+  "18290": [
+    "Chârost",
+    "Civray",
+    "Mareuil-sur-Arnon",
+    "Plou",
+    "Poisieux",
+    "Saint-Ambroix",
+    "Saugy"
+  ],
+  "18300": [
+    "Bannay",
+    "Bué",
+    "Couargues",
+    "Crézancy-en-Sancerre",
+    "Feux",
+    "Gardefort",
+    "Jalognes",
+    "Menetou-Râtel",
+    "Ménétréol-sous-Sancerre",
+    "Saint-Bouize",
+    "Saint-Satur",
+    "Sancerre",
+    "Sens-Beaujeu",
+    "Sury-en-Vaux",
+    "Thauvenay",
+    "Veaugues",
+    "Verdigny",
+    "Vinon"
+  ],
+  "18310": [
+    "Dampierre-en-Graçay",
+    "Genouilly",
+    "Graçay",
+    "Nohant-en-Graçay",
+    "Saint-Outrille"
+  ],
+  "18320": [
+    "Beffes",
+    "Cours-les-Barres",
+    "Jouet-sur-l'Aubois",
+    "Marseilles-lès-Aubigny",
+    "Menetou-Couture",
+    "Saint-Hilaire-de-Gondilly",
+    "Torteron"
+  ],
+  "18330": [
+    "Nançay",
+    "Neuvy-sur-Barangeon",
+    "Saint-Laurent",
+    "Vouzeron"
+  ],
+  "18340": [
+    "Annoix",
+    "Arçay",
+    "Corquoy",
+    "Crosses",
+    "Lapan",
+    "Levet",
+    "Lissay-Lochy",
+    "Plaimpied-Givaudins",
+    "Saint-Germain-des-Bois",
+    "Saint-Just",
+    "Senneçay",
+    "Soye-en-Septaine",
+    "Vorly"
+  ],
+  "18350": [
+    "Blet",
+    "Charly",
+    "Chaumont",
+    "Cornusse",
+    "Croisy",
+    "Flavigny",
+    "Ignol",
+    "Mornay-Berry",
+    "Nérondes",
+    "Osmery",
+    "Ourouer-les-Bourdelins",
+    "Saint-Hilaire-de-Gondilly",
+    "Tendron"
+  ],
+  "18360": [
+    "Faverdines",
+    "La Celette",
+    "Saint-Vitte",
+    "Saulzais-le-Potier",
+    "Vesdun",
+    "Épineuil-le-Fleuriel"
+  ],
+  "18370": [
+    "Beddes",
+    "Châteaumeillant",
+    "Préveranges",
+    "Saint-Jeanvrin",
+    "Saint-Priest-la-Marche",
+    "Saint-Saturnin"
+  ],
+  "18380": [
+    "Ennordres",
+    "Ivoy-le-Pré",
+    "La Chapelle-d'Angillon",
+    "Méry-ès-Bois",
+    "Presly"
+  ],
+  "18390": [
+    "Moulins-sur-Yèvre",
+    "Nohant-en-Goût",
+    "Osmoy",
+    "Saint-Germain-du-Puy",
+    "Saint-Michel-de-Volangis",
+    "Savigny-en-Septaine"
+  ],
+  "18400": [
+    "Lunery",
+    "Primelles",
+    "Saint-Caprais",
+    "Saint-Florent-sur-Cher",
+    "Villeneuve-sur-Cher"
+  ],
+  "18410": [
+    "Argent-sur-Sauldre",
+    "Blancafort",
+    "Brinon-sur-Sauldre",
+    "Clémont"
+  ],
+  "18500": [
+    "Allouis",
+    "Berry-Bouy",
+    "Foëcy",
+    "Marmagne",
+    "Mehun-sur-Yèvre",
+    "Sainte-Thorette",
+    "Vignoux-sur-Barangeon"
+  ],
+  "18510": [
+    "Menetou-Salon"
+  ],
+  "18520": [
+    "Avord",
+    "Bengy-sur-Craon"
+  ],
+  "18570": [
+    "La Chapelle-Saint-Ursin",
+    "Le Subdray",
+    "Morthomiers",
+    "Trouy"
+  ],
+  "18600": [
+    "Augy-sur-Aubois",
+    "Givardon",
+    "Grossouvre",
+    "Mornay-sur-Allier",
+    "Neuilly-en-Dun",
+    "Neuvy-le-Barrois",
+    "Sagonne",
+    "Saint-Aignan-des-Noyers",
+    "Sancoins",
+    "Vereaux"
+  ],
+  "18700": [
+    "Aubigny-sur-Nère",
+    "Ménétréol-sur-Sauldre",
+    "Oizon",
+    "Sainte-Montaine"
+  ],
+  "18800": [
+    "Baugy",
+    "Chassy",
+    "Farges-en-Septaine",
+    "Gron",
+    "Villabon",
+    "Villequiers",
+    "Étréchy"
+  ],
+  "28000": [
+    "Chartres"
+  ],
+  "28100": [
+    "Dreux"
+  ],
+  "28110": [
+    "Lucé"
+  ],
+  "28120": [
+    "Bailleau-le-Pin",
+    "Blandainville",
+    "Cernay",
+    "Charonville",
+    "Chauffours",
+    "Ermenonville-la-Grande",
+    "Ermenonville-la-Petite",
+    "Illiers-Combray",
+    "Les Châtelliers-Notre-Dame",
+    "Magny",
+    "Marchéville",
+    "Meslay-le-Grenet",
+    "Montigny-le-Chartif",
+    "Méréglise",
+    "Nogent-sur-Eure",
+    "Nonvilliers-Grandhoux",
+    "Ollé",
+    "Saint-Avit-les-Guespières",
+    "Saint-Éman",
+    "Sandarville",
+    "Vieuvicq",
+    "Épeautrolles"
+  ],
+  "28130": [
+    "Bouglainval",
+    "Chartainvilliers",
+    "Hanches",
+    "Houx",
+    "Maintenon",
+    "Mévoisins",
+    "Pierres",
+    "Saint-Martin-de-Nigelles",
+    "Saint-Piat",
+    "Soulaires",
+    "Villiers-le-Morhier",
+    "Yermenonville"
+  ],
+  "28140": [
+    "Baigneaux",
+    "Bazoches-en-Dunois",
+    "Bazoches-les-Hautes",
+    "Cormainville",
+    "Courbehaye",
+    "Dambron",
+    "Fontenay-sur-Conie",
+    "Guillonville",
+    "Loigny-la-Bataille",
+    "Lumeau",
+    "Nottonville",
+    "Orgères-en-Beauce",
+    "Poupry",
+    "Péronville",
+    "Terminiers",
+    "Tillay-le-Péneux",
+    "Varize"
+  ],
+  "28150": [
+    "Allonnes",
+    "Beauvilliers",
+    "Boisville-la-Saint-Père",
+    "Boncé",
+    "Les Villages Vovéens",
+    "Louville-la-Chenard",
+    "Moutiers-en-Beauce",
+    "Ouarville",
+    "Prasville",
+    "Réclainville",
+    "Theuville",
+    "Villars",
+    "Ymonville",
+    "Éole-en-Beauce"
+  ],
+  "28160": [
+    "Brou",
+    "Dampierre-sous-Brou",
+    "Dangeau",
+    "Frazé",
+    "Gohory",
+    "Mottereau",
+    "Moulhard",
+    "Unverre",
+    "Yèvres"
+  ],
+  "28170": [
+    "Ardelles",
+    "Châteauneuf-en-Thymerais",
+    "Favières",
+    "Fontaine-les-Ribouts",
+    "Le Boullay-les-Deux-Églises",
+    "Maillebois",
+    "Puiseux",
+    "Saint-Ange-et-Torçay",
+    "Saint-Jean-de-Rebervilliers",
+    "Saint-Maixme-Hauterive",
+    "Saint-Sauveur-Marville",
+    "Serazereux",
+    "Thimert-Gâtelles",
+    "Tremblay-les-Villages"
+  ],
+  "28190": [
+    "Billancelles",
+    "Chuisnes",
+    "Courville-sur-Eure",
+    "Dangers",
+    "Fontaine-la-Guyon",
+    "Fruncé",
+    "Landelles",
+    "Le Favril",
+    "Mittainvilliers-Vérigny",
+    "Orrouer",
+    "Pontgouin",
+    "Saint-Arnoult-des-Bois",
+    "Saint-Georges-sur-Eure",
+    "Saint-Germain-le-Gaillard",
+    "Saint-Luperce",
+    "Villebon"
+  ],
+  "28200": [
+    "Châteaudun",
+    "Conie-Molitard",
+    "Donnemain-Saint-Mamès",
+    "Jallans",
+    "La Chapelle-du-Noyer",
+    "Logron",
+    "Marboué",
+    "Moléans",
+    "Saint-Christophe",
+    "Saint-Denis-Lanneray",
+    "Thiville",
+    "Villampuy",
+    "Villemaury"
+  ],
+  "28210": [
+    "Bréchamps",
+    "Chaudon",
+    "Coulombs",
+    "Croisilles",
+    "Faverolles",
+    "Le Boullay-Mivoye",
+    "Le Boullay-Thierry",
+    "Les Pinthières",
+    "Lormaye",
+    "Nogent-le-Roi",
+    "Néron",
+    "Ormoy",
+    "Saint-Laurent-la-Gâtine",
+    "Saint-Lucien",
+    "Senantes",
+    "Villemeux-sur-Eure"
+  ],
+  "28220": [
+    "Cloyes-les-Trois-Rivières"
+  ],
+  "28230": [
+    "Droue-sur-Drouette",
+    "Épernon"
+  ],
+  "28240": [
+    "Belhomert-Guéhouville",
+    "Champrond-en-Gâtine",
+    "Fontaine-Simon",
+    "Friaize",
+    "La Loupe",
+    "Le Thieulin",
+    "Les Corvées-les-Yys",
+    "Manou",
+    "Meaucé",
+    "Montireau",
+    "Montlandon",
+    "Saint-Denis-des-Puits",
+    "Saint-Maurice-Saint-Germain",
+    "Saint-Victor-de-Buthon",
+    "Saint-Éliph",
+    "Vaupillon"
+  ],
+  "28250": [
+    "Digny",
+    "Jaudrais",
+    "La Framboisière",
+    "La Puisaye",
+    "La Saucelle",
+    "Le Mesnil-Thomas",
+    "Louvilliers-lès-Perche",
+    "Senonches"
+  ],
+  "28260": [
+    "Anet",
+    "Berchères-sur-Vesgre",
+    "Boncourt",
+    "Gilles",
+    "Guainville",
+    "La Chaussée-d'Ivry",
+    "Le Mesnil-Simon",
+    "Oulins",
+    "Rouvres",
+    "Saint-Ouen-Marchefroy",
+    "Saussay",
+    "Sorel-Moussel"
+  ],
+  "28270": [
+    "Beauche",
+    "Brezolles",
+    "Bérou-la-Mulotière",
+    "Châtaincourt",
+    "Crucey-Villages",
+    "Escorpain",
+    "Fessanvilliers-Mattanvilliers",
+    "La Mancelière",
+    "Laons",
+    "Les Châtelets",
+    "Montigny-sur-Avre",
+    "Prudemanche",
+    "Revercourt",
+    "Rueil-la-Gadelière",
+    "Saint-Lubin-de-Cravant"
+  ],
+  "28290": [
+    "Chapelle-Royale",
+    "Vald'Yerre"
+  ],
+  "28300": [
+    "Amilly",
+    "Bailleau-l'Évêque",
+    "Berchères-Saint-Germain",
+    "Briconville",
+    "Challet",
+    "Champhol",
+    "Cintray",
+    "Clévilliers",
+    "Coltainville",
+    "Fresnay-le-Gilmert",
+    "Gasville-Oisème",
+    "Jouy",
+    "Lèves",
+    "Mainvilliers",
+    "Poisvilliers",
+    "Saint-Aubin-des-Bois",
+    "Saint-Prest"
+  ],
+  "28310": [
+    "Baudreville",
+    "Fresnay-l'Évêque",
+    "Gommerville",
+    "Gouillons",
+    "Guilleville",
+    "Intréville",
+    "Janville-en-Beauce",
+    "Levesville-la-Chenard",
+    "Mérouville",
+    "Neuville Saint Denis",
+    "Oinville-Saint-Liphard",
+    "Poinville",
+    "Santilly",
+    "Toury",
+    "Trancrainville"
+  ],
+  "28320": [
+    "Bailleau-Armenonville",
+    "Gallardon",
+    "Gas",
+    "Ymeray",
+    "Écrosnes"
+  ],
+  "28330": [
+    "Authon-du-Perche",
+    "Béthonvilliers",
+    "Chapelle-Guillaume",
+    "Charbonnières",
+    "Coudray-au-Perche",
+    "La Bazoche-Gouet",
+    "Les Autels-Villevillon",
+    "Les Étilleux",
+    "Saint-Bomer"
+  ],
+  "28340": [
+    "Boissy-lès-Perche",
+    "La Chapelle-Fortin",
+    "La Ferté-Vidame",
+    "Lamblore",
+    "Les Ressuintes",
+    "Morvilliers",
+    "Rohaire"
+  ],
+  "28350": [
+    "Dampierre-sur-Avre",
+    "Saint-Lubin-des-Joncherets"
+  ],
+  "28360": [
+    "Dammarie",
+    "Fresnay-le-Comte",
+    "La Bourdinière-Saint-Loup",
+    "Luplanté",
+    "Meslay-le-Vidame",
+    "Prunay-le-Gillon",
+    "Theuville",
+    "Vitray-en-Beauce"
+  ],
+  "28380": [
+    "Saint-Rémy-sur-Avre"
+  ],
+  "28400": [
+    "Arcisses",
+    "Champrond-en-Perchet",
+    "La Gaudaine",
+    "Marolles-les-Buis",
+    "Nogent-le-Rotrou",
+    "Saint-Jean-Pierre-Fixte",
+    "Souancé-au-Perche",
+    "Trizay-Coutretot-Saint-Serge"
+  ],
+  "28410": [
+    "Abondant",
+    "Boutigny-Prouais",
+    "Broué",
+    "Bû",
+    "Goussainville",
+    "Havelu",
+    "Marchezais",
+    "Saint-Lubin-de-la-Haye",
+    "Serville"
+  ],
+  "28480": [
+    "Argenvilliers",
+    "Beaumont-les-Autels",
+    "Chassant",
+    "Combres",
+    "Happonvilliers",
+    "La Croix-du-Perche",
+    "Luigny",
+    "Miermaigne",
+    "Saintigny",
+    "Thiron-Gardais",
+    "Vichères"
+  ],
+  "28500": [
+    "Allainville",
+    "Aunay-sous-Crécy",
+    "Boissy-en-Drouais",
+    "Charpont",
+    "Cherisy",
+    "Crécy-Couvé",
+    "Garancières-en-Drouais",
+    "Garnay",
+    "Germainville",
+    "La Chapelle-Forainvilliers",
+    "Louvilliers-en-Drouais",
+    "Luray",
+    "Marville-Moutiers-Brûlé",
+    "Montreuil",
+    "Mézières-en-Drouais",
+    "Ouerre",
+    "Sainte-Gemme-Moronval",
+    "Saulnières",
+    "Tréon",
+    "Vernouillet",
+    "Vert-en-Drouais",
+    "Écluzelles"
+  ],
+  "28600": [
+    "Luisant"
+  ],
+  "28630": [
+    "Barjouville",
+    "Berchères-les-Pierres",
+    "Corancez",
+    "Fontenay-sur-Eure",
+    "Gellainville",
+    "Le Coudray",
+    "Mignières",
+    "Morancez",
+    "Nogent-le-Phaye",
+    "Sours",
+    "Thivars",
+    "Ver-lès-Chartres"
+  ],
+  "28700": [
+    "Ardelu",
+    "Aunay-sous-Auneau",
+    "Auneau-Bleury-Saint-Symphorien",
+    "Béville-le-Comte",
+    "Champseru",
+    "Châtenay",
+    "Denonville",
+    "Francourville",
+    "Garancières-en-Beauce",
+    "Gommerville",
+    "Houville-la-Branche",
+    "La Chapelle-d'Aunainville",
+    "Le Gué-de-Longroi",
+    "Levainville",
+    "Léthuin",
+    "Maisons",
+    "Moinville-la-Jeulin",
+    "Mondonville-Saint-Jean",
+    "Morainville",
+    "Oinville-sous-Auneau",
+    "Oysonville",
+    "Roinville",
+    "Saint-Léger-des-Aubées",
+    "Sainville",
+    "Santeuil",
+    "Umpeau",
+    "Vierville",
+    "Voise"
+  ],
+  "28800": [
+    "Alluyes",
+    "Bonneval",
+    "Bouville",
+    "Bullainville",
+    "Dancy",
+    "Flacey",
+    "Le Gault-Saint-Denis",
+    "Montboissier",
+    "Montharville",
+    "Moriers",
+    "Neuvy-en-Dunois",
+    "Pré-Saint-Martin",
+    "Pré-Saint-Évroult",
+    "Saint-Maur-sur-le-Loir",
+    "Sancheville",
+    "Saumeray",
+    "Trizay-lès-Bonneval",
+    "Villiers-Saint-Orien"
+  ],
+  "36000": [
+    "Châteauroux"
+  ],
+  "36100": [
+    "Brives",
+    "Chouday",
+    "Condé",
+    "Issoudun",
+    "La Champenoise",
+    "Les Bordes",
+    "Lizeray",
+    "Meunet-Planches",
+    "Neuvy-Pailloux",
+    "Saint-Aoustrille",
+    "Saint-Aubin",
+    "Saint-Georges-sur-Arnon",
+    "Saint-Valentin",
+    "Sainte-Fauste",
+    "Ségry",
+    "Thizay",
+    "Vouillon"
+  ],
+  "36110": [
+    "Baudres",
+    "Bouges-le-Château",
+    "Bretagne",
+    "Brion",
+    "Francillon",
+    "Levroux",
+    "Moulins-sur-Céphons",
+    "Rouvres-les-Bois",
+    "Villegongis",
+    "Vineuil"
+  ],
+  "36120": [
+    "Ambrault",
+    "Ardentes",
+    "Bommiers",
+    "Jeu-les-Bois",
+    "Mâron",
+    "Pruniers",
+    "Saint-Août",
+    "Sassierges-Saint-Germain",
+    "Étrechet"
+  ],
+  "36130": [
+    "Coings",
+    "Diors",
+    "Déols",
+    "Montierchaume"
+  ],
+  "36140": [
+    "Aigurande",
+    "Crevant",
+    "Crozon-sur-Vauvre",
+    "La Buxerette",
+    "Lourdoueix-Saint-Michel",
+    "Montchevrier"
+  ],
+  "36150": [
+    "Aize",
+    "Buxeuil",
+    "Fontenay",
+    "Giroux",
+    "Guilly",
+    "La Chapelle-Saint-Laurian",
+    "Liniez",
+    "Luçay-le-Libre",
+    "Meunet-sur-Vatan",
+    "Ménétréols-sous-Vatan",
+    "Reboursin",
+    "Saint-Florentin",
+    "Vatan"
+  ],
+  "36160": [
+    "Champillet",
+    "Feusines",
+    "La Motte-Feuilly",
+    "Lignerolles",
+    "Pouligny-Notre-Dame",
+    "Pouligny-Saint-Martin",
+    "Pérassay",
+    "Sainte-Sévère-sur-Indre",
+    "Sazeray",
+    "Urciers",
+    "Vigoulant",
+    "Vijon"
+  ],
+  "36170": [
+    "Chazelet",
+    "La Châtre-Langlin",
+    "Mouhet",
+    "Parnac",
+    "Roussines",
+    "Sacierges-Saint-Martin",
+    "Saint-Benoît-du-Sault",
+    "Saint-Civran",
+    "Saint-Gilles",
+    "Vigoux"
+  ],
+  "36180": [
+    "Frédille",
+    "Heugnes",
+    "Pellevoisin",
+    "Selles-sur-Nahon"
+  ],
+  "36190": [
+    "Cuzion",
+    "Gargilesse-Dampierre",
+    "Orsennes",
+    "Pommiers",
+    "Saint-Plantaire"
+  ],
+  "36200": [
+    "Argenton-sur-Creuse",
+    "Badecon-le-Pin",
+    "Bouesse",
+    "Ceaulmont",
+    "Celon",
+    "Chavin",
+    "Le Menoux",
+    "Le Pêchereau",
+    "Mosnay",
+    "Saint-Marcel",
+    "Tendu"
+  ],
+  "36210": [
+    "Anjouin",
+    "Bagneux",
+    "Chabris",
+    "Dun-le-Poëlier",
+    "Menetou-sur-Nahon",
+    "Orville",
+    "Poulaines",
+    "Saint-Christophe-en-Bazelle",
+    "Sembleçay",
+    "Val-Fouzon"
+  ],
+  "36220": [
+    "Fontgombault",
+    "Lingé",
+    "Lurais",
+    "Lureuil",
+    "Martizay",
+    "Mérigny",
+    "Néons-sur-Creuse",
+    "Preuilly-la-Ville",
+    "Sauzelles",
+    "Tournon-Saint-Martin"
+  ],
+  "36230": [
+    "Buxières-d'Aillac",
+    "Fougerolles",
+    "Gournay",
+    "Lys-Saint-Georges",
+    "Mers-sur-Indre",
+    "Montipouret",
+    "Neuvy-Saint-Sépulchre",
+    "Saint-Denis-de-Jouhet",
+    "Sarzay",
+    "Tranzault"
+  ],
+  "36240": [
+    "Gehée",
+    "Jeu-Maloches",
+    "Préaux",
+    "Écueillé"
+  ],
+  "36250": [
+    "Niherne",
+    "Saint-Maur"
+  ],
+  "36260": [
+    "Diou",
+    "Migny",
+    "Paudy",
+    "Reuilly",
+    "Saint-Pierre-de-Jards",
+    "Sainte-Lizaigne"
+  ],
+  "36270": [
+    "Baraize",
+    "Bazaiges",
+    "Éguzon-Chantôme"
+  ],
+  "36290": [
+    "Azay-le-Ferron",
+    "Mézières-en-Brenne",
+    "Obterre",
+    "Paulnay",
+    "Saint-Michel-en-Brenne",
+    "Saulnay",
+    "Villiers"
+  ],
+  "36300": [
+    "Ciron",
+    "Concremiers",
+    "Douadic",
+    "Ingrandes",
+    "Le Blanc",
+    "Pouligny-Saint-Pierre",
+    "Rosnay",
+    "Ruffec",
+    "Saint-Aigny"
+  ],
+  "36310": [
+    "Beaulieu",
+    "Bonneuil",
+    "Chaillac",
+    "Dunet",
+    "Tilly"
+  ],
+  "36320": [
+    "Villedieu-sur-Indre"
+  ],
+  "36330": [
+    "Arthon",
+    "Le Poinçonnet",
+    "Velles"
+  ],
+  "36340": [
+    "Cluis",
+    "Maillet",
+    "Malicornay",
+    "Mouhers"
+  ],
+  "36350": [
+    "La Pérouille",
+    "Luant"
+  ],
+  "36360": [
+    "Luçay-le-Mâle",
+    "Villentrois-Faverolles-en-Berry"
+  ],
+  "36370": [
+    "Bélâbre",
+    "Chalais",
+    "Lignac",
+    "Mauvières",
+    "Prissac",
+    "Saint-Hilaire-sur-Benaize"
+  ],
+  "36400": [
+    "Briantes",
+    "Chassignolles",
+    "La Berthenoux",
+    "La Châtre",
+    "Lacs",
+    "Le Magny",
+    "Lourouer-Saint-Laurent",
+    "Montgivray",
+    "Montlevicq",
+    "Nohant-Vic",
+    "Néret",
+    "Saint-Chartier",
+    "Saint-Christophe-en-Boucherie",
+    "Thevet-Saint-Julien",
+    "Verneuil-sur-Igneraie",
+    "Vicq-Exemplet"
+  ],
+  "36500": [
+    "Argy",
+    "Buzançais",
+    "Chezelles",
+    "La Chapelle-Orthemale",
+    "Méobecq",
+    "Neuillay-les-Bois",
+    "Palluau-sur-Indre",
+    "Saint-Genou",
+    "Saint-Lactencin",
+    "Sainte-Gemme",
+    "Sougé",
+    "Vendœuvres",
+    "Villegouin"
+  ],
+  "36600": [
+    "Fontguenand",
+    "La Vernelle",
+    "Langé",
+    "Lye",
+    "Valençay",
+    "Veuil",
+    "Vicq-sur-Nahon",
+    "Villentrois-Faverolles-en-Berry"
+  ],
+  "36700": [
+    "Arpheuilles",
+    "Châtillon-sur-Indre",
+    "Clion",
+    "Cléré-du-Bois",
+    "Fléré-la-Rivière",
+    "Le Tranger",
+    "Murs",
+    "Saint-Cyran-du-Jambot",
+    "Saint-Médard"
+  ],
+  "36800": [
+    "Chasseneuil",
+    "Chitray",
+    "Le Pont-Chrétien-Chabenet",
+    "Luzeret",
+    "Migné",
+    "Nuret-le-Ferron",
+    "Oulches",
+    "Rivarennes",
+    "Saint-Gaultier",
+    "Thenay"
+  ],
+  "37000": [
+    "Tours"
+  ],
+  "37100": [
+    "Tours"
+  ],
+  "37110": [
+    "Autrèche",
+    "Auzouer-en-Touraine",
+    "Château-Renault",
+    "Dame-Marie-les-Bois",
+    "La Ferrière",
+    "Le Boulay",
+    "Les Hermites",
+    "Monthodon",
+    "Morand",
+    "Neuville-sur-Brenne",
+    "Saint-Nicolas-des-Motets",
+    "Saunay",
+    "Villedômer"
+  ],
+  "37120": [
+    "Assay",
+    "Braslou",
+    "Braye-sous-Faye",
+    "Champigny-sur-Veude",
+    "Chaveignes",
+    "Courcoué",
+    "Faye-la-Vineuse",
+    "Jaulnay",
+    "La Tour-Saint-Gelin",
+    "Luzé",
+    "Lémeré",
+    "Marigny-Marmande",
+    "Razines",
+    "Richelieu",
+    "Verneuil-le-Château"
+  ],
+  "37130": [
+    "Bréhémont",
+    "Cinq-Mars-la-Pile",
+    "Coteaux-sur-Loire",
+    "La Chapelle-aux-Naux",
+    "Langeais",
+    "Lignières-de-Touraine",
+    "Mazières-de-Touraine"
+  ],
+  "37140": [
+    "Benais",
+    "Bourgueil",
+    "Chouzé-sur-Loire",
+    "Coteaux-sur-Loire",
+    "La Chapelle-sur-Loire",
+    "Restigné",
+    "Saint-Nicolas-de-Bourgueil"
+  ],
+  "37150": [
+    "Bléré",
+    "Chenonceaux",
+    "Chisseaux",
+    "Civray-de-Touraine",
+    "Dierre",
+    "Francueil",
+    "La Croix-en-Touraine",
+    "Luzillé",
+    "Épeigné-les-Bois"
+  ],
+  "37160": [
+    "Abilly",
+    "Civray-sur-Esves",
+    "Descartes",
+    "La Celle-Saint-Avant",
+    "Marcé-sur-Esves",
+    "Neuilly-le-Brignon"
+  ],
+  "37170": [
+    "Chambray-lès-Tours"
+  ],
+  "37190": [
+    "Azay-le-Rideau",
+    "Cheillé",
+    "Druye",
+    "Neuil",
+    "Rivarennes",
+    "Saché",
+    "Vallères",
+    "Villaines-les-Rochers"
+  ],
+  "37200": [
+    "Tours"
+  ],
+  "37210": [
+    "Chançay",
+    "Noizay",
+    "Parçay-Meslay",
+    "Rochecorbon",
+    "Vernou-sur-Brenne",
+    "Vouvray"
+  ],
+  "37220": [
+    "Avon-les-Roches",
+    "Brizay",
+    "Chezelles",
+    "Crissay-sur-Manse",
+    "Crouzilles",
+    "L'Île-Bouchard",
+    "Panzoult",
+    "Parçay-sur-Vienne",
+    "Rilly-sur-Vienne",
+    "Sazilly",
+    "Tavant",
+    "Theneuil",
+    "Trogues"
+  ],
+  "37230": [
+    "Fondettes",
+    "Luynes",
+    "Pernay",
+    "Saint-Étienne-de-Chigny"
+  ],
+  "37240": [
+    "Bossée",
+    "Bournan",
+    "Ciran",
+    "Cussay",
+    "Esves-le-Moutier",
+    "La Chapelle-Blanche-Saint-Martin",
+    "Le Louroux",
+    "Ligueil",
+    "Manthelan",
+    "Vou"
+  ],
+  "37250": [
+    "Montbazon",
+    "Sorigny",
+    "Veigné"
+  ],
+  "37260": [
+    "Artannes-sur-Indre",
+    "Monts",
+    "Pont-de-Ruan",
+    "Thilouze",
+    "Villeperdue"
+  ],
+  "37270": [
+    "Athée-sur-Cher",
+    "Azay-sur-Cher",
+    "Larçay",
+    "Montlouis-sur-Loire",
+    "Saint-Martin-le-Beau",
+    "Véretz"
+  ],
+  "37290": [
+    "Bossay-sur-Claise",
+    "Boussay",
+    "Chambon",
+    "Charnizay",
+    "Preuilly-sur-Claise",
+    "Tournon-Saint-Pierre",
+    "Yzeures-sur-Creuse"
+  ],
+  "37300": [
+    "Joué-lès-Tours"
+  ],
+  "37310": [
+    "Azay-sur-Indre",
+    "Chambourg-sur-Indre",
+    "Chédigny",
+    "Cigogné",
+    "Courçay",
+    "Dolus-le-Sec",
+    "Reignac-sur-Indre",
+    "Saint-Quentin-sur-Indrois",
+    "Sublaines",
+    "Tauxigny-Saint-Bauld"
+  ],
+  "37320": [
+    "Cormery",
+    "Esvres",
+    "Louans",
+    "Saint-Branchs",
+    "Truyes"
+  ],
+  "37330": [
+    "Braye-sur-Maulne",
+    "Brèches",
+    "Channay-sur-Lathan",
+    "Château-la-Vallière",
+    "Couesmes",
+    "Courcelles-de-Touraine",
+    "Lublé",
+    "Marcilly-sur-Maulne",
+    "Saint-Laurent-de-Lin",
+    "Souvigné",
+    "Villiers-au-Bouin"
+  ],
+  "37340": [
+    "Ambillou",
+    "Avrillé-les-Ponceaux",
+    "Cléré-les-Pins",
+    "Continvoir",
+    "Gizeux",
+    "Hommes",
+    "Rillé",
+    "Savigné-sur-Lathan"
+  ],
+  "37350": [
+    "Barrou",
+    "Chaumussay",
+    "Ferrière-Larçon",
+    "La Celle-Guenand",
+    "La Guerche",
+    "Le Grand-Pressigny",
+    "Le Petit-Pressigny",
+    "Paulmy"
+  ],
+  "37360": [
+    "Beaumont-Louestault",
+    "Neuillé-Pont-Pierre",
+    "Rouziers-de-Touraine",
+    "Saint-Antoine-du-Rocher",
+    "Semblançay",
+    "Sonzay"
+  ],
+  "37370": [
+    "Beaumont-Louestault",
+    "Bueil-en-Touraine",
+    "Chemillé-sur-Dême",
+    "Marray",
+    "Neuvy-le-Roi",
+    "Saint-Aubin-le-Dépeint",
+    "Saint-Christophe-sur-le-Nais",
+    "Saint-Paterne-Racan",
+    "Villebourg",
+    "Épeigné-sur-Dême"
+  ],
+  "37380": [
+    "Crotelles",
+    "Monnaie",
+    "Neuillé-le-Lierre",
+    "Nouzilly",
+    "Reugny",
+    "Saint-Laurent-en-Gâtines"
+  ],
+  "37390": [
+    "Cerelles",
+    "Chanceaux-sur-Choisille",
+    "Charentilly",
+    "La Membrolle-sur-Choisille",
+    "Mettray",
+    "Notre-Dame-d'Oé",
+    "Saint-Roch"
+  ],
+  "37400": [
+    "Amboise",
+    "Lussault-sur-Loire"
+  ],
+  "37420": [
+    "Avoine",
+    "Beaumont-en-Véron",
+    "Huismes",
+    "Rigny-Ussé",
+    "Savigny-en-Véron"
+  ],
+  "37460": [
+    "Beaumont-Village",
+    "Chemillé-sur-Indrois",
+    "Céré-la-Ronde",
+    "Genillé",
+    "Le Liège",
+    "Loché-sur-Indrois",
+    "Montrésor",
+    "Nouans-les-Fontaines",
+    "Orbigny",
+    "Villedômain",
+    "Villeloin-Coulangé"
+  ],
+  "37500": [
+    "Anché",
+    "Candes-Saint-Martin",
+    "Chinon",
+    "Cinais",
+    "Couziers",
+    "Cravant-les-Côteaux",
+    "La Roche-Clermault",
+    "Lerné",
+    "Ligré",
+    "Marçay",
+    "Rivière",
+    "Saint-Benoît-la-Forêt",
+    "Saint-Germain-sur-Vienne",
+    "Seuilly",
+    "Thizay"
+  ],
+  "37510": [
+    "Ballan-Miré",
+    "Berthenay",
+    "Saint-Genouph",
+    "Savonnières",
+    "Villandry"
+  ],
+  "37520": [
+    "La Riche"
+  ],
+  "37530": [
+    "Cangey",
+    "Chargé",
+    "Limeray",
+    "Montreuil-en-Touraine",
+    "Mosnes",
+    "Nazelles-Négron",
+    "Pocé-sur-Cisse",
+    "Saint-Ouen-les-Vignes",
+    "Saint-Règle",
+    "Souvigny-de-Touraine"
+  ],
+  "37540": [
+    "Saint-Cyr-sur-Loire"
+  ],
+  "37550": [
+    "Saint-Avertin"
+  ],
+  "37600": [
+    "Beaulieu-lès-Loches",
+    "Betz-le-Château",
+    "Bridoré",
+    "Chanceaux-près-Loches",
+    "Ferrière-sur-Beaulieu",
+    "Loches",
+    "Mouzay",
+    "Perrusson",
+    "Saint-Flovier",
+    "Saint-Hippolyte",
+    "Saint-Jean-Saint-Germain",
+    "Saint-Senoch",
+    "Sennevières",
+    "Varennes",
+    "Verneuil-sur-Indre"
+  ],
+  "37700": [
+    "La Ville-aux-Dames",
+    "Saint-Pierre-des-Corps"
+  ],
+  "37800": [
+    "Antogny-le-Tillac",
+    "Draché",
+    "Maillé",
+    "Marcilly-sur-Vienne",
+    "Nouâtre",
+    "Noyant-de-Touraine",
+    "Ports-sur-Vienne",
+    "Pouzay",
+    "Pussigny",
+    "Saint-Épain",
+    "Sainte-Catherine-de-Fierbois",
+    "Sainte-Maure-de-Touraine",
+    "Sepmes"
+  ],
+  "41000": [
+    "Blois",
+    "Saint-Denis-sur-Loire",
+    "Saint-Sulpice-de-Pommeray",
+    "Villebarou",
+    "Villerbon"
+  ],
+  "41100": [
+    "Areines",
+    "Azé",
+    "Coulommiers-la-Tour",
+    "Crucheray",
+    "Faye",
+    "Lisle",
+    "Marcilly-en-Beauce",
+    "Mazangé",
+    "Meslay",
+    "Naveil",
+    "Pezou",
+    "Périgny",
+    "Renay",
+    "Rocé",
+    "Saint-Firmin-des-Prés",
+    "Saint-Ouen",
+    "Sainte-Anne",
+    "Selommes",
+    "Thoré-la-Rochette",
+    "Vendôme",
+    "Villemardy",
+    "Villerable",
+    "Villeromain",
+    "Villetrun",
+    "Villiers-sur-Loir",
+    "Villiersfaux"
+  ],
+  "41110": [
+    "Châteauvieux",
+    "Couffy",
+    "Mareuil-sur-Cher",
+    "Pouillé",
+    "Saint-Aignan",
+    "Seigy"
+  ],
+  "41120": [
+    "Candé-sur-Beuvron",
+    "Cellettes",
+    "Chailles",
+    "Chitenay",
+    "Cormeray",
+    "Le Controis-en-Sologne",
+    "Les Montils",
+    "Monthou-sur-Bièvre",
+    "Sambin",
+    "Seur",
+    "Valaire"
+  ],
+  "41130": [
+    "Billy",
+    "Châtillon-sur-Cher",
+    "Gièvres",
+    "Meusnes",
+    "Selles-sur-Cher"
+  ],
+  "41140": [
+    "Méhers",
+    "Noyers-sur-Cher",
+    "Saint-Romain-sur-Cher",
+    "Thésée"
+  ],
+  "41150": [
+    "Chaumont-sur-Loire",
+    "Mesland",
+    "Monteaux",
+    "Rilly-sur-Loire",
+    "Valloire-sur-Cisse",
+    "Veuzain-sur-Loire"
+  ],
+  "41160": [
+    "Beauce la Romaine",
+    "Brévainville",
+    "Busloup",
+    "Danzé",
+    "Fréteval",
+    "La Ville-aux-Clercs",
+    "Lignières",
+    "Moisy",
+    "Morée",
+    "Ouzouer-le-Doyen",
+    "Rahart",
+    "Saint-Hilaire-la-Gravelle",
+    "Saint-Jean-Froidmentel"
+  ],
+  "41170": [
+    "Baillou",
+    "Beauchêne",
+    "Choue",
+    "Cormenon",
+    "Couëtron-au-Perche",
+    "Le Plessis-Dorin",
+    "Le Temple",
+    "Mondoubleau",
+    "Saint-Marc-du-Cor",
+    "Sargé-sur-Braye"
+  ],
+  "41190": [
+    "Françay",
+    "Herbault",
+    "Lancôme",
+    "Landes-le-Gaulois",
+    "Pray",
+    "Saint-Cyr-du-Gault",
+    "Saint-Lubin-en-Vergonnois",
+    "Saint-Étienne-des-Guérets",
+    "Santenay",
+    "Tourailles",
+    "Valencisse"
+  ],
+  "41200": [
+    "Loreux",
+    "Millançay",
+    "Pruniers-en-Sologne",
+    "Romorantin-Lanthenay",
+    "Villefranche-sur-Cher",
+    "Villeherviers"
+  ],
+  "41210": [
+    "La Ferté-Beauharnais",
+    "La Marolle-en-Sologne",
+    "Marcilly-en-Gault",
+    "Montrieux-en-Sologne",
+    "Neung-sur-Beuvron",
+    "Saint-Viâtre"
+  ],
+  "41220": [
+    "Crouy-sur-Cosson",
+    "Dhuizon",
+    "La Ferté-Saint-Cyr",
+    "Saint-Laurent-Nouan",
+    "Thoury",
+    "Villeny"
+  ],
+  "41230": [
+    "Courmemin",
+    "Gy-en-Sologne",
+    "Lassay-sur-Croisne",
+    "Mur-de-Sologne",
+    "Rougeou",
+    "Soings-en-Sologne",
+    "Veilleins",
+    "Vernou-en-Sologne"
+  ],
+  "41240": [
+    "Autainville",
+    "Beauce la Romaine",
+    "Binas",
+    "Saint-Laurent-des-Bois",
+    "Villermain"
+  ],
+  "41250": [
+    "Bauzy",
+    "Bracieux",
+    "Chambord",
+    "Fontaines-en-Sologne",
+    "Maslives",
+    "Mont-près-Chambord",
+    "Neuvy",
+    "Tour-en-Sologne"
+  ],
+  "41260": [
+    "La Chaussée-Saint-Victor"
+  ],
+  "41270": [
+    "Bouffry",
+    "Boursay",
+    "Chauvigny-du-Perche",
+    "Droué",
+    "Fontaine-Raoul",
+    "La Chapelle-Vicomtesse",
+    "La Fontenelle",
+    "Le Gault-du-Perche",
+    "Le Poislay",
+    "Romilly",
+    "Ruan-sur-Egvonne",
+    "Villebout"
+  ],
+  "41290": [
+    "Boisseau",
+    "Conan",
+    "La Chapelle-Enchérie",
+    "Oucques La Nouvelle",
+    "Rhodon",
+    "Vievy-le-Rayé",
+    "Villeneuve-Frouville",
+    "Épiais"
+  ],
+  "41300": [
+    "La Ferté-Imbault",
+    "Orçay",
+    "Pierrefitte-sur-Sauldre",
+    "Salbris",
+    "Selles-Saint-Denis",
+    "Souesmes",
+    "Theillay"
+  ],
+  "41310": [
+    "Ambloy",
+    "Authon",
+    "Gombergean",
+    "Huisseau-en-Beauce",
+    "Lancé",
+    "Nourray",
+    "Prunay-Cassereau",
+    "Saint-Amand-Longpré",
+    "Saint-Gourgon",
+    "Sasnières",
+    "Villechauve",
+    "Villeporcher"
+  ],
+  "41320": [
+    "Châtres-sur-Cher",
+    "La Chapelle-Montmartin",
+    "Langon-sur-Cher",
+    "Maray",
+    "Mennetou-sur-Cher",
+    "Saint-Julien-sur-Cher",
+    "Saint-Loup"
+  ],
+  "41330": [
+    "Averdon",
+    "Champigny-en-Beauce",
+    "Fossé",
+    "La Chapelle-Vendômoise",
+    "Marolles",
+    "Saint-Bohaire",
+    "Villefrancœur"
+  ],
+  "41350": [
+    "Huisseau-sur-Cosson",
+    "Montlivault",
+    "Saint-Claude-de-Diray",
+    "Saint-Gervais-la-Forêt",
+    "Vineuil"
+  ],
+  "41360": [
+    "Cellé",
+    "Fortan",
+    "Lunay",
+    "Savigny-sur-Braye",
+    "Épuisay"
+  ],
+  "41370": [
+    "Briou",
+    "Concriers",
+    "Josnes",
+    "La Madeleine-Villefrouin",
+    "Le Plessis-l'Échelle",
+    "Lorges",
+    "Marchenoir",
+    "Roches",
+    "Saint-Léonard-en-Beauce",
+    "Talcy"
+  ],
+  "41400": [
+    "Angé",
+    "Chissay-en-Touraine",
+    "Faverolles-sur-Cher",
+    "Le Controis-en-Sologne",
+    "Monthou-sur-Cher",
+    "Montrichard Val de Cher",
+    "Pontlevoy",
+    "Saint-Georges-sur-Cher",
+    "Saint-Julien-de-Chédon",
+    "Vallières-les-Grandes"
+  ],
+  "41500": [
+    "Avaray",
+    "Cour-sur-Loire",
+    "Courbouzon",
+    "La Chapelle-Saint-Martin-en-Plaine",
+    "Lestiou",
+    "Maves",
+    "Menars",
+    "Mer",
+    "Muides-sur-Loire",
+    "Mulsans",
+    "Saint-Dyé-sur-Loire",
+    "Suèvres",
+    "Séris",
+    "Villexanton"
+  ],
+  "41600": [
+    "Chaon",
+    "Chaumont-sur-Tharonne",
+    "Lamotte-Beuvron",
+    "Nouan-le-Fuzelier",
+    "Souvigny-en-Sologne",
+    "Vouzon",
+    "Yvoy-le-Marron"
+  ],
+  "41700": [
+    "Cheverny",
+    "Choussy",
+    "Chémery",
+    "Couddes",
+    "Cour-Cheverny",
+    "Fresnes",
+    "Le Controis-en-Sologne",
+    "Oisly",
+    "Sassay"
+  ],
+  "41800": [
+    "Artins",
+    "Bonneveau",
+    "Fontaine-les-Coteaux",
+    "Houssay",
+    "Lavardin",
+    "Les Essarts",
+    "Les Hayes",
+    "Les Roches-l'Évêque",
+    "Montoire-sur-le-Loir",
+    "Montrouveau",
+    "Saint-Arnoult",
+    "Saint-Jacques-des-Guérets",
+    "Saint-Martin-des-Bois",
+    "Saint-Rimay",
+    "Sougé",
+    "Ternay",
+    "Troo",
+    "Vallée-de-Ronsard",
+    "Villavard",
+    "Villedieu-le-Château"
+  ],
+  "45000": [
+    "Orléans"
+  ],
+  "45100": [
+    "Orléans"
+  ],
+  "45110": [
+    "Châteauneuf-sur-Loire",
+    "Germigny-des-Prés",
+    "Saint-Martin-d'Abbat",
+    "Sigloy"
+  ],
+  "45120": [
+    "Cepoy",
+    "Châlette-sur-Loing",
+    "Corquilleroy",
+    "Girolles"
+  ],
+  "45130": [
+    "Baccon",
+    "Baule",
+    "Charsonville",
+    "Coulmiers",
+    "Huisseau-sur-Mauves",
+    "Le Bardon",
+    "Meung-sur-Loire",
+    "Rozières-en-Beauce",
+    "Saint-Ay",
+    "Épieds-en-Beauce"
+  ],
+  "45140": [
+    "Boulay-les-Barres",
+    "Bucy-Saint-Liphard",
+    "Ingré",
+    "Ormes",
+    "Saint-Jean-de-la-Ruelle"
+  ],
+  "45150": [
+    "Darvoy",
+    "Férolles",
+    "Jargeau",
+    "Ouvrouer-les-Champs"
+  ],
+  "45160": [
+    "Ardon",
+    "Olivet",
+    "Saint-Hilaire-Saint-Mesmin"
+  ],
+  "45170": [
+    "Aschères-le-Marché",
+    "Attray",
+    "Bougy-lez-Neuville",
+    "Chilleurs-aux-Bois",
+    "Crottes-en-Pithiverais",
+    "Montigny",
+    "Neuville-aux-Bois",
+    "Oison",
+    "Saint-Lyé-la-Forêt",
+    "Santeau",
+    "Tivernon",
+    "Villereau"
+  ],
+  "45190": [
+    "Beaugency",
+    "Cravant",
+    "Messas",
+    "Tavers",
+    "Villorceau"
+  ],
+  "45200": [
+    "Amilly",
+    "Montargis",
+    "Paucourt"
+  ],
+  "45210": [
+    "Bazoches-sur-le-Betz",
+    "Chevannes",
+    "Chevry-sous-le-Bignon",
+    "Ferrières-en-Gâtinais",
+    "Fontenay-sur-Loing",
+    "Griselles",
+    "La Chapelle-Saint-Sépulcre",
+    "La Selle-en-Hermoy",
+    "La Selle-sur-le-Bied",
+    "Le Bignon-Mirabeau",
+    "Louzouer",
+    "Mérinville",
+    "Nargis",
+    "Pers-en-Gâtinais",
+    "Rozoy-le-Vieil",
+    "Thorailles"
+  ],
+  "45220": [
+    "Chuelles",
+    "Château-Renard",
+    "Douchy-Montcorbon",
+    "Gy-les-Nonains",
+    "Melleroy",
+    "Saint-Firmin-des-Bois",
+    "Saint-Germain-des-Prés",
+    "Triguères"
+  ],
+  "45230": [
+    "Adon",
+    "Aillant-sur-Milleron",
+    "Châtillon-Coligny",
+    "Dammarie-sur-Loing",
+    "Feins-en-Gâtinais",
+    "La Bussière",
+    "La Chapelle-sur-Aveyron",
+    "Le Charme",
+    "Montbouy",
+    "Saint-Maurice-sur-Aveyron",
+    "Sainte-Geneviève-des-Bois"
+  ],
+  "45240": [
+    "La Ferté-Saint-Aubin",
+    "Ligny-le-Ribault",
+    "Marcilly-en-Villette",
+    "Ménestreau-en-Villette",
+    "Sennely"
+  ],
+  "45250": [
+    "Breteau",
+    "Briare",
+    "Escrignelles",
+    "Ousson-sur-Loire",
+    "Ouzouer-sur-Trézée"
+  ],
+  "45260": [
+    "Chailly-en-Gâtinais",
+    "Châtenoy",
+    "Coudroy",
+    "La Cour-Marigny",
+    "Lorris",
+    "Montereau",
+    "Noyers",
+    "Presnoy",
+    "Thimory",
+    "Vieilles-Maisons-sur-Joudry"
+  ],
+  "45270": [
+    "Auvilliers-en-Gâtinais",
+    "Beauchamps-sur-Huillard",
+    "Bellegarde",
+    "Chapelon",
+    "Fréville-du-Gâtinais",
+    "Ladon",
+    "Moulon",
+    "Mézières-en-Gâtinais",
+    "Nesploy",
+    "Ouzouer-sous-Bellegarde",
+    "Quiers-sur-Bezonde",
+    "Villemoutiers"
+  ],
+  "45290": [
+    "Boismorand",
+    "Langesse",
+    "Le Moulinet-sur-Solin",
+    "Les Choux",
+    "Nogent-sur-Vernisson",
+    "Oussoy-en-Gâtinais",
+    "Ouzouer-des-Champs",
+    "Pressigny-les-Pins",
+    "Varennes-Changy"
+  ],
+  "45300": [
+    "Ascoux",
+    "Audeville",
+    "Bondaroy",
+    "Bouilly-en-Gâtinais",
+    "Bouzonville-aux-Bois",
+    "Boynes",
+    "Courcelles-le-Roi",
+    "Courcy-aux-Loges",
+    "Césarville-Dossainville",
+    "Dadonville",
+    "Engenville",
+    "Escrennes",
+    "Estouy",
+    "Givraines",
+    "Guigneville",
+    "Intville-la-Guétard",
+    "Laas",
+    "Le Malesherbois",
+    "Mareau-aux-Bois",
+    "Marsainvilliers",
+    "Morville-en-Beauce",
+    "Pannecières",
+    "Pithiviers",
+    "Pithiviers-le-Vieil",
+    "Ramoulu",
+    "Rouvres-Saint-Jean",
+    "Sermaises",
+    "Thignonville",
+    "Vrigny",
+    "Yèvre-la-Ville"
+  ],
+  "45310": [
+    "Bricy",
+    "Coinces",
+    "Gémigny",
+    "La Chapelle-Onzerain",
+    "Patay",
+    "Rouvray-Sainte-Croix",
+    "Saint-Péravy-la-Colombe",
+    "Saint-Sigismond",
+    "Tournoisis",
+    "Villamblain",
+    "Villeneuve-sur-Conie"
+  ],
+  "45320": [
+    "Chantecoq",
+    "Courtemaux",
+    "Courtenay",
+    "Ervauville",
+    "Foucherolles",
+    "Saint-Hilaire-les-Andrésis"
+  ],
+  "45330": [
+    "Augerville-la-Rivière",
+    "Le Malesherbois"
+  ],
+  "45340": [
+    "Auxy",
+    "Barville-en-Gâtinais",
+    "Batilly-en-Gâtinais",
+    "Beaune-la-Rolande",
+    "Boiscommun",
+    "Bordeaux-en-Gâtinais",
+    "Chambon-la-Forêt",
+    "Gaubertin",
+    "Juranville",
+    "Montbarrois",
+    "Montliard",
+    "Nancray-sur-Rimarde",
+    "Nibelle",
+    "Saint-Loup-des-Vignes",
+    "Saint-Michel",
+    "Égry"
+  ],
+  "45360": [
+    "Cernoy-en-Berry",
+    "Châtillon-sur-Loire",
+    "Pierrefitte-ès-Bois",
+    "Saint-Firmin-sur-Loire"
+  ],
+  "45370": [
+    "Cléry-Saint-André",
+    "Dry",
+    "Jouy-le-Potier",
+    "Mareau-aux-Prés",
+    "Mézières-lez-Cléry"
+  ],
+  "45380": [
+    "Chaingy",
+    "La Chapelle-Saint-Mesmin"
+  ],
+  "45390": [
+    "Aulnay-la-Rivière",
+    "Boësses",
+    "Briarres-sur-Essonne",
+    "Bromeilles",
+    "Desmonts",
+    "Dimancheville",
+    "Grangermont",
+    "La Neuville-sur-Essonne",
+    "Ondreville-sur-Essonne",
+    "Orville",
+    "Puiseaux",
+    "Échilleuses"
+  ],
+  "45400": [
+    "Chanteau",
+    "Fleury-les-Aubrais",
+    "Semoy"
+  ],
+  "45410": [
+    "Artenay",
+    "Bucy-le-Roi",
+    "Lion-en-Beauce",
+    "Ruan",
+    "Sougy",
+    "Trinay"
+  ],
+  "45420": [
+    "Batilly-en-Puisaye",
+    "Bonny-sur-Loire",
+    "Champoulet",
+    "Dammarie-en-Puisaye",
+    "Faverelles",
+    "Thou"
+  ],
+  "45430": [
+    "Bou",
+    "Chécy",
+    "Mardié"
+  ],
+  "45450": [
+    "Donnery",
+    "Fay-aux-Loges",
+    "Ingrannes",
+    "Sully-la-Chapelle"
+  ],
+  "45460": [
+    "Bonnée",
+    "Bouzy-la-Forêt",
+    "Bray-Saint-Aignan",
+    "Les Bordes"
+  ],
+  "45470": [
+    "Loury",
+    "Rebréchien",
+    "Traînou"
+  ],
+  "45480": [
+    "Andonville",
+    "Autruy-sur-Juine",
+    "Bazoches-les-Gallerandes",
+    "Boisseaux",
+    "Charmont-en-Beauce",
+    "Chaussy",
+    "Châtillon-le-Roi",
+    "Erceville",
+    "Greneville-en-Beauce",
+    "Jouy-en-Pithiverais",
+    "Léouville",
+    "Outarville"
+  ],
+  "45490": [
+    "Corbeilles",
+    "Courtempierre",
+    "Gondreville",
+    "Lorcy",
+    "Mignerette",
+    "Mignères",
+    "Préfontaines",
+    "Sceaux-du-Gâtinais",
+    "Treilles-en-Gâtinais"
+  ],
+  "45500": [
+    "Autry-le-Châtel",
+    "Gien",
+    "Nevoy",
+    "Poilly-lez-Gien",
+    "Saint-Brisson-sur-Loire",
+    "Saint-Gondon",
+    "Saint-Martin-sur-Ocre"
+  ],
+  "45510": [
+    "Neuvy-en-Sullias",
+    "Tigy",
+    "Vannes-sur-Cosson",
+    "Vienne-en-Val"
+  ],
+  "45520": [
+    "Cercottes",
+    "Chevilly",
+    "Gidy",
+    "Huêtre"
+  ],
+  "45530": [
+    "Combreux",
+    "Seichebrières",
+    "Sury-aux-Bois",
+    "Vitry-aux-Loges"
+  ],
+  "45550": [
+    "Saint-Denis-de-l'Hôtel"
+  ],
+  "45560": [
+    "Saint-Denis-en-Val"
+  ],
+  "45570": [
+    "Dampierre-en-Burly",
+    "Ouzouer-sur-Loire"
+  ],
+  "45590": [
+    "Saint-Cyr-en-Val"
+  ],
+  "45600": [
+    "Guilly",
+    "Lion-en-Sullias",
+    "Saint-Aignan-le-Jaillard",
+    "Saint-Florent-le-Jeune",
+    "Saint-Père-sur-Loire",
+    "Sully-sur-Loire",
+    "Viglain",
+    "Villemurlin"
+  ],
+  "45620": [
+    "Cerdon",
+    "Isdes"
+  ],
+  "45630": [
+    "Beaulieu-sur-Loire"
+  ],
+  "45640": [
+    "Sandillon"
+  ],
+  "45650": [
+    "Saint-Jean-le-Blanc"
+  ],
+  "45680": [
+    "Dordives"
+  ],
+  "45700": [
+    "Chevillon-sur-Huillard",
+    "Conflans-sur-Loing",
+    "Cortrat",
+    "Lombreuil",
+    "Montcresson",
+    "Mormant-sur-Vernisson",
+    "Pannes",
+    "Saint-Hilaire-sur-Puiseaux",
+    "Saint-Maurice-sur-Fessard",
+    "Solterre",
+    "Villemandeur",
+    "Villevoques",
+    "Vimory"
+  ],
+  "45720": [
+    "Coullons"
+  ],
+  "45730": [
+    "Saint-Benoît-sur-Loire"
+  ],
+  "45740": [
+    "Lailly-en-Val"
+  ],
+  "45750": [
+    "Saint-Pryvé-Saint-Mesmin"
+  ],
+  "45760": [
+    "Boigny-sur-Bionne",
+    "Marigny-les-Usages",
+    "Vennecy"
+  ],
+  "45770": [
+    "Saran"
+  ],
+  "45800": [
+    "Combleux",
+    "Saint-Jean-de-Braye"
+  ]
+}
