@@ -686,31 +686,25 @@
               <!-- Stats -->
               <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
 
-              <!-- Barre de recherche SeLoger-style -->
-              <div id="scanner-search-bar" class="scanner-search-bar" style="display:none">
-                <div class="scanner-search-row">
-                  <!-- Sélecteur code postal -->
-                  <div class="scanner-search-cp">
-                    <div style="position:relative">
-                      <input id="cp-search" type="text" placeholder="Saisissez un code postal ou une ville" autocomplete="off" class="scanner-search-input">
-                      <div id="cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
-                    </div>
-                    <span id="cp-active-badge" style="display:none;padding:3px 10px;background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);border:1px solid var(--accent-gold,#C5A059)44;border-radius:6px;font-size:12px;font-weight:600"></span>
-                    <button id="cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">× Réinit.</button>
+              <!-- Zone C : Barre de recherche -->
+              <div id="scanner-search-bar" class="scanner-search-bar-v2" style="display:none">
+                <div class="scanner-search-cp-segment">
+                  <span class="scanner-search-cp-icon">📍</span>
+                  <div style="position:relative;flex:1;min-width:0">
+                    <input id="cp-search" type="text" placeholder="Code postal ou ville…" autocomplete="off" class="scanner-search-cp-input">
+                    <div id="cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
                   </div>
-                  <!-- Séparateur -->
-                  <div class="scanner-search-sep"></div>
-                  <!-- Quick filters -->
-                  <button class="scanner-qf-btn" id="qf-budget-btn">Votre budget <span class="scanner-qf-arrow">▾</span></button>
-                  <button class="scanner-qf-btn" id="qf-pieces-btn">Nb de pièces <span class="scanner-qf-arrow">▾</span></button>
-                  <button class="scanner-qf-btn" id="qf-surface-btn">Surface <span class="scanner-qf-arrow">▾</span></button>
-                  <button class="scanner-qf-btn" id="qf-type-btn">Type de bien <span class="scanner-qf-arrow">▾</span></button>
-                  <!-- Toggle critères avancés -->
-                  <button id="btn-toggle-filters" class="scanner-qf-btn scanner-qf-btn--toggle">
-                    <span id="btn-toggle-filters-label">Afficher les critères</span>
-                    <span id="scanner-filter-count-badge" class="scanner-filter-badge" style="display:none"></span>
-                  </button>
+                  <span id="cp-active-badge" style="display:none;padding:3px 10px;background:rgba(197,160,89,0.15);color:var(--accent-gold);border:1px solid rgba(197,160,89,0.3);border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap"></span>
+                  <button id="cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">× Réinit.</button>
                 </div>
+                <button class="scanner-search-pill" id="qf-budget-btn">Budget <span class="scanner-qf-arrow">▾</span></button>
+                <button class="scanner-search-pill" id="qf-pieces-btn">Pièces <span class="scanner-qf-arrow">▾</span></button>
+                <button class="scanner-search-pill" id="qf-surface-btn">Surface <span class="scanner-qf-arrow">▾</span></button>
+                <button class="scanner-search-pill" id="qf-type-btn">Type <span class="scanner-qf-arrow">▾</span></button>
+                <button id="btn-toggle-filters" class="scanner-search-filters-btn">
+                  ☰ Tous les filtres
+                  <span id="scanner-filter-count-badge" class="scanner-filter-badge" style="display:none"></span>
+                </button>
               </div>
 
               <!-- Panel critères avancés (SeLoger-style) -->
