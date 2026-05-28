@@ -44,7 +44,7 @@ def _update_state(running=None, progress=None, log=None, error=None, finished=Fa
             scan_state["last_run"] = datetime.now().isoformat(timespec="seconds")
 
 
-def _run_scanner(full: bool):
+def _run_scanner(full: bool, ville: str = None, code_postal: str = None):
     if SCRAPER_DIR not in sys.path:
         sys.path.insert(0, SCRAPER_DIR)
 
@@ -66,8 +66,9 @@ def _run_scanner(full: bool):
         def progress_callback(pct: int, msg: str):
             _update_state(progress=pct, log=msg)
 
+        villes_override = [{"ville": ville, "code_postal": code_postal, "dept": code_postal[:2]}]
         _update_state(running=True, progress=0, log="Scan lancé…", error=None)
-        scraper_main.main(progress_callback=progress_callback)
+        scraper_main.main(villes_override=villes_override, progress_callback=progress_callback)
         _update_state(finished=True)
     except Exception as e:
         _update_state(log=f"ERREUR : {e}", error=str(e), finished=True)
@@ -148,24 +149,36 @@ def after_request(response):
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
+    data = request.get_json(force=True, silent=True) or {}
+    ville = (data.get("ville") or "").strip()
+    code_postal = (data.get("code_postal") or "").strip()
+    if not ville or not code_postal:
+        return jsonify({"error": "ville_required"}), 400
+
     with _lock:
         if scan_state["running"]:
             return jsonify({"error": "scan_running"}), 409
         scan_state["logs"] = []
 
-    t = threading.Thread(target=_run_scanner, args=(False,), daemon=True)
+    t = threading.Thread(target=_run_scanner, args=(False, ville, code_postal), daemon=True)
     t.start()
     return jsonify({"started": True})
 
 
 @app.route("/api/scan/full", methods=["POST"])
 def api_scan_full():
+    data = request.get_json(force=True, silent=True) or {}
+    ville = (data.get("ville") or "").strip()
+    code_postal = (data.get("code_postal") or "").strip()
+    if not ville or not code_postal:
+        return jsonify({"error": "ville_required"}), 400
+
     with _lock:
         if scan_state["running"]:
             return jsonify({"error": "scan_running"}), 409
         scan_state["logs"] = []
 
-    t = threading.Thread(target=_run_scanner, args=(True,), daemon=True)
+    t = threading.Thread(target=_run_scanner, args=(True, ville, code_postal), daemon=True)
     t.start()
     return jsonify({"started": True, "db_cleared": True})
 
