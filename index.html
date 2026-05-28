@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+    <script src="/vendor/leaflet/leaflet.js"></script>
 </head>
 <body>
     <div class="shell">
@@ -658,6 +660,21 @@
                 <div class="scanner-progress-bar">
                   <div id="scanner-progress-fill" class="scanner-progress-fill" style="width:0%"></div>
                 </div>
+              </div>
+
+              <!-- Onglets Tableau / Carte -->
+              <div id="scanner-view-tabs" style="display:none;margin-bottom:12px;gap:8px">
+                <button id="tab-tableau" style="padding:6px 18px;border-radius:6px;border:1px solid var(--accent-gold,#C5A059);background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);font-size:13px;cursor:pointer;font-weight:600">Tableau</button>
+                <button id="tab-carte"   style="padding:6px 18px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer">Carte</button>
+              </div>
+
+              <!-- Conteneur carte -->
+              <div id="scanner-map-container" style="display:none;border-radius:12px;overflow:hidden;border:1px solid var(--border)">
+                <div id="scanner-map" style="height:500px;width:100%"></div>
+                <div id="scanner-map-offline" style="display:none;padding:12px;text-align:center;font-size:12px;color:var(--muted)">
+                  Tuiles de carte indisponibles (connexion internet requise pour la carte).
+                </div>
+                <div id="scanner-map-unloc" style="padding:8px 14px;font-size:12px;color:var(--muted);background:var(--surface-strong)"></div>
               </div>
 
               <!-- Stats -->

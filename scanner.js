@@ -218,6 +218,22 @@ function _bindButtons() {
   });
 
   _initCPSelector();
+
+  document.getElementById('tab-tableau')?.addEventListener('click', () => {
+    document.getElementById('scanner-map-container').style.display = 'none';
+    document.getElementById('scanner-results').style.display = '';
+    document.getElementById('tab-tableau').style.cssText = 'padding:6px 18px;border-radius:6px;border:1px solid var(--accent-gold,#C5A059);background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);font-size:13px;cursor:pointer;font-weight:600';
+    document.getElementById('tab-carte').style.cssText   = 'padding:6px 18px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer';
+  });
+
+  document.getElementById('tab-carte')?.addEventListener('click', () => {
+    document.getElementById('scanner-results').style.display = 'none';
+    document.getElementById('scanner-map-container').style.display = '';
+    document.getElementById('tab-carte').style.cssText   = 'padding:6px 18px;border-radius:6px;border:1px solid var(--accent-gold,#C5A059);background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);font-size:13px;cursor:pointer;font-weight:600';
+    document.getElementById('tab-tableau').style.cssText = 'padding:6px 18px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer';
+    _renderMap(_displayedResultats);
+    setTimeout(() => _leafletMap?.invalidateSize(), 100);
+  });
 }
 
 function _updateFilterCount() {
@@ -299,6 +315,7 @@ async function _loadResults(showEmpty) {
     document.getElementById('scanner-stats').style.display = '';
     document.getElementById('scanner-filters').style.display = '';
     document.getElementById('scanner-results').style.display = '';
+    document.getElementById('scanner-view-tabs')?.style.setProperty('display', 'flex');
     document.getElementById('scanner-cp-wrapper')?.style.setProperty('display', '');
     if (data.stats?.last_run || data.generated_at) {
       _setStatus('done', 'Dernier scan · ' + _fmtDatetime(data.generated_at));
@@ -966,6 +983,117 @@ function _detailInfo(label, val) {
     <span style="font-weight:600">${_esc(String(val))}</span>
   </div>`;
 }
+
+// ─── Carte Leaflet ────────────────────────────────────────────────────────────
+
+let _leafletMap = null;
+let _leafletMarkers = null;
+
+function _initMap() {
+  if (_leafletMap) return;
+  if (typeof L === 'undefined') return;
+
+  _leafletMap = L.map('scanner-map', {
+    center: [47.5, 1.5],  // Centre-Val de Loire
+    zoom: 8,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18,
+  }).addTo(_leafletMap);
+
+  _leafletMarkers = L.layerGroup().addTo(_leafletMap);
+
+  _leafletMap.once('tileerror', () => {
+    document.getElementById('scanner-map-offline').style.display = '';
+  });
+}
+
+async function _renderMap(resultats) {
+  if (typeof L === 'undefined') return;
+  _initMap();
+  _leafletMarkers.clearLayers();
+
+  // Collecter les villes/CP uniques à géocoder
+  const toGeocode = [];
+  const seen = new Set();
+  for (const r of resultats) {
+    const key = `${r.ville}|${r.code_postal}`;
+    if (!seen.has(key) && r.ville) {
+      seen.add(key);
+      toGeocode.push({ ville: r.ville, code_postal: r.code_postal });
+    }
+  }
+
+  let geoData = {};
+  try {
+    const resp = await fetch('/api/geocode/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toGeocode),
+    });
+    geoData = await resp.json();
+  } catch (e) {
+    console.warn('Géocodage échoué', e);
+  }
+
+  let nonLocalises = 0;
+  const bounds = [];
+
+  for (const r of resultats) {
+    const key   = `${r.ville}|${r.code_postal}`;
+    const coord = geoData[key];
+    if (!coord || !coord.lat) { nonLocalises++; continue; }
+
+    const color = r.score >= 80 ? '#16a34a'
+                : r.score >= 60 ? '#22c55e'
+                : r.score >= 40 ? '#f59e0b'
+                : r.score >= 20 ? '#e3720c'
+                : '#dc2626';
+
+    const marker = L.circleMarker([coord.lat, coord.lng], {
+      radius: 9,
+      fillColor: color,
+      fillOpacity: 0.85,
+      color: '#fff',
+      weight: 1.5,
+    });
+
+    const cfStr = r.cf_apres_impot != null
+      ? `${r.cf_apres_impot >= 0 ? '+' : ''}${Math.round(r.cf_apres_impot)} €/mois`
+      : '—';
+
+    marker.bindPopup(`
+      <div style="min-width:180px;font-family:sans-serif">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">${_esc(r.titre)}</div>
+        <div style="font-size:11px;color:#666">${_esc(r.ville)} · ${r.surface ? r.surface.toFixed(0) + ' m²' : '—'}</div>
+        <div style="margin:6px 0;font-size:13px"><strong>${r.prix ? r.prix.toLocaleString('fr-FR') + ' €' : '—'}</strong></div>
+        <div style="font-size:12px">CF : <strong style="color:${r.cf_apres_impot >= 0 ? 'green' : 'red'}">${cfStr}</strong></div>
+        <div style="font-size:12px">Score : <strong>${r.score ?? '—'}/100</strong></div>
+        <button onclick="window._openDrawerFromMap(${resultats.indexOf(r)})"
+          style="margin-top:8px;width:100%;padding:5px;border-radius:5px;border:1px solid #C5A059;background:transparent;color:#C5A059;cursor:pointer;font-size:12px">
+          Voir le détail →
+        </button>
+      </div>
+    `);
+
+    marker.addTo(_leafletMarkers);
+    bounds.push([coord.lat, coord.lng]);
+  }
+
+  if (bounds.length > 1) _leafletMap.fitBounds(bounds, { padding: [30, 30] });
+
+  const unloc = document.getElementById('scanner-map-unloc');
+  if (unloc) unloc.textContent = nonLocalises > 0
+    ? `${nonLocalises} bien${nonLocalises > 1 ? 's' : ''} non localisé${nonLocalises > 1 ? 's' : ''} (ville inconnue).`
+    : '';
+}
+
+// Accessible depuis le popup Leaflet (contexte global)
+window._openDrawerFromMap = function(idx) {
+  if (_displayedResultats[idx]) _openDrawer(_displayedResultats[idx]);
+};
 
 async function _loadPriceHistory(url, container) {
   if (!container) return;
