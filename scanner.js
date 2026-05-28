@@ -6,6 +6,122 @@ const API = {
   results: '/api/results',
 };
 
+// ─── Sélecteur CP ─────────────────────────────────────────────────────────────
+
+let _communesData = null;   // {cp: [commune, ...]}
+let _cpFilter = null;       // {cp: string, commune: string|null} ou null
+
+async function _loadCommunesData() {
+  if (_communesData) return;
+  try {
+    const resp = await fetch('/data/communes_centre_val.json');
+    _communesData = await resp.json();
+  } catch (e) {
+    _communesData = {};
+  }
+}
+
+function _initCPSelector() {
+  const input = document.getElementById('cp-search');
+  const dropdown = document.getElementById('cp-dropdown');
+  const resetBtn = document.getElementById('cp-reset');
+  if (!input) return;
+
+  input.addEventListener('focus', () => _loadCommunesData());
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim();
+    if (val.length < 2 || !_communesData) { dropdown.style.display = 'none'; return; }
+
+    // Trouver les communes correspondantes
+    const matches = [];
+    for (const [cp, communes] of Object.entries(_communesData)) {
+      if (cp.startsWith(val)) {
+        for (const commune of communes) {
+          matches.push({ cp, commune });
+        }
+      }
+    }
+
+    if (!matches.length) { dropdown.style.display = 'none'; return; }
+
+    // Compter les biens par CP
+    const biensCounts = {};
+    for (const r of _allResultats) {
+      if (r.code_postal) biensCounts[r.code_postal] = (biensCounts[r.code_postal] || 0) + 1;
+    }
+
+    // Grouper par préfixe pour l'option "Toutes"
+    const totalMatching = matches.reduce((sum, m) => sum + (biensCounts[m.cp] || 0), 0);
+    const uniqueCPs = [...new Set(matches.map(m => m.cp))];
+
+    let html = '';
+    if (uniqueCPs.length > 1) {
+      html += `<div class="cp-option cp-option-all" data-cp="${val}" data-commune="__all__"
+        style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-weight:600;color:var(--accent-gold,#C5A059)">
+        Toutes les communes "${val}…" <span style="color:var(--muted);font-weight:400">(${totalMatching} biens)</span>
+      </div>`;
+    }
+    for (const { cp, commune } of matches.slice(0, 30)) {
+      const n = biensCounts[cp] || 0;
+      html += `<div class="cp-option" data-cp="${cp}" data-commune="${_esc(commune)}"
+        style="padding:8px 14px;cursor:pointer;font-size:13px">
+        <span style="color:var(--muted);font-size:11px;margin-right:6px">${cp}</span>${_esc(commune)}
+        <span style="color:var(--muted);font-size:11px;float:right">${n} bien${n !== 1 ? 's' : ''}</span>
+      </div>`;
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+
+    dropdown.querySelectorAll('.cp-option').forEach(el => {
+      el.addEventListener('mouseenter', () => el.style.background = 'var(--surface-strong)');
+      el.addEventListener('mouseleave', () => el.style.background = '');
+      el.addEventListener('click', () => {
+        const cp = el.dataset.cp;
+        const commune = el.dataset.commune;
+        _setCPFilter(cp, commune === '__all__' ? null : commune, commune === '__all__' ? `${cp}… (toutes)` : `${cp} — ${commune}`);
+        dropdown.style.display = 'none';
+      });
+    });
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  resetBtn?.addEventListener('click', () => {
+    _cpFilter = null;
+    input.value = '';
+    document.getElementById('cp-active-badge').style.display = 'none';
+    resetBtn.style.display = 'none';
+    _applyTable();
+  });
+}
+
+function _setCPFilter(cp, commune, label) {
+  _cpFilter = { cp, commune };
+  const badge = document.getElementById('cp-active-badge');
+  const reset = document.getElementById('cp-reset');
+  if (badge) { badge.textContent = label; badge.style.display = ''; }
+  if (reset)   reset.style.display = '';
+  document.getElementById('cp-search').value = label;
+  _applyTable();
+}
+
+function _matchCP(r) {
+  if (!_cpFilter) return true;
+  const cp = (r.code_postal || '');
+  if (_cpFilter.commune) {
+    return cp === _cpFilter.cp && (r.ville || '').toLowerCase() === _cpFilter.commune.toLowerCase();
+  }
+  return cp.startsWith(_cpFilter.cp);
+}
+
+// ─── État scanner ─────────────────────────────────────────────────────────────
+
 let _pollInterval = null;
 let _scanRunning = false;
 let _saveCurrentStudy = null;
@@ -100,6 +216,8 @@ function _bindButtons() {
     _updateFilterCount();
     _applyTable();
   });
+
+  _initCPSelector();
 }
 
 function _updateFilterCount() {
@@ -181,6 +299,7 @@ async function _loadResults(showEmpty) {
     document.getElementById('scanner-stats').style.display = '';
     document.getElementById('scanner-filters').style.display = '';
     document.getElementById('scanner-results').style.display = '';
+    document.getElementById('scanner-cp-wrapper')?.style.setProperty('display', '');
     if (data.stats?.last_run || data.generated_at) {
       _setStatus('done', 'Dernier scan · ' + _fmtDatetime(data.generated_at));
     }
@@ -294,6 +413,7 @@ function _bindRange(rangeId, inputId) {
 }
 
 function _matchFilters(r) {
+  if (!_matchCP(r)) return false;
   // Chips — Score par bande
   const activeScores = [...document.querySelectorAll('input[name="score-filter"]:checked')].map(el => el.value);
   if (activeScores.length > 0) {
@@ -635,6 +755,7 @@ function _showEmpty(visible) {
   if (!visible) {
     document.getElementById('scanner-stats')?.style.setProperty('display', '');
     document.getElementById('scanner-results')?.style.setProperty('display', '');
+    document.getElementById('scanner-cp-wrapper')?.style.setProperty('display', '');
   }
 }
 
