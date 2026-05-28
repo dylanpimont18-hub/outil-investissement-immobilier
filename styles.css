@@ -2537,15 +2537,210 @@ body.tuto-active {
   background: rgba(197, 160, 89, 0.15);
   color: #C5A059;
 }
+
+/* ── Scanner : barre de recherche SeLoger-style ──────────────────────────── */
+.scanner-search-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.scanner-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.scanner-search-cp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 180px;
+}
+.scanner-search-input {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 13px;
+  width: 100%;
+  min-width: 160px;
+  transition: border-color .15s;
+}
+.scanner-search-input:focus {
+  outline: none;
+  border-color: var(--accent-gold, #C5A059);
+}
+.scanner-search-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+.scanner-qf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, color .15s;
+}
+.scanner-qf-btn:hover {
+  border-color: var(--accent-gold, #C5A059);
+  color: var(--accent-gold, #C5A059);
+}
+.scanner-qf-btn--toggle {
+  margin-left: auto;
+  background: transparent;
+  border-style: dashed;
+}
+.scanner-qf-btn--toggle.is-active {
+  border-color: var(--accent-gold, #C5A059);
+  color: var(--accent-gold, #C5A059);
+  border-style: solid;
+}
+.scanner-qf-arrow {
+  font-size: 10px;
+  opacity: .6;
+}
+.scanner-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent-gold, #C5A059);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Scanner : panel critères avancés ────────────────────────────────────── */
 .scanner-filter-panel {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 14px 18px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  overflow: hidden;
+  margin-bottom: 12px;
 }
+.scanner-filter-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-strong);
+}
+.scanner-filter-hide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.scanner-filter-hide-btn:hover {
+  border-color: var(--muted);
+  color: var(--muted);
+}
+.scanner-filter-hide-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+.scanner-filter-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.scanner-filter-section:last-of-type {
+  border-bottom: none;
+}
+.scanner-filter-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-muted, #8b949e);
+  margin-bottom: 10px;
+}
+
+/* DPE blocks (style SeLoger) */
+.scanner-dpe-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scanner-dpe-block {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: var(--surface-strong);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--muted);
+  transition: border-color .15s, background .15s, color .15s;
+  user-select: none;
+}
+.scanner-dpe-block input[type="checkbox"] { display: none; }
+.scanner-dpe-block:hover { border-color: var(--muted); color: var(--text); }
+.scanner-chip--dpe-a.scanner-dpe-block:has(input:checked) { border-color:#00a550;background:rgba(0,165,80,.15);color:#00a550; }
+.scanner-chip--dpe-b.scanner-dpe-block:has(input:checked) { border-color:#51b845;background:rgba(81,184,69,.15);color:#51b845; }
+.scanner-chip--dpe-c.scanner-dpe-block:has(input:checked) { border-color:#c8d200;background:rgba(200,210,0,.15);color:#9fa800; }
+.scanner-chip--dpe-d.scanner-dpe-block:has(input:checked) { border-color:#ffcc00;background:rgba(255,204,0,.15);color:#b89200; }
+.scanner-chip--dpe-e.scanner-dpe-block:has(input:checked) { border-color:#f4a623;background:rgba(244,166,35,.15);color:#f4a623; }
+.scanner-chip--dpe-f.scanner-dpe-block:has(input:checked) { border-color:#e3720c;background:rgba(227,114,12,.15);color:#e3720c; }
+.scanner-chip--dpe-g.scanner-dpe-block:has(input:checked) { border-color:#cc0000;background:rgba(204,0,0,.15);color:#cc0000; }
+
+/* Bouton "Voir les annonces" */
+.scanner-voir-resultats-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 28px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent-gold, #C5A059);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.scanner-voir-resultats-btn:hover {
+  opacity: .88;
+  transform: translateY(-1px);
+}
+
 .scanner-filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -2607,7 +2802,8 @@ body.tuto-active {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-top: 4px;
+  padding: 14px 18px;
+  background: var(--surface-strong);
   border-top: 1px solid var(--border);
 }
 .scanner-filter-count {
@@ -2673,6 +2869,46 @@ body.tuto-active {
   padding: 60px 20px;
   color: #555;
   font-size: 13px;
+}
+
+/* ── Scanner header (Zone A) ── */
+.scanner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.scanner-header-left { flex: 1; min-width: 200px; }
+.scanner-header-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--accent-gold);
+  margin-bottom: 4px;
+}
+.scanner-header-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+.scanner-header-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.scanner-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .field--scanner-highlight {
