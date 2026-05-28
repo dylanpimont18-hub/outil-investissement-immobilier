@@ -2911,6 +2911,71 @@ body.tuto-active {
   flex-wrap: wrap;
 }
 
+/* ── Scanner search bar v2 (Zone C) ── */
+.scanner-search-bar-v2 {
+  display: flex;
+  align-items: stretch;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  margin: 12px 24px;
+  overflow: visible;
+  position: relative;
+}
+.scanner-search-cp-segment {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.scanner-search-cp-icon { font-size: 14px; flex-shrink: 0; color: var(--muted); }
+.scanner-search-cp-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+  min-width: 0;
+}
+.scanner-search-cp-input::placeholder { color: var(--muted); }
+.scanner-search-pill {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: color .15s;
+}
+.scanner-search-pill:hover { color: var(--text); }
+.scanner-search-filters-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: rgba(197, 160, 89, 0.1);
+  border: none;
+  border-left: 1px solid rgba(197, 160, 89, 0.25);
+  border-radius: 0 10px 10px 0;
+  color: var(--accent-gold);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background .15s;
+}
+.scanner-search-filters-btn:hover { background: rgba(197, 160, 89, 0.18); }
+
 .field--scanner-highlight {
   transition: box-shadow 0.3s, background-color 0.3s;
   box-shadow: 0 0 0 2px #C5A059;
