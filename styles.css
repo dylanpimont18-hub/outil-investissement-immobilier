@@ -2976,6 +2976,58 @@ body.tuto-active {
 }
 .scanner-search-filters-btn:hover { background: rgba(197, 160, 89, 0.18); }
 
+/* ── Scanner content layout + sidebar filtres (Zone D) ── */
+.scanner-content-layout {
+  display: flex;
+  align-items: flex-start;
+}
+.scanner-filter-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+.scanner-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.scanner-sidebar-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text);
+}
+.scanner-main-area {
+  flex: 1;
+  min-width: 0;
+}
+.scanner-filter-sidebar .scanner-filter-section {
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+}
+.scanner-filter-sidebar .scanner-filter-section:last-of-type { border-bottom: none; }
+.scanner-filter-sidebar .scanner-filter-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+.scanner-filter-sidebar .scanner-filter-panel-header { display: none; }
+
 .field--scanner-highlight {
   transition: box-shadow 0.3s, background-color 0.3s;
   box-shadow: 0 0 0 2px #C5A059;
