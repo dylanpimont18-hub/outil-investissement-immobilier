@@ -59,10 +59,11 @@ def inserer_annonce(bien_id: int, enrichie: dict, conn: sqlite3.Connection) -> i
             charges_copro, taxe_fonciere, meuble, parking_garage, chauffage,
             points_forts, points_faibles, resume_ia,
             loyer_estime, mensualite, cf_net, cf_apres_impot,
+            cf_apres_impot_reel, cf_apres_impot_sci, regime_optimal, loyer_source,
             renta_brute, renta_nette_nette, dscr, score,
             date_enrichissement)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             bien_id,
             enrichie.get("nb_pieces"),
@@ -85,6 +86,10 @@ def inserer_annonce(bien_id: int, enrichie: dict, conn: sqlite3.Connection) -> i
             enrichie.get("mensualite"),
             enrichie.get("cf_net"),
             enrichie.get("cf_apres_impot"),
+            enrichie.get("cf_apres_impot_reel"),
+            enrichie.get("cf_apres_impot_sci"),
+            enrichie.get("regime_optimal"),
+            enrichie.get("loyer_source"),
             enrichie.get("renta_brute"),
             enrichie.get("renta_nette_nette"),
             enrichie.get("dscr"),

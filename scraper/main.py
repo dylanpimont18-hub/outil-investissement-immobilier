@@ -17,6 +17,7 @@ from ia import enrichir_batch
 from calculs import enrichir as enrichir_calculs
 from utils import inserer_bien, inserer_annonce
 from scrapers import REGISTRY
+from marche_locatif import main as marche_main, est_stale as marche_stale
 
 
 def _log(msg: str):
@@ -77,6 +78,16 @@ def main(progress_callback=None):
     conn = init_db()
     _emit(5, "Base SQLite initialisée.")
 
+    # ── 1.5 Marché locatif (si stale) ────────────────────────────────────────
+    if marche_stale(conn):
+        _emit(3, "Analyse du marché locatif (premières données ou expirées)…")
+        try:
+            marche_main(conn, progress_callback=lambda p, m: _emit(int(3 + p * 0.02), m))
+        except Exception as e:
+            _emit(5, f"  [Marché] ERREUR : {e} — on continue sans loyers de marché.")
+    else:
+        _emit(3, "Données marché locatif à jour — réutilisation du cache.")
+
     # ── 2. Scraping multi-sites ───────────────────────────────────────────────
     toutes_nouvelles: list[dict] = []
     total_par_site:   dict[str, int] = {}
@@ -129,7 +140,7 @@ def main(progress_callback=None):
     # ── 5. Calculs financiers ─────────────────────────────────────────────────
     _emit(82, "Calculs financiers…")
     for annonce in toutes_nouvelles:
-        enrichir_calculs(annonce)
+        enrichir_calculs(annonce, conn)
 
     # ── 6. Stockage en base ───────────────────────────────────────────────────
     _emit(90, "Enregistrement en base…")
