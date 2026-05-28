@@ -639,15 +639,21 @@
             </section>
 
             <section id="scanner-panel" style="display:none" aria-label="Scanner LeBonCoin">
-              <!-- Barre de contrôle -->
-              <div id="scanner-controls" class="scanner-controls">
-                <div class="scanner-cp-badge">CP <strong id="scanner-cp">—</strong></div>
-                <button id="btn-scan" class="scanner-btn scanner-btn--primary">▶ Lancer un scan</button>
-                <button id="btn-scan-full" class="scanner-btn scanner-btn--outline">↺ Scan complet</button>
-                <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">🗑 Vider le cache</button>
-                <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
-                  <span id="scanner-status-dot" class="scanner-status-dot"></span>
-                  <span id="scanner-status-label">En attente</span>
+              <!-- Zone A : Header -->
+              <div class="scanner-header">
+                <div class="scanner-header-left">
+                  <p class="scanner-header-kicker">📡 Scanner d'annonces</p>
+                  <h2 class="scanner-header-title">Opportunités locatives</h2>
+                  <p id="scanner-header-sub" class="scanner-header-sub">Centre-Val de Loire</p>
+                </div>
+                <div class="scanner-header-right">
+                  <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
+                    <span id="scanner-status-dot" class="scanner-status-dot"></span>
+                    <span id="scanner-status-label">En attente</span>
+                  </div>
+                  <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">🗑 Vider le cache</button>
+                  <button id="btn-scan-full" class="scanner-btn scanner-btn--outline">↺ Scan complet</button>
+                  <button id="btn-scan" class="scanner-btn scanner-btn--primary">▶ Lancer un scan</button>
                 </div>
               </div>
 
@@ -680,81 +686,139 @@
               <!-- Stats -->
               <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
 
-              <!-- Sélecteur code postal -->
-              <div id="scanner-cp-wrapper" style="display:none;margin-bottom:12px">
-                <div style="position:relative;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <div style="position:relative">
-                    <input id="cp-search" type="text" placeholder="🔍 Code postal…" autocomplete="off"
-                      style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-strong);color:var(--text);font-size:13px;width:200px">
-                    <div id="cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
+              <!-- Barre de recherche SeLoger-style -->
+              <div id="scanner-search-bar" class="scanner-search-bar" style="display:none">
+                <div class="scanner-search-row">
+                  <!-- Sélecteur code postal -->
+                  <div class="scanner-search-cp">
+                    <div style="position:relative">
+                      <input id="cp-search" type="text" placeholder="Saisissez un code postal ou une ville" autocomplete="off" class="scanner-search-input">
+                      <div id="cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
+                    </div>
+                    <span id="cp-active-badge" style="display:none;padding:3px 10px;background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);border:1px solid var(--accent-gold,#C5A059)44;border-radius:6px;font-size:12px;font-weight:600"></span>
+                    <button id="cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">× Réinit.</button>
                   </div>
-                  <span id="cp-active-badge" style="display:none;padding:3px 10px;background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);border:1px solid var(--accent-gold,#C5A059)44;border-radius:6px;font-size:12px;font-weight:600"></span>
-                  <button id="cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">× Réinitialiser</button>
+                  <!-- Séparateur -->
+                  <div class="scanner-search-sep"></div>
+                  <!-- Quick filters -->
+                  <button class="scanner-qf-btn" id="qf-budget-btn">Votre budget <span class="scanner-qf-arrow">▾</span></button>
+                  <button class="scanner-qf-btn" id="qf-pieces-btn">Nb de pièces <span class="scanner-qf-arrow">▾</span></button>
+                  <button class="scanner-qf-btn" id="qf-surface-btn">Surface <span class="scanner-qf-arrow">▾</span></button>
+                  <button class="scanner-qf-btn" id="qf-type-btn">Type de bien <span class="scanner-qf-arrow">▾</span></button>
+                  <!-- Toggle critères avancés -->
+                  <button id="btn-toggle-filters" class="scanner-qf-btn scanner-qf-btn--toggle">
+                    <span id="btn-toggle-filters-label">Afficher les critères</span>
+                    <span id="scanner-filter-count-badge" class="scanner-filter-badge" style="display:none"></span>
+                  </button>
                 </div>
               </div>
 
-              <!-- Panel de filtres -->
+              <!-- Panel critères avancés (SeLoger-style) -->
               <div id="scanner-filters" class="scanner-filter-panel" style="display:none">
-                <div class="scanner-filter-row">
+
+                <!-- En-tête panel -->
+                <div class="scanner-filter-panel-header">
+                  <button id="btn-hide-filters" class="scanner-filter-hide-btn">
+                    <span class="scanner-filter-hide-icon">×</span> Masquer les critères
+                  </button>
+                  <span id="scanner-filter-count" class="scanner-filter-count"></span>
+                </div>
+
+                <!-- ── Section : À PROPOS DU BIEN ─────────────────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">À PROPOS DU BIEN</div>
                   <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">Score</span>
+                    <span class="scanner-filter-title">Nombre de pièces</span>
                     <div class="scanner-filter-chips">
-                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Excellent 80+</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Bon 60–79</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Neutre 40–59</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Attention 20–39</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Faible &lt;20</span></label>
-                    </div>
-                  </div>
-                  <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">Cash-flow</span>
-                    <div class="scanner-filter-chips">
-                      <label class="scanner-chip"><input type="checkbox" id="filter-cf-positif"><span>CF net positif</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-cf-negatif"><span>CF net négatif</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-cfai-positif"><span>CF après impôt positif</span></label>
-                    </div>
-                  </div>
-                  <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">DPE</span>
-                    <div class="scanner-filter-chips">
-                      <label class="scanner-chip scanner-chip--dpe-a"><input type="checkbox" name="dpe-filter" value="a"><span>A</span></label>
-                      <label class="scanner-chip scanner-chip--dpe-b"><input type="checkbox" name="dpe-filter" value="b"><span>B</span></label>
-                      <label class="scanner-chip scanner-chip--dpe-c"><input type="checkbox" name="dpe-filter" value="c"><span>C</span></label>
-                      <label class="scanner-chip scanner-chip--dpe-d"><input type="checkbox" name="dpe-filter" value="d"><span>D</span></label>
-                      <label class="scanner-chip scanner-chip--dpe-e"><input type="checkbox" name="dpe-filter" value="e"><span>E</span></label>
-                      <label class="scanner-chip scanner-chip--dpe-f"><input type="checkbox" name="dpe-filter" value="f"><span>F</span></label>
-                      <label class="scanner-chip scanner-chip--dpe-g"><input type="checkbox" name="dpe-filter" value="g"><span>G</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-dpe-safe"><span>Sans risque DPE</span></label>
-                    </div>
-                  </div>
-                  <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">Type de bien</span>
-                    <div class="scanner-filter-chips">
-                      <label class="scanner-chip"><input type="checkbox" name="type-filter" value="appartement"><span>Appartement</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="type-filter" value="maison"><span>Maison</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="type-filter" value="immeuble"><span>Immeuble</span></label>
-                    </div>
-                  </div>
-                  <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">État</span>
-                    <div class="scanner-filter-chips">
-                      <label class="scanner-chip"><input type="checkbox" id="filter-deja-loue"><span>Déjà loué</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-travaux"><span>Avec travaux</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-sans-travaux"><span>Sans travaux</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-meuble"><span>Meublé</span></label>
-                    </div>
-                  </div>
-                  <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">Source loyer</span>
-                    <div class="scanner-filter-chips">
-                      <label class="scanner-chip"><input type="checkbox" id="filter-loyer-marche"><span>Données marché</span></label>
-                      <label class="scanner-chip"><input type="checkbox" id="filter-loyer-annonce"><span>Loyer annonce</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="1"><span>1 pièce</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="2"><span>2 pièces</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="3"><span>3 pièces</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="4"><span>4 pièces</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="5"><span>5+ pièces</span></label>
                     </div>
                   </div>
                 </div>
 
-                <!-- Filtres numériques (sliders + inputs) -->
-                <div class="scanner-filter-ranges">
+                <!-- ── Section : DPE ──────────────────────────────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">DIAGNOSTIC DE PERFORMANCE ÉNERGÉTIQUE</div>
+                  <div class="scanner-dpe-row">
+                    <label class="scanner-dpe-block scanner-chip--dpe-a"><input type="checkbox" name="dpe-filter" value="a"><span>A</span></label>
+                    <label class="scanner-dpe-block scanner-chip--dpe-b"><input type="checkbox" name="dpe-filter" value="b"><span>B</span></label>
+                    <label class="scanner-dpe-block scanner-chip--dpe-c"><input type="checkbox" name="dpe-filter" value="c"><span>C</span></label>
+                    <label class="scanner-dpe-block scanner-chip--dpe-d"><input type="checkbox" name="dpe-filter" value="d"><span>D</span></label>
+                    <label class="scanner-dpe-block scanner-chip--dpe-e"><input type="checkbox" name="dpe-filter" value="e"><span>E</span></label>
+                    <label class="scanner-dpe-block scanner-chip--dpe-f"><input type="checkbox" name="dpe-filter" value="f"><span>F</span></label>
+                    <label class="scanner-dpe-block scanner-chip--dpe-g"><input type="checkbox" name="dpe-filter" value="g"><span>G</span></label>
+                    <label class="scanner-chip" style="margin-left:12px"><input type="checkbox" id="filter-dpe-safe"><span>Sans risque (A–D)</span></label>
+                  </div>
+                </div>
+
+                <!-- ── Section : TYPE + ÉTAT + ÉQUIPEMENTS ───────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">TYPE ET ÉTAT DU BIEN</div>
+                  <div class="scanner-filter-row" style="flex-wrap:wrap;gap:24px">
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Type de bien</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" name="type-filter" value="appartement"><span>Appartement</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="type-filter" value="maison"><span>Maison</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="type-filter" value="immeuble"><span>Immeuble</span></label>
+                      </div>
+                    </div>
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">État</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" id="filter-sans-travaux"><span>Sans travaux</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-travaux"><span>Avec travaux</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-meuble"><span>Meublé</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-deja-loue"><span>Déjà loué</span></label>
+                      </div>
+                    </div>
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Équipements</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" id="filter-parking"><span>Parking / Garage</span></label>
+                      </div>
+                    </div>
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Source loyer</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" id="filter-loyer-marche"><span>Données marché</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-loyer-annonce"><span>Loyer annonce</span></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ── Section : PERFORMANCES INVESTISSEMENT ─────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">PERFORMANCES INVESTISSEMENT</div>
+                  <div class="scanner-filter-row" style="flex-wrap:wrap;gap:24px">
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Score global</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Excellent 80+</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Bon 60–79</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Neutre 40–59</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Attention 20–39</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Faible &lt;20</span></label>
+                      </div>
+                    </div>
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Cash-flow</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" id="filter-cf-positif"><span>CF net positif</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-cf-negatif"><span>CF net négatif</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-cfai-positif"><span>CF après impôt positif</span></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ── Section : BUDGET ET SURFACE ────────────────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">BUDGET ET SURFACE</div>
                   <div style="display:flex;flex-wrap:wrap;gap:16px">
                     <div class="scanner-range-group" style="flex:1;min-width:200px">
                       <span class="scanner-filter-title">Prix (€)</span>
@@ -777,6 +841,11 @@
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <!-- ── Section : RATIOS FINANCIERS ────────────────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">RATIOS FINANCIERS</div>
                   <div style="display:flex;flex-wrap:wrap;gap:16px">
                     <div class="scanner-range-group" style="flex:1;min-width:160px">
                       <span class="scanner-filter-title">Renta brute min (%)</span>
@@ -812,9 +881,13 @@
                   </div>
                 </div>
 
+                <!-- ── Footer ─────────────────────────────────────────────── -->
                 <div class="scanner-filter-footer">
-                  <button id="scanner-filter-reset" class="scanner-btn scanner-btn--ghost" style="font-size:11px;padding:4px 12px">Réinitialiser</button>
-                  <span id="scanner-filter-count" class="scanner-filter-count"></span>
+                  <button id="scanner-filter-reset" class="scanner-btn scanner-btn--ghost" style="font-size:12px;padding:5px 16px">↺ Réinitialiser</button>
+                  <div style="flex:1"></div>
+                  <button id="btn-voir-resultats" class="scanner-voir-resultats-btn">
+                    VOIR LES ANNONCES (<span id="filter-result-count">—</span>)
+                  </button>
                 </div>
               </div>
 
