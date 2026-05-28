@@ -645,6 +645,17 @@
                   <p class="scanner-header-kicker">📡 Scanner d'annonces</p>
                   <h2 class="scanner-header-title">Opportunités locatives</h2>
                   <p id="scanner-header-sub" class="scanner-header-sub">Centre-Val de Loire</p>
+                  <div class="scanner-target-cp-group" style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
+                    <span style="font-size:12px;color:var(--muted)">Zone :</span>
+                    <div style="position:relative">
+                      <input id="scan-target-cp-input" type="text" placeholder="Code postal ou ville…"
+                        autocomplete="off"
+                        style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-strong);color:var(--text);font-size:13px;width:210px;font-family:inherit">
+                      <div id="scan-target-cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
+                    </div>
+                    <span id="scan-target-cp-badge" style="display:none;padding:3px 10px;background:rgba(197,160,89,0.15);color:var(--accent-gold);border:1px solid rgba(197,160,89,0.3);border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap"></span>
+                    <button id="scan-target-cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">× Réinit.</button>
+                  </div>
                 </div>
                 <div class="scanner-header-right">
                   <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
@@ -652,8 +663,8 @@
                     <span id="scanner-status-label">En attente</span>
                   </div>
                   <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">🗑 Vider le cache</button>
-                  <button id="btn-scan-full" class="scanner-btn scanner-btn--outline">↺ Scan complet</button>
-                  <button id="btn-scan" class="scanner-btn scanner-btn--primary">▶ Lancer un scan</button>
+                  <button id="btn-scan-full" class="scanner-btn scanner-btn--outline" disabled>↺ Scan complet</button>
+                  <button id="btn-scan" class="scanner-btn scanner-btn--primary" disabled>▶ Lancer un scan</button>
                 </div>
               </div>
 
