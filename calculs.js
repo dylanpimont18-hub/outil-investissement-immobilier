@@ -164,7 +164,7 @@ export function computeProjectMetrics(projectData) {
     if (cfNetNet >= 300) pts += 3; else if (cfNetNet >= 100) pts += 2; else if (cfNetNet >= 0) pts += 1;
     if (rentaNette >= 7) pts += 3; else if (rentaNette >= 5) pts += 2; else if (rentaNette >= 3.5) pts += 1;
     let scoreLabel;
-    if (pts >= 5) scoreLabel = 'Excellent'; else if (pts >= 3) scoreLabel = 'Bon'; else if (pts >= 1) scoreLabel = 'Moyen'; else scoreLabel = 'Risque';
+    if (pts >= 5) scoreLabel = 'Élevé'; else if (pts >= 3) scoreLabel = 'Intermédiaire'; else if (pts >= 1) scoreLabel = 'Limite'; else scoreLabel = 'Critique';
 
     return { prixNet, coutTotal, loyer, rentaBrute, rentaNette, rentaNetNet, cfNetNet, coc, grm, dscr, bestRegime, scoreLabel };
 }
@@ -173,54 +173,54 @@ function getDecisionToneFromThresholds(metrics) {
     if (metrics.cfNetNet < -150 || metrics.dscr < 0.95 || metrics.rentaNetNet < 3.5) {
         return {
             code: 'refuser',
-            label: 'Refuser',
+            label: 'Non conforme',
             tone: 'negative',
             rank: 0,
-            summary: 'Dans sa configuration actuelle, le bien ne tient pas correctement en exploitation sans parier sur une sortie future.',
-            action: 'Écarter ce dossier ou revoir en profondeur le prix, le loyer cible ou le financement.'
+            summary: 'Dans sa configuration actuelle, l exploitation ne couvre pas correctement les charges, la dette et la marge minimale attendue.',
+            action: 'Revoir le prix, le loyer cible ou le financement avant de poursuivre.'
         };
     }
 
     if (metrics.cfNetNet < 0 || metrics.dscr < 1 || metrics.rentaNetNet < 4) {
         return {
             code: 'negocier',
-            label: 'À négocier',
+            label: 'À recalibrer',
             tone: 'watch',
             rank: 1,
-            summary: 'Le dossier peut devenir viable, mais il manque encore de marge pour être validé sereinement.',
-            action: 'Renégocier les conditions d entrée avant d aller plus loin.'
+            summary: 'Le dossier peut devenir acceptable, mais les indicateurs restent sous les seuils cibles.',
+            action: 'Réviser les conditions d entrée ou le montage avant arbitrage.'
         };
     }
 
     if (metrics.cfNetNet < 75 || metrics.dscr < 1.1 || metrics.rentaNetNet < 4.8) {
         return {
             code: 'tenable',
-            label: 'Tenable',
+            label: 'Limite',
             tone: 'neutral',
             rank: 2,
-            summary: 'Le bien tient sans revente, mais la marge de sécurité reste étroite.',
-            action: 'Sécuriser le montage avant de considérer le dossier comme robuste.'
+            summary: 'Le dossier couvre ses flux, mais avec une marge de sécurité faible.',
+            action: 'Confirmer les hypothèses et sécuriser le montage avant décision.'
         };
     }
 
     if (metrics.cfNetNet < 200 || metrics.dscr < 1.25 || metrics.rentaNetNet < 6) {
         return {
             code: 'solide',
-            label: 'Solide',
+            label: 'Conforme',
             tone: 'positive',
             rank: 3,
-            summary: 'Le bien s autofinance avec une marge crédible et une couverture de dette convenable.',
-            action: 'Poursuivre l étude et confirmer les hypothèses de terrain.'
+            summary: 'Les indicateurs principaux restent cohérents avec une exploitation stabilisée.',
+            action: 'Poursuivre l analyse et confirmer les hypothèses de terrain.'
         };
     }
 
     return {
         code: 'tres-solide',
-        label: 'Très solide',
+        label: 'Favorable',
         tone: 'excellent',
         rank: 4,
-        summary: 'Le bien combine autonomie, couverture et résilience. Il tient proprement sans dépendre d\'une revente.',
-        action: 'Traiter ce dossier comme une priorité.'
+        summary: 'Les indicateurs dépassent les seuils cibles avec une marge de sécurité observable.',
+        action: 'Passer en vérification finale avant offre.'
     };
 }
 
@@ -391,7 +391,7 @@ function buildConfidenceModel(inputs) {
     if (score >= 80) {
         label = 'Élevée';
         tone = 'positive';
-        summary = 'Les hypothèses critiques sont majoritairement vérifiées et la lecture du dossier est solide.';
+        summary = 'Les hypothèses critiques sont majoritairement vérifiées et la lecture du dossier reste cohérente.';
     } else if (score >= 60) {
         label = 'Intermédiaire';
         tone = 'watch';
@@ -419,11 +419,11 @@ function getEconomicAcquisitionSignal(metrics, currentPrice, maxOfferPrice, soli
     if (currentPrice <= solidOfferPrice + 500 && metrics.cfNetNet >= thresholds.strongCf && metrics.dscr >= thresholds.strongDscr) {
         return {
             code: 'buy-now',
-            label: 'Acheter maintenant',
-            matrixLabel: 'Acheter',
+            label: 'Offre recevable',
+            matrixLabel: 'Favorable',
             tone: 'excellent',
-            summary: 'Le prix se situe déjà dans une zone d\'achat solide avec une marge suffisante pour avancer.',
-            action: 'Passer en vérification documentaire puis en offre si le terrain confirme les hypothèses.',
+            summary: 'Le prix se situe déjà sous le seuil favorable avec une marge suffisante pour avancer.',
+            action: 'Passer en vérification documentaire avant offre, sous réserve de confirmation terrain.',
             negotiationToTenable,
             negotiationToSolid
         };
@@ -432,11 +432,11 @@ function getEconomicAcquisitionSignal(metrics, currentPrice, maxOfferPrice, soli
     if (currentPrice <= maxOfferPrice + 500 && metrics.cfNetNet >= thresholds.minCf && metrics.dscr >= thresholds.minDscr) {
         return {
             code: 'buy-clean',
-            label: 'Acheter si le dossier est propre',
-            matrixLabel: 'Acheter',
+            label: 'Offre recevable sous validation',
+            matrixLabel: 'Recevable',
             tone: 'positive',
-            summary: 'Le bien peut être acheté à ce prix, mais il faut encore verrouiller les points de contrôle du dossier.',
-            action: 'Vérifier le terrain, les travaux et les baux avant de formuler l offre.',
+            summary: 'Le prix reste compatible avec les seuils, mais le dossier doit encore être confirmé.',
+            action: 'Vérifier le terrain, les travaux et les baux avant formulation d offre.',
             negotiationToTenable,
             negotiationToSolid
         };
@@ -445,11 +445,11 @@ function getEconomicAcquisitionSignal(metrics, currentPrice, maxOfferPrice, soli
     if (negotiationToTenable > 0 || metrics.cfNetNet >= (thresholds.minCf - 150) || metrics.dscr >= Math.max(0.85, thresholds.minDscr - 0.05)) {
         return {
             code: 'conditional',
-            label: 'Négocier sous conditions',
-            matrixLabel: 'Négocier',
+            label: 'Révision de prix requise',
+            matrixLabel: 'Réviser',
             tone: 'watch',
-            summary: 'À ce prix, la décision d\'achat n est pas assez robuste. La marge doit être recréée par la négociation.',
-            action: `Viser au moins ${Math.round(negotiationToTenable)} € de baisse, idéalement ${Math.round(negotiationToSolid)} € pour entrer en zone solide.`,
+            summary: 'À ce niveau de prix, les indicateurs restent insuffisants. La marge doit être recréée par la négociation.',
+            action: `Viser au moins ${Math.round(negotiationToTenable)} € de baisse pour atteindre le seuil minimal, idéalement ${Math.round(negotiationToSolid)} € pour atteindre le seuil favorable.`,
             negotiationToTenable,
             negotiationToSolid
         };
@@ -457,11 +457,11 @@ function getEconomicAcquisitionSignal(metrics, currentPrice, maxOfferPrice, soli
 
     return {
         code: 'reject',
-        label: 'À écarter',
-        matrixLabel: 'Refuser',
+        label: 'Non recevable',
+        matrixLabel: 'Écarter',
         tone: 'negative',
-        summary: 'Le bien ne fournit pas un cadre assez défendable pour passer en offre aujourd hui.',
-        action: 'Sortir du dossier ou n y revenir qu avec un changement majeur de prix, de loyer ou de financement.',
+        summary: 'Le bien ne fournit pas un cadre suffisamment défendable pour une offre à ce stade.',
+        action: 'Suspendre le dossier, sauf changement majeur de prix, de loyer ou de financement.',
         negotiationToTenable,
         negotiationToSolid
     };
@@ -813,20 +813,20 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     let action = economicSignal.action;
 
     if (economicSignal.tone !== 'negative' && checklist.blockersCount > 0) {
-        label = checklist.criticalBlockers > 0 || checklist.blockersCount >= 2 ? 'Ne pas offrir' : 'Offre bloquée';
+        label = checklist.criticalBlockers > 0 || checklist.blockersCount >= 2 ? 'Offre non recevable' : 'Validation bloquée';
         tone = checklist.criticalBlockers > 0 || checklist.blockersCount >= 2 ? 'negative' : 'watch';
-        summary = 'L\'économie peut exister, mais le dossier reste bloqué par des points terrain ou documentaires non levés.';
-        action = 'Lever les points bloquants de la checklist avant de remettre une offre sur la table.';
+        summary = 'Les indicateurs économiques peuvent être recevables, mais le dossier reste incomplet sur des points terrain ou documentaires.';
+        action = 'Lever les points bloquants de la checklist avant toute offre.';
     } else if (economicSignal.tone === 'excellent' && checklist.warningCount > 0) {
-        label = 'Acheter si le dossier est propre';
+        label = 'Favorable sous validation';
         tone = 'positive';
-        summary = 'Le prix est bon, mais le dossier demande encore quelques validations avant une offre engageante.';
-        action = 'Verrouiller les réserves de la checklist puis lancer l offre.';
+        summary = 'Le prix est cohérent, mais certains contrôles doivent encore être confirmés avant engagement.';
+        action = 'Clore les réserves de la checklist avant offre.';
     } else if (economicSignal.tone === 'positive' && checklist.warningCount >= 2) {
-        label = 'Offre sous réserve';
+        label = 'Décision sous réserve';
         tone = 'watch';
-        summary = 'Le dossier peut rester achetable, mais il faut lever les réserves avant d engager une offre ferme.';
-        action = 'Traiter les points de vigilance avant d avancer sur le compromis.';
+        summary = 'Le dossier reste potentiellement recevable, mais les réserves doivent être levées avant engagement.';
+        action = 'Traiter les points de vigilance avant décision.';
     }
 
     if (tone !== 'negative' && confidenceModel.score < 55) {
@@ -1221,143 +1221,6 @@ function computeConsolidatedTaxEstimate(taxSnapshots, tmi) {
     };
 }
 
-function buildPortfolioHealthDecision(dashboard, income) {
-    if (dashboard.assetCount === 0) {
-        return {
-            label: 'À construire',
-            tone: 'neutral',
-            rank: 0,
-            summary: 'Le portefeuille est vide. Il faut d abord constituer une base de biens suivis ou déjà détenus.',
-            action: 'Commencer par enregistrer les biens détenus et les dossiers prioritaires.',
-            checkpoints: []
-        };
-    }
-
-    const monthlyIncome = Math.max(1, (income || 0) / 12);
-    const effortRatio = dashboard.totalEffort > 0 ? (dashboard.totalEffort / monthlyIncome) * 100 : 0;
-    const taxRatio = dashboard.totalRentMonthly > 0 ? ((dashboard.consolidatedTaxAnnual / 12) / dashboard.totalRentMonthly) * 100 : 0;
-
-    let baseDecision;
-    if (dashboard.totalCashflow < -250 || dashboard.dscr < 0.95) {
-        baseDecision = {
-            label: 'Sous tension',
-            tone: 'negative',
-            rank: 0,
-            summary: 'Le portefeuille consomme trop de trésorerie ou ne couvre plus correctement sa dette.',
-            action: 'Traiter les biens les plus faibles avant toute nouvelle acquisition.'
-        };
-    } else if (dashboard.totalCashflow < 0 || dashboard.dscr < 1) {
-        baseDecision = {
-            label: 'Fragile',
-            tone: 'watch',
-            rank: 1,
-            summary: 'Le portefeuille reste exploitable mais manque de marge de sécurité consolidée.',
-            action: 'Reconstituer de la marge avant d ajouter un nouveau bien.'
-        };
-    } else if (dashboard.totalCashflow < 150 || dashboard.dscr < 1.1) {
-        baseDecision = {
-            label: 'À stabiliser',
-            tone: 'neutral',
-            rank: 2,
-            summary: 'Le portefeuille tient globalement, mais il peut encore être optimisé pour gagner en régularité.',
-            action: 'Arbitrer les priorités et sécuriser les biens les moins robustes.'
-        };
-    } else if (dashboard.totalCashflow < 400 || dashboard.dscr < 1.25) {
-        baseDecision = {
-            label: 'Solide',
-            tone: 'positive',
-            rank: 3,
-            summary: 'Le portefeuille couvre sa dette et laisse une marge de pilotage confortable.',
-            action: 'Étudier les acquisitions seulement si elles renforcent encore l ensemble.'
-        };
-    } else {
-        baseDecision = {
-            label: 'Très solide',
-            tone: 'excellent',
-            rank: 4,
-            summary: 'Le portefeuille combine autonomie, couverture et création de valeur dans le temps.',
-            action: 'Prioriser les acquisitions qui renforcent cet équilibre sans le fragiliser.'
-        };
-    }
-
-    return {
-        ...baseDecision,
-        checkpoints: [
-            {
-                label: 'CF consolidé',
-                kind: 'currency',
-                value: dashboard.totalCashflow,
-                target: '>= 0 € / mois',
-                tone: dashboard.totalCashflow >= 0 ? 'positive' : 'negative'
-            },
-            {
-                label: 'DSCR consolidé',
-                kind: 'ratio',
-                value: dashboard.dscr,
-                target: '>= 1,10',
-                tone: dashboard.dscr >= 1.1 ? 'positive' : (dashboard.dscr >= 1 ? 'watch' : 'negative')
-            },
-            {
-                label: 'Ponction fiscale',
-                kind: 'percent',
-                value: taxRatio,
-                target: '<= 20 % des loyers',
-                tone: taxRatio <= 20 ? 'positive' : (taxRatio <= 28 ? 'watch' : 'negative')
-            },
-            {
-                label: 'Effort du foyer',
-                kind: 'percent',
-                value: effortRatio,
-                target: '<= 10 % du revenu brut',
-                tone: effortRatio <= 10 ? 'positive' : (effortRatio <= 18 ? 'watch' : 'negative')
-            }
-        ]
-    };
-}
-
-function buildPortfolioAlerts(portfolioItems, dashboard) {
-    const alerts = [];
-
-    if (dashboard.totalCashflow < 0) {
-        alerts.push({
-            tone: 'negative',
-            title: 'Portefeuille déficitaire',
-            detail: `Effort consolide de ${Math.round(Math.abs(dashboard.totalCashflow))} € / mois.`
-        });
-    }
-
-    if (dashboard.dscr < 1) {
-        alerts.push({
-            tone: 'negative',
-            title: 'Dette insuffisamment couverte',
-            detail: `DSCR consolidé à ${dashboard.dscr.toFixed(2)}.`
-        });
-    }
-
-    portfolioItems.forEach(item => {
-        if (item.metrics.cfNetNet < 0) {
-            alerts.push({
-                tone: 'negative',
-                title: item.name,
-                detail: `CF net-net à ${Math.round(item.metrics.cfNetNet)} € / mois.`
-            });
-        } else if (item.metrics.dscr < 1) {
-            alerts.push({
-                tone: 'watch',
-                title: item.name,
-                detail: `Couverture de dette fragile avec un DSCR à ${item.metrics.dscr.toFixed(2)}.`
-            });
-        } else if ((item.analysisModel.decision.regimeGap || 0) > 25) {
-            alerts.push({
-                tone: 'watch',
-                title: item.name,
-                detail: `Levier fiscal mobilisable de ${Math.round(item.analysisModel.decision.regimeGap)} € / mois.`
-            });
-        }
-    });
-
-    return alerts.slice(0, 5);
-}
 
 function buildPortfolioPriorities(portfolioItems) {
     return portfolioItems
@@ -1429,179 +1292,6 @@ function buildPortfolioDashboard(portfolioItems, tmi, income) {
     };
 }
 
-function estimateFinancedAmount(monthlyPaymentCapacity, referenceInputs) {
-    const monthlyPayment = Math.max(0, monthlyPaymentCapacity || 0);
-    if (monthlyPayment <= 0) {
-        return 0;
-    }
-
-    const durationMonths = Math.max(1, Math.round((referenceInputs['duree'] || 20) * 12));
-    const monthlyRate = Math.max(0, (referenceInputs['taux-input'] || 0) / 100 / 12);
-    const insuranceMonthlyRate = Math.max(0, (referenceInputs['assurance'] || 0) / 100 / 12);
-
-    const creditFactor = monthlyRate > 0
-        ? (monthlyRate / (1 - Math.pow(1 + monthlyRate, -durationMonths)))
-        : (1 / durationMonths);
-
-    const totalFactor = creditFactor + insuranceMonthlyRate;
-    return totalFactor > 0 ? (monthlyPayment / totalFactor) : 0;
-}
-
-function buildPortfolioCapacity(dashboard, income, referenceInputs) {
-    const thresholds = normalizeDecisionThresholds(referenceInputs || {});
-    const monthlyIncome = Math.max(1, (income || 0) / 12);
-    const allowedEffort = monthlyIncome * (thresholds.maxEffortRatio / 100);
-    const remainingEffort = allowedEffort - dashboard.totalEffort;
-    const financedAmount = estimateFinancedAmount(Math.max(0, remainingEffort), referenceInputs || {});
-    const upfrontCash = Math.max(0, Number(referenceInputs['apport']) || 0);
-    const acquisitionBudget = financedAmount + upfrontCash;
-
-    let label = 'Capacité disponible';
-    let tone = 'positive';
-    let summary = 'Le foyer conserve encore une marge de trésorerie pour absorber un nouveau dossier.';
-
-    if (remainingEffort < 0) {
-        label = 'Capacité dépassée';
-        tone = 'negative';
-        summary = 'Le foyer dépasse déjà le seuil d\'effort cible : toute acquisition supplémentaire ajoute du risque.';
-    } else if (remainingEffort < Math.max(75, allowedEffort * 0.2)) {
-        label = 'Capacité limitée';
-        tone = 'watch';
-        summary = 'La marge restante existe encore, mais elle devient faible pour absorber un nouveau bien sans tension.';
-    }
-
-    return {
-        label,
-        tone,
-        summary,
-        maxEffortRatio: thresholds.maxEffortRatio,
-        allowedEffort,
-        remainingEffort,
-        financedAmount,
-        acquisitionBudget
-    };
-}
-
-function buildPortfolioConcentration(portfolioItems) {
-    if (!portfolioItems.length) {
-        return {
-            label: 'À construire',
-            tone: 'neutral',
-            summary: 'Ajoutez des biens au portefeuille pour lire la concentration du risque.',
-            cityCount: 0,
-            topCityShare: 0,
-            topAssetShare: 0,
-            cities: []
-        };
-    }
-
-    const totalRentMonthly = Math.max(1, portfolioItems.reduce((sum, item) => sum + (item.analysisModel.annual.loyersEncaisses / 12), 0));
-    const cityMap = new Map();
-
-    portfolioItems.forEach(item => {
-        const city = item.city || 'Ville non renseignée';
-        const current = cityMap.get(city) || { label: city, monthlyRent: 0, count: 0 };
-        current.monthlyRent += item.analysisModel.annual.loyersEncaisses / 12;
-        current.count += 1;
-        cityMap.set(city, current);
-    });
-
-    const cities = [...cityMap.values()]
-        .map(entry => ({
-            ...entry,
-            share: (entry.monthlyRent / totalRentMonthly) * 100
-        }))
-        .sort((left, right) => right.share - left.share);
-
-    const topCityShare = cities[0]?.share || 0;
-    const topAssetShare = portfolioItems
-        .map(item => ((item.analysisModel.annual.loyersEncaisses / 12) / totalRentMonthly) * 100)
-        .sort((left, right) => right - left)[0] || 0;
-
-    let label = 'Diversifié';
-    let tone = 'positive';
-    let summary = 'Le risque locatif reste assez bien réparti entre les biens suivis.';
-
-    if (topCityShare >= 60 || topAssetShare >= 45) {
-        label = 'Concentré';
-        tone = 'negative';
-        summary = 'Le portefeuille dépend trop d\'une seule ville ou d\'un seul bien pour rester confortable.';
-    } else if (topCityShare >= 40 || topAssetShare >= 30) {
-        label = 'À surveiller';
-        tone = 'watch';
-        summary = 'Une part importante des loyers repose déjà sur une poche de risque limitée.';
-    }
-
-    return {
-        label,
-        tone,
-        summary,
-        cityCount: cities.length,
-        topCityShare,
-        topAssetShare,
-        cities: cities.slice(0, 3)
-    };
-}
-
-function buildAcquisitionArbitrage(candidateItems, portfolioItems, baseDashboard, householdProfile, tmi, referenceInputs) {
-    const existingPortfolio = portfolioItems;
-    const thresholds = normalizeDecisionThresholds(referenceInputs || {});
-
-    return candidateItems
-        .map(candidate => {
-            const scenarioDashboard = buildPortfolioDashboard([...existingPortfolio, candidate], tmi, householdProfile.income || 0);
-            const scenarioCapacity = buildPortfolioCapacity(scenarioDashboard, householdProfile.income || 0, referenceInputs || {});
-            const deltaCashflow = scenarioDashboard.totalCashflow - baseDashboard.totalCashflow;
-            const deltaTaxAnnual = scenarioDashboard.consolidatedTaxAnnual - baseDashboard.consolidatedTaxAnnual;
-            const deltaTraction = scenarioDashboard.totalTraction - baseDashboard.totalTraction;
-            const acquisitionTone = candidate.analysisModel.acquisitionDecision.tone;
-            const acquisitionScore = candidate.analysisModel.acquisitionDecision.score;
-
-            let recommendation;
-            if ((acquisitionTone === 'excellent' || acquisitionTone === 'positive') && acquisitionScore >= 75 && deltaCashflow >= 0 && scenarioDashboard.dscr >= Math.max(1.05, thresholds.minDscr) && scenarioCapacity.remainingEffort >= 0) {
-                recommendation = {
-                    label: 'Acheter maintenant',
-                    tone: 'positive',
-                    rank: 3,
-                    summary: 'Le portefeuille gagne en flux sans se tendre.'
-                };
-            } else if (acquisitionTone !== 'negative' && acquisitionScore >= 55 && deltaCashflow >= -75 && scenarioDashboard.dscr >= Math.max(1, thresholds.minDscr - 0.05) && scenarioCapacity.remainingEffort >= -75) {
-                recommendation = {
-                    label: 'À négocier',
-                    tone: 'watch',
-                    rank: 2,
-                    summary: 'Le dossier peut passer, mais le montage doit encore être sécurisé.'
-                };
-            } else {
-                recommendation = {
-                    label: 'À reporter',
-                    tone: 'negative',
-                    rank: 1,
-                    summary: 'L\'ajout fragilise trop le portefeuille ou manque encore de marge.'
-                };
-            }
-
-            return {
-                id: candidate.id,
-                name: candidate.name,
-                decisionLabel: candidate.analysisModel.acquisitionDecision.label,
-                recommendation,
-                deltaCashflow,
-                deltaTaxAnnual,
-                deltaTraction,
-                scenarioCashflow: scenarioDashboard.totalCashflow,
-                scenarioDscr: scenarioDashboard.dscr,
-                scenarioCapacity: scenarioCapacity.remainingEffort,
-                summary: recommendation.summary
-            };
-        })
-        .sort((left, right) => {
-            if (right.recommendation.rank !== left.recommendation.rank) {
-                return right.recommendation.rank - left.recommendation.rank;
-            }
-            return right.deltaCashflow - left.deltaCashflow;
-        });
-}
 
 export function computePortfolioViewModel(assetRecords = [], householdProfile = {}, activeAssetId = null, referenceInputs = {}) {
     const income = householdProfile.income || 0;
@@ -1666,47 +1356,13 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
         });
 
     const dashboard = buildPortfolioDashboard(portfolioItems, tmi, income);
-    const capacity = buildPortfolioCapacity(dashboard, income, referenceInputs || {});
-    const concentration = buildPortfolioConcentration(portfolioItems);
-    const alerts = buildPortfolioAlerts(portfolioItems, dashboard);
-    if (capacity.tone !== 'positive') {
-        alerts.unshift({
-            tone: capacity.tone,
-            title: capacity.label,
-            detail: capacity.summary
-        });
-    }
-    if (concentration.tone !== 'positive' && concentration.tone !== 'neutral') {
-        alerts.unshift({
-            tone: concentration.tone,
-            title: 'Risque de concentration',
-            detail: concentration.summary
-        });
-    }
     const priorities = buildPortfolioPriorities(portfolioItems);
-    const acquisitions = buildAcquisitionArbitrage(
-        comparisonItems.filter(item => !item.inPortfolio),
-        portfolioItems,
-        dashboard,
-        { income, adults, children },
-        tmi,
-        referenceInputs || {}
-    );
-    const readyAcquisitions = acquisitions.filter(item => item.recommendation.rank >= 3).length;
 
     return {
         comparisonItems,
         portfolioItems,
-        dashboard: {
-            ...dashboard,
-            readyAcquisitions
-        },
-        decision: buildPortfolioHealthDecision(dashboard, income),
-        alerts: alerts.slice(0, 5),
-        priorities,
-        acquisitions,
-        capacity,
-        concentration
+        dashboard,
+        priorities
     };
 }
 
