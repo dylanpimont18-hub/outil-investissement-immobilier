@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spark Investissement | Décision locative</title>
-    <meta name="theme-color" content="#F8F9FA">
+    <title>Spark Investissement | Analyse locative</title>
+    <meta name="theme-color" content="#060912">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
     <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="shell">
@@ -19,20 +20,32 @@
                 <figure class="topbar-logo">
                     <img src="Logo_site.png" alt="Logo" width="24" height="24">
                 </figure>
-                <span class="topbar-name">Spark Investissement</span>
+                <div class="topbar-brand-copy">
+                    <span class="topbar-kicker">Analyse immobilière</span>
+                    <span class="topbar-name">Spark Investissement</span>
+                </div>
             </div>
             <div class="topbar-study">
-                <span id="topbar-study-name" class="topbar-study-chip">—</span>
+                <span class="topbar-study-label">Dossier actif</span>
+                <strong id="topbar-study-name" class="topbar-study-name">—</strong>
+                <span id="topbar-study-meta" class="topbar-study-meta">Ville à préciser · À étudier</span>
             </div>
             <div class="topbar-actions">
-                <button type="button" id="theme-toggle" class="topbar-btn" aria-label="Basculer thème"></button>
-                <button type="button" id="screen-toggle" class="topbar-btn" aria-label="Mode 2 écrans"></button>
-                <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode tutoriel" aria-pressed="false">Tuto</button>
-                <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
-                    <button type="button" class="mode-toggle__btn" id="mode-btn-guided" data-mode="guided" aria-pressed="false">⚡ Guidé</button>
-                    <button type="button" class="mode-toggle__btn" id="mode-btn-full" data-mode="full" aria-pressed="true">☰ Complet</button>
+                <div class="topbar-actions__minor">
+                    <button type="button" id="theme-toggle" class="topbar-btn topbar-btn--icon" aria-label="Basculer thème"></button>
+                    <button type="button" id="screen-toggle" class="topbar-btn topbar-btn--minor" aria-label="Mode 2 écrans"></button>
                 </div>
-                <button type="button" id="profile-trigger" class="topbar-btn" aria-label="Profil du foyer"></button>
+                <div class="topbar-actions__mode">
+                    <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode assistant" aria-pressed="false">Assistant</button>
+                    <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
+                        <button type="button" class="mode-toggle__btn" id="mode-btn-guided" data-mode="guided" aria-pressed="false">Guidé</button>
+                        <button type="button" class="mode-toggle__btn" id="mode-btn-full" data-mode="full" aria-pressed="true">Complet</button>
+                    </div>
+                </div>
+                <button type="button" id="profile-trigger" class="topbar-profile" aria-label="Profil du foyer">
+                    <span id="topbar-profile-label" class="topbar-profile__title">Profil du foyer</span>
+                    <span id="topbar-profile-meta" class="topbar-profile__meta">Configuration requise pour les calculs</span>
+                </button>
             </div>
         </header>
 
@@ -40,13 +53,15 @@
             <nav class="workspace-tabs" aria-label="Navigation">
                 <button class="workspace-tab is-active" data-target="workspace-panel">Saisie &amp; Analyse</button>
                 <button class="workspace-tab" data-target="collection-panel">Portefeuille</button>
-                <button class="workspace-tab" data-target="scanner-panel">📡 Scanner</button>
+                <button class="workspace-tab" data-target="feasibility-panel">Faisabilité</button>
+                <button class="workspace-tab" data-target="scanner-panel">Scanner</button>
             </nav>
             <section class="workspace-panel" aria-label="Espace de travail">
                 <div class="panel-head">
                     <h2 id="workspace-title"></h2>
                     <p id="workspace-subtitle" class="panel-subtitle"></p>
                 </div>
+                <section id="workspace-hero" class="workspace-hero" aria-label="Synthèse du dossier"></section>
                 <div id="workspace-board" class="workspace-board" data-layout="2">
                     <section id="variables-panel" class="variables-panel" aria-label="Variables modifiables">
                         <div class="panel-head panel-head--stacked">
@@ -156,10 +171,12 @@
                                     <label class="variables-field" for="taux-input">
                                         <span class="status-label">Taux % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'intérêt annuel du crédit immobilier, hors assurance. Comparer les offres bancaires.">?</button></span>
                                         <input id="taux-input" name="taux-input" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
+                                        <input type="range" id="taux-slider" class="variables-slider" min="0.5" max="7" step="0.1" value="3.5" aria-hidden="true" tabindex="-1">
                                     </label>
                                     <label class="variables-field" for="duree">
                                         <span class="status-label">Durée (ans) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Durée du prêt en années. Plus longue = mensualité plus faible mais coût total plus élevé.">?</button></span>
                                         <input id="duree" name="duree" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
+                                        <input type="range" id="duree-slider" class="variables-slider" min="5" max="30" step="1" value="20" aria-hidden="true" tabindex="-1">
                                     </label>
                                     <label class="variables-field" for="assurance">
                                         <span class="status-label">Assurance % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'assurance emprunteur annuel (ADI), en % du capital emprunté. Environ 0,20–0,40 %.">?</button></span>
@@ -169,6 +186,26 @@
                                         <span class="status-label">Frais bancaires <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Frais de dossier bancaire et garantie (hypothèque ou caution). Généralement 1 000–2 000 €.">?</button></span>
                                         <input id="frais-bancaires" name="frais-bancaires" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
                                     </label>
+                                </div>
+                                <div class="finance-live-card" aria-live="polite" aria-label="Mensualités du financement en direct">
+                                    <div class="finance-live-card__head">
+                                        <span class="finance-live-card__eyebrow">Simulation en direct</span>
+                                        <strong class="finance-live-card__title">Mensualité du financement</strong>
+                                    </div>
+                                    <div class="finance-live-card__grid">
+                                        <div class="finance-live-card__item">
+                                            <span class="finance-live-card__label">Crédit</span>
+                                            <strong class="finance-live-card__value" id="finance-live-credit">—</strong>
+                                        </div>
+                                        <div class="finance-live-card__item">
+                                            <span class="finance-live-card__label">Assurance</span>
+                                            <strong class="finance-live-card__value" id="finance-live-insurance">—</strong>
+                                        </div>
+                                        <div class="finance-live-card__item finance-live-card__item--total">
+                                            <span class="finance-live-card__label">Total / mois</span>
+                                            <strong class="finance-live-card__value finance-live-card__value--accent" id="finance-live-total">—</strong>
+                                        </div>
+                                    </div>
                                 </div>
                             </fieldset>
                                 </div>
@@ -230,7 +267,8 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid variables-grid--single">
                                     <label class="variables-field" for="regime">
-                                        <span class="status-label">Régime <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Régime fiscal de la location : Micro-foncier (abattement 30 %), Réel (déduction charges réelles), SCI IS (imposition société).">?</button></span>
+                                        <span class="status-label">Régime <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Régime fiscal de la location : Micro-foncier (abattement 30 %), Réel (déduction charges réelles), SCI IS (imposition société).">?</button>
+                                            <button type="button" class="field-regime-info" id="btn-regime-modal" title="Détails des régimes fiscaux">ⓘ</button></span>
                                         <select id="regime" name="regime" class="variables-input">
                                             <option value="micro-foncier">Micro-foncier</option>
                                             <option value="reel">Foncier réel</option>
@@ -389,14 +427,14 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field variables-field--wide" for="decision-thesis">
-                                        <span class="status-label">Thèse d'investissement <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Résumez en quelques mots pourquoi vous étudiez ce bien. Requis pour enregistrer le dossier (20 caractères min).">?</button></span>
-                                        <span id="decision-thesis-help" class="field-assist">Champ requis pour enregistrer le dossier. Résumez la logique d'achat en au moins 20 caractères.</span>
+                                        <span class="status-label">Hypothèse d'analyse <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Résumez l'hypothèse principale retenue pour ce dossier. Requis pour enregistrer le dossier (20 caractères min).">?</button></span>
+                                        <span id="decision-thesis-help" class="field-assist">Champ requis pour enregistrer le dossier. Résumez l'hypothèse d'analyse en 20 caractères minimum.</span>
                                         <textarea id="decision-thesis" name="decision-thesis" class="variables-input variables-textarea" rows="4" aria-required="true" aria-describedby="decision-thesis-help decision-thesis-error"></textarea>
                                         <span id="decision-thesis-error" class="field-error" aria-live="polite" hidden></span>
                                     </label>
                                     <label class="variables-field variables-field--wide" for="decision-next-step">
-                                        <span class="status-label">Prochaine étape <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Prochaine action concrète à mener sur ce dossier (visite, devis, offre…). Requis pour enregistrer (10 caractères min).">?</button></span>
-                                        <span id="decision-next-step-help" class="field-assist">Champ requis pour enregistrer le dossier. Indiquez la prochaine étape concrète en au moins 10 caractères.</span>
+                                        <span class="status-label">Action suivante <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Indiquez l'action suivante à mener sur ce dossier (visite, devis, offre, demande de pièces). Requis pour enregistrer (10 caractères min).">?</button></span>
+                                        <span id="decision-next-step-help" class="field-assist">Champ requis pour enregistrer le dossier. Indiquez l'action suivante en 10 caractères minimum.</span>
                                         <textarea id="decision-next-step" name="decision-next-step" class="variables-input variables-textarea" rows="3" aria-required="true" aria-describedby="decision-next-step-help decision-next-step-error"></textarea>
                                         <span id="decision-next-step-error" class="field-error" aria-live="polite" hidden></span>
                                     </label>
@@ -428,11 +466,11 @@
                                 <div class="variables-grid">
                                     <label class="variables-field" for="nom-bien">
                                         <span class="status-label">Nom du bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Nom libre pour identifier ce dossier dans votre comparateur et vos exports PDF.">?</button></span>
-                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off">
+                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off" placeholder="ex. T3 centre Tours">
                                     </label>
                                     <label class="variables-field" for="ville">
                                         <span class="status-label">Ville <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Ville où se situe le bien. Utilisée pour contextualiser l'analyse et le rapport.">?</button></span>
-                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off">
+                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off" placeholder="ex. Tours">
                                     </label>
                                     <label class="variables-field" for="type-bien">
                                         <span class="status-label">Type de bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Type du bien. Influence les valeurs par défaut des seuils de décision et des charges.">?</button></span>
@@ -463,6 +501,13 @@
                             <button type="button" id="new-asset" class="toolbar-button">Nouvelle étude</button>
                             <button type="button" id="save-comparison" class="toolbar-button">Enregistrer au comparateur</button>
                             <button type="button" id="save-portfolio" class="toolbar-button">Basculer au portefeuille</button>
+                        <div id="asset-status-bar" class="asset-status-bar asset-status-bar--new" aria-live="polite">
+                            <div class="asset-status-bar__left">
+                                <span class="asset-status-bar__dot asset-status-bar__dot--new">○</span>
+                                <span class="asset-status-bar__text">Nouvelle étude · pas encore enregistrée</span>
+                            </div>
+                            <div class="asset-status-bar__badges"></div>
+                        </div>
                             <button type="button" id="export-decision-pdf" class="toolbar-button">Exporter la note PDF</button>
                         </div>
                     </section>
@@ -471,7 +516,7 @@
                         <div class="panel-head panel-head--stacked">
                             <div>
                                 <p id="analysis-kicker" class="brand-kicker"></p>
-                                <h3>Lecture décisionnelle</h3>
+                                <h3>Synthèse analytique</h3>
                                 <p id="analysis-subtitle" class="panel-note"></p>
                             </div>
                         </div>
@@ -483,27 +528,14 @@
                             <div id="analysis-acquisition-decision"></div>
                         </section>
 
+                        <div class="analysis-section-badge">② ÉCONOMIE DU DEAL</div>
                         <div id="analysis-cf-waterfall" class="cf-waterfall"></div>
 
-                        <div class="analysis-section-badge">② MÉTRIQUES CLÉS</div>
                         <div id="analysis-metrics" class="analysis-grid"></div>
 
-                        <div class="analysis-section-badge">③ SOLIDITÉ &amp; ④ STRESS</div>
-                        <div class="analysis-columns--2up">
-                            <section class="analysis-block">
-                                <h4>Solidité des hypothèses</h4>
-                                <div id="analysis-confidence"></div>
-                            </section>
-
-                            <section class="analysis-block">
-                                <h4>Scénarios de stress</h4>
-                                <div id="analysis-scenarios"></div>
-                            </section>
-                        </div>
-
                         <section class="analysis-block">
-                            <h4>Journal de décision</h4>
-                            <div id="analysis-journal"></div>
+                            <h4>Décision d'exploitation</h4>
+                            <div id="analysis-summary"></div>
                         </section>
 
                         <div class="analysis-visuals">
@@ -518,7 +550,37 @@
                             </section>
                         </div>
 
-                        <div class="analysis-section-badge">⑤ PROJECTIONS &amp; FISCALITÉ</div>
+                        <div class="analysis-section-badge">③ ROBUSTESSE</div>
+                        <div class="analysis-columns--2up">
+                            <section class="analysis-block">
+                                <h4>Solidité des hypothèses</h4>
+                                <div id="analysis-confidence"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Checklist avant offre</h4>
+                                <div id="analysis-checklist"></div>
+                            </section>
+                        </div>
+
+                        <section class="analysis-block">
+                            <h4>Vue détaillée</h4>
+                            <div id="analysis-details"></div>
+                        </section>
+
+                        <div class="analysis-section-badge">④ SCÉNARIOS &amp; PROJECTIONS</div>
+                        <div class="analysis-columns--2up">
+                            <section class="analysis-block">
+                                <h4>Scénarios de stress</h4>
+                                <div id="analysis-scenarios"></div>
+                            </section>
+
+                            <section class="analysis-block">
+                                <h4>Comparatif des leviers</h4>
+                                <div id="analysis-sensitivity-table"></div>
+                            </section>
+                        </div>
+
                         <div class="analysis-forward">
                             <section class="analysis-block analysis-block--wide">
                                 <div class="analysis-block-head">
@@ -541,37 +603,21 @@
                             </section>
                         </div>
 
-                        <div class="analysis-tables">
-                            <section class="analysis-block">
-                                <h4>Régimes fiscaux</h4>
-                                <div id="analysis-regime-table"></div>
-                            </section>
+                        <section class="analysis-block">
+                            <h4>Régimes fiscaux</h4>
+                            <div id="analysis-regime-table"></div>
+                        </section>
 
+                        <div class="analysis-section-badge">⑤ PLAN D'ACTION</div>
+                        <div class="analysis-columns--2up">
                             <section class="analysis-block">
-                                <h4>Comparatif des leviers</h4>
-                                <div id="analysis-sensitivity-table"></div>
-                            </section>
-                        </div>
-
-                        <div class="analysis-columns">
-                            <section class="analysis-block">
-                                <h4>Décision d'exploitation</h4>
-                                <div id="analysis-summary"></div>
-                            </section>
-
-                            <section class="analysis-block">
-                                <h4>Checklist avant offre</h4>
-                                <div id="analysis-checklist"></div>
+                                <h4>Journal de décision</h4>
+                                <div id="analysis-journal"></div>
                             </section>
 
                             <section class="analysis-block">
                                 <h4>Leviers prioritaires</h4>
                                 <div id="analysis-action-plan"></div>
-                            </section>
-
-                            <section class="analysis-block">
-                                <h4>Vue détaillée</h4>
-                                <div id="analysis-details"></div>
                             </section>
                         </div>
                     </section>
@@ -587,112 +633,256 @@
                     </div>
                 </div>
 
+                <div id="portfolio-kpi-banner"></div>
+                <section id="portfolio-hero" class="workspace-hero" aria-label="Synthèse portefeuille"></section>
+
                 <div id="portfolio-summary" class="analysis-grid"></div>
 
-                <div class="analysis-columns">
-                    <section class="analysis-block">
-                        <h4>Lecture consolidée</h4>
-                        <div id="portfolio-decision"></div>
-                    </section>
-
-                    <section class="analysis-block">
-                        <h4>Alertes prioritaires</h4>
-                        <div id="portfolio-alerts"></div>
-                    </section>
-                </div>
-
-                <div class="analysis-columns">
-                    <section class="analysis-block">
-                        <h4>Capacité d'achat restante</h4>
-                        <div id="portfolio-capacity"></div>
-                    </section>
-
-                    <section class="analysis-block">
-                        <h4>Concentration du risque</h4>
-                        <div id="portfolio-concentration"></div>
-                    </section>
-                </div>
+                <div id="portfolio-asset-grid-owned" class="portfolio-asset-section"></div>
+                <div id="portfolio-asset-grid-pipeline" class="portfolio-asset-section"></div>
 
                 <div class="analysis-tables">
                     <section class="analysis-block">
                         <h4>Priorités de portefeuille</h4>
                         <div id="portfolio-priorities"></div>
                     </section>
+                </div>
 
+                <div class="analysis-columns">
                     <section class="analysis-block">
-                        <h4>Arbitrage des acquisitions</h4>
-                        <div id="acquisition-arbitrage"></div>
+                        <h4>Vue fiscale consolidée</h4>
+                        <div id="portfolio-fiscal"></div>
+                    </section>
+                    <section class="analysis-block">
+                        <h4>Taux d'endettement bancaire</h4>
+                        <div id="portfolio-debt-ratios"></div>
+                    </section>
+                </div>
+
+                <div class="analysis-columns">
+                    <section class="analysis-block">
+                        <h4>Progression vers l'objectif</h4>
+                        <div id="portfolio-objectif"></div>
+                    </section>
+                    <section class="analysis-block">
+                        <h4>Projection patrimoniale</h4>
+                        <div id="portfolio-projection"></div>
                     </section>
                 </div>
 
                 <div class="analysis-tables">
                     <section class="analysis-block">
-                        <h4>Comparateur</h4>
-                        <div id="comparison-table"></div>
+                        <h4>Répartition par bien</h4>
+                        <div id="portfolio-repartition"></div>
                     </section>
+                </div>
 
+                <div class="analysis-tables">
                     <section class="analysis-block">
-                        <h4>Portefeuille</h4>
-                        <div id="portfolio-table"></div>
+                        <h4>Crédits en cours</h4>
+                        <div id="portfolio-credits"></div>
+                    </section>
+                </div>
+
+                <div class="analysis-tables">
+                    <section class="analysis-block">
+                        <h4>Chronologie des biens</h4>
+                        <div id="portfolio-timeline"></div>
                     </section>
                 </div>
             </section>
 
-            <section id="scanner-panel" style="display:none" aria-label="Scanner LeBonCoin">
-              <!-- Zone A : Header -->
+            <section id="feasibility-panel" class="workspace-panel" style="display:none" aria-label="Faisabilité">
+                <div class="panel-head panel-head--stacked">
+                    <div>
+                        <p class="brand-kicker">Cadrage acquisition</p>
+                        <h2>Prix cible et loyer plancher</h2>
+                        <p class="panel-note">Calé sur vos hypothèses actuelles (apport, taux, durée, charges, régime fiscal).</p>
+                    </div>
+                </div>
+
+                <div class="feasibility-wrapper">
+                    <div class="feasibility-target-card">
+                        <label class="feasibility-label" for="feasibility-target-cf">
+                            Objectif de cash-flow net-net
+                            <button class="field-hint" type="button" tabindex="-1" data-tip="Le montant net que vous voulez garder chaque mois après crédit, charges et impôts.">?</button>
+                        </label>
+                        <div class="feasibility-input-row">
+                            <input type="number" id="feasibility-target-cf" class="variables-input" value="100" step="10" min="-500" max="2000">
+                            <span class="feasibility-unit">€ / mois</span>
+                        </div>
+                    </div>
+
+                    <div class="feasibility-options">
+                        <div class="feasibility-option">
+                            <div class="feasibility-option-header">
+                                <span class="feasibility-option-badge">Option A</span>
+                                <span class="feasibility-option-sub">Vous partez du marché locatif</span>
+                            </div>
+                            <h3>Je pars du loyer de marché</h3>
+                            <p>Vous connaissez le loyer crédible du secteur. L'application vous donne le prix d'achat maximum à ne pas dépasser pour rester dans votre cible.</p>
+
+                            <label class="feasibility-label" for="feasibility-loyer-estime">
+                                Loyer estimé
+                            </label>
+                            <div class="feasibility-input-row">
+                                <input type="number" id="feasibility-loyer-estime" class="variables-input" value="500" step="10" min="0">
+                                <span class="feasibility-unit">€/mois</span>
+                            </div>
+
+                            <div class="feasibility-result">
+                                <span class="feasibility-result-label">Prix d'achat maximal (FAI)
+                                    <button class="field-hint" type="button" tabindex="-1" data-tip="Le prix maximum que vous pouvez payer frais inclus pour atteindre votre objectif de cash-flow avec ce loyer.">?</button>
+                                </span>
+                                <strong id="feasibility-prix-max" class="feasibility-result-value">—</strong>
+                            </div>
+                        </div>
+
+                        <div class="feasibility-option">
+                            <div class="feasibility-option-header">
+                                <span class="feasibility-option-badge">Option B</span>
+                                <span class="feasibility-option-sub">Vous partez d'un prix affiché</span>
+                            </div>
+                            <h3>Je pars du prix affiché</h3>
+                            <p>Vous avez déjà une annonce en tête. L'application vous indique le loyer minimum à sécuriser pour rester aligné avec votre objectif.</p>
+
+                            <label class="feasibility-label" for="feasibility-prix-annonce">
+                                Prix de l'annonce (FAI)
+                                <button class="field-hint" type="button" tabindex="-1" data-tip="FAI = Frais d'Agence Inclus. Prix affiché dans l'annonce, commission incluse.">?</button>
+                            </label>
+                            <div class="feasibility-input-row">
+                                <input type="number" id="feasibility-prix-annonce" class="variables-input" value="80000" step="1000" min="0">
+                                <span class="feasibility-unit">€</span>
+                            </div>
+
+                            <div class="feasibility-result">
+                                <span class="feasibility-result-label">Loyer minimum à sécuriser
+                                    <button class="field-hint" type="button" tabindex="-1" data-tip="Le loyer mensuel minimum que vous devez demander pour atteindre votre objectif de CF avec ce prix d'achat.">?</button>
+                                </span>
+                                <strong id="feasibility-loyer-min" class="feasibility-result-value">—</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="panel-note" style="margin-top: 16px;">Ces calculs réutilisent l'apport, le taux, la durée, les charges et le régime fiscal définis dans l'onglet Saisie &amp; Analyse.</p>
+                </div>
+            </section>
+                        <section id="scanner-panel" style="display:none" aria-label="Scanner d'annonces">
               <div class="scanner-header">
                 <div class="scanner-header-left">
-                  <p class="scanner-header-kicker">📡 Scanner d'annonces</p>
-                  <h2 class="scanner-header-title">Opportunités locatives</h2>
+                                    <p class="scanner-header-kicker">Scanner d'annonces</p>
+                                    <h2 class="scanner-header-title">Base d'annonces locatives</h2>
                   <p id="scanner-header-sub" class="scanner-header-sub">Centre-Val de Loire</p>
-                  <div class="scanner-target-cp-group" style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
-                    <span style="font-size:12px;color:var(--muted)">Zone :</span>
-                    <div style="position:relative">
-                      <input id="scan-target-cp-input" type="text" placeholder="Code postal ou ville…"
-                        autocomplete="off"
-                        style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-strong);color:var(--text);font-size:13px;width:210px;font-family:inherit">
-                      <div id="scan-target-cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
-                    </div>
-                    <span id="scan-target-cp-badge" style="display:none;padding:3px 10px;background:rgba(197,160,89,0.15);color:var(--accent-gold);border:1px solid rgba(197,160,89,0.3);border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap"></span>
-                    <button id="scan-target-cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">× Réinit.</button>
+                                                                        <p class="scanner-header-story">Constituez un lot d'annonces, structurez les fiches, puis isolez les dossiers compatibles avec vos seuils d'analyse.</p>
+                                    <div class="scanner-hero-meta">
+                                        <span class="scanner-meta-chip">Lot régional</span>
+                                                                                <span id="scanner-results-meta" class="scanner-meta-chip scanner-meta-chip--muted">Définissez une zone pour lancer un scan ciblé.</span>
                   </div>
                 </div>
-                <div class="scanner-header-right">
-                  <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
-                    <span id="scanner-status-dot" class="scanner-status-dot"></span>
-                    <span id="scanner-status-label">En attente</span>
-                  </div>
-                  <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">🗑 Vider le cache</button>
-                  <button id="btn-scan-full" class="scanner-btn scanner-btn--outline" disabled>↺ Scan complet</button>
-                  <button id="btn-scan" class="scanner-btn scanner-btn--primary" disabled>▶ Lancer un scan</button>
+                                <div class="scanner-command-grid">
+                                    <section class="scanner-command-card scanner-command-card--primary">
+                                        <div class="scanner-command-card__eyebrow">Prochain scan</div>
+                                        <h3 class="scanner-command-card__title">Cibler une zone</h3>
+                                                                                <p class="scanner-command-card__copy">Lancez un scan par code postal ou ville pour constituer un lot de travail réutilisable et comparable dans le temps.</p>
+                                        <div class="scanner-target-cp-group">
+                                            <span class="scanner-target-cp-label">Zone</span>
+                                            <div class="scanner-target-cp-input-wrap">
+                                                <input id="scan-target-cp-input" type="text" placeholder="Code postal ou ville…"
+                                                    autocomplete="off"
+                                                    class="scanner-target-cp-input">
+                                                <div id="scan-target-cp-dropdown" class="scanner-dropdown"></div>
+                                            </div>
+                                            <span id="scan-target-cp-badge" class="scanner-target-cp-badge"></span>
+                                            <button id="scan-target-cp-reset" class="scanner-target-cp-reset">Réinitialiser</button>
+                                        </div>
+                                        <div class="scanner-command-card__actions">
+                                            <button id="btn-scan" class="scanner-btn scanner-btn--primary" disabled>Lancer un scan</button>
+                                            <button id="btn-scan-full" class="scanner-btn scanner-btn--outline" disabled>Scan complet</button>
+                                        </div>
+                                    </section>
+
+                                    <section class="scanner-command-card scanner-command-card--secondary">
+                                        <div class="scanner-command-card__top">
+                                            <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
+                                                <span id="scanner-status-dot" class="scanner-status-dot"></span>
+                                                <span id="scanner-status-label">En attente</span>
+                                            </div>
+                                            <label for="scanner-missing-threshold" class="scanner-missing-threshold">
+                                                <span>Biens absents</span>
+                                                <select id="scanner-missing-threshold" title="Masquer un bien après plusieurs scans manqués" class="scanner-missing-threshold__select">
+                                                    <option value="0">Jamais</option>
+                                                    <option value="1">1 scan</option>
+                                                    <option value="2">2 scans</option>
+                                                    <option value="3">3 scans</option>
+                                                    <option value="5">5 scans</option>
+                                                    <option value="7">7 scans</option>
+                                                    <option value="10">10 scans</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        <p class="scanner-command-card__copy">Le lot courant reste disponible entre deux scans. Lancez l'analyse IA pour structurer les fiches et homogénéiser la lecture des dossiers.</p>
+                                        <div class="scanner-command-card__actions scanner-command-card__actions--secondary">
+                                            <button id="btn-enrich" class="scanner-btn scanner-btn--outline scanner-btn--accent" disabled>Analyser avec l'IA <span id="enrich-pending-badge" class="scanner-inline-badge"></span></button>
+                                            <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">Vider le cache</button>
+                                        </div>
+                                    </section>
                 </div>
               </div>
 
-              <!-- Barre de progression (masquée par défaut) -->
+              <section id="scanner-hero-summary" class="workspace-hero" aria-label="Synthèse scanner"></section>
+
               <div id="scanner-progress" class="scanner-progress" style="display:none">
+                                <div class="scanner-progress-head">
+                                    <div>
+                                        <div class="scanner-progress-eyebrow">Exécution en cours</div>
+                                        <div id="scanner-progress-title" class="scanner-progress-title">Pipeline scanner</div>
+                                    </div>
+                                    <span id="scanner-pct" class="scanner-progress-pct">0%</span>
+                                </div>
+                                <div id="scanner-progress-stages" class="scanner-progress-stages">
+                                    <span class="scanner-progress-stage is-active">Préparer</span>
+                                    <span class="scanner-progress-stage">Collecter</span>
+                                    <span class="scanner-progress-stage">Qualifier</span>
+                                    <span class="scanner-progress-stage">Classer</span>
+                                    <span class="scanner-progress-stage">Clôturer</span>
+                                </div>
+                                <div class="scanner-progress-bar">
+                                    <div id="scanner-progress-fill" class="scanner-progress-fill" style="width:0%"></div>
+                                </div>
                 <div class="scanner-progress-top">
                   <span id="scanner-log-line" class="scanner-log-line">—</span>
-                  <span id="scanner-pct">0%</span>
+                                    <button id="scanner-log-toggle" type="button" class="scanner-log-toggle" aria-expanded="false">Journal détaillé</button>
                 </div>
-                <div class="scanner-progress-bar">
-                  <div id="scanner-progress-fill" class="scanner-progress-fill" style="width:0%"></div>
-                </div>
+                                <div id="scanner-logs" class="scanner-logs" hidden></div>
               </div>
 
-              <!-- Stats — pleine largeur -->
               <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
 
-              <!-- Zone C : Barre de recherche -->
               <div id="scanner-search-bar" class="scanner-search-bar-v2" style="display:none">
                 <div class="scanner-search-cp-segment">
                   <span class="scanner-search-cp-icon">📍</span>
                   <div style="position:relative;flex:1;min-width:0">
                     <input id="cp-search" type="text" placeholder="Code postal ou ville…" autocomplete="off" class="scanner-search-cp-input">
-                    <div id="cp-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:280px;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto"></div>
+                                            <div id="cp-dropdown" class="scanner-dropdown scanner-dropdown--compact"></div>
                   </div>
-                  <span id="cp-active-badge" style="display:none;padding:3px 10px;background:rgba(197,160,89,0.15);color:var(--accent-gold);border:1px solid rgba(197,160,89,0.3);border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap"></span>
-                  <button id="cp-reset" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">× Réinit.</button>
+                                    <span id="cp-active-badge" class="scanner-search-active-badge"></span>
+                                    <button id="cp-reset" class="scanner-search-reset">× Réinit.</button>
                 </div>
+                                <div class="scanner-search-preset-segment">
+                                    <span class="scanner-search-preset-icon">⚡</span>
+                                    <select id="scanner-filter-preset" class="scanner-search-preset-select" aria-label="Sélection de filtres">
+                                        <option value="all">Sélection de filtres</option>
+                                        <option value="ranking-top">Score de classement élevé</option>
+                                        <option value="solid">Décision favorable</option>
+                                        <option value="ia-ready">Analyses IA prêtes</option>
+                                        <option value="ia-pending">Analyses IA en attente</option>
+                                        <option value="cf-positive">CF après impôt positif</option>
+                                        <option value="immeuble">Immeubles de rapport</option>
+                                        <option value="safe-dpe">DPE A-D</option>
+                                        <option value="no-works">Sans travaux</option>
+                                        <option value="rented">Déjà loués</option>
+                                    </select>
+                                </div>
                 <button class="scanner-search-pill" id="qf-budget-btn">Budget <span class="scanner-qf-arrow">▾</span></button>
                 <button class="scanner-search-pill" id="qf-pieces-btn">Pièces <span class="scanner-qf-arrow">▾</span></button>
                 <button class="scanner-search-pill" id="qf-surface-btn">Surface <span class="scanner-qf-arrow">▾</span></button>
@@ -701,18 +891,25 @@
                   ☰ Tous les filtres
                   <span id="scanner-filter-count-badge" class="scanner-filter-badge" style="display:none"></span>
                 </button>
+                                <div id="scanner-view-tabs" class="scanner-view-tabs" style="display:none">
+                                    <button id="tab-tableau" class="scanner-view-tab is-active">Tableau</button>
+                                    <button id="tab-carte" class="scanner-view-tab">Carte</button>
+                                </div>
               </div>
+                            <div id="scanner-active-filters" class="scanner-active-filters" style="display:none"></div>
+                            <div id="scanner-filters-backdrop" class="scanner-filters-backdrop" hidden></div>
 
-              <!-- Content layout (sidebar + main area) -->
               <div id="scanner-content-layout" class="scanner-content-layout" style="display:none">
 
-              <!-- Sidebar filtres -->
               <aside id="scanner-filters" class="scanner-filter-sidebar">
 
-                <!-- En-tête sidebar -->
                 <div class="scanner-sidebar-header">
-                  <span class="scanner-sidebar-title">Filtres</span>
+                                    <div class="scanner-sidebar-headline">
+                                        <span class="scanner-sidebar-title">Filtres d'analyse</span>
+                                        <p class="scanner-sidebar-copy">Réduisez le lot pour ne conserver que les dossiers compatibles avec vos seuils.</p>
+                                    </div>
                   <span id="scanner-filter-count" class="scanner-filter-count"></span>
+                                    <button id="scanner-filters-close" type="button" class="scanner-filters-close">Fermer</button>
                 </div>
 
                 <!-- ── Section : À PROPOS DU BIEN ─────────────────────────── -->
@@ -741,14 +938,14 @@
                     <label class="scanner-dpe-block scanner-chip--dpe-e"><input type="checkbox" name="dpe-filter" value="e"><span>E</span></label>
                     <label class="scanner-dpe-block scanner-chip--dpe-f"><input type="checkbox" name="dpe-filter" value="f"><span>F</span></label>
                     <label class="scanner-dpe-block scanner-chip--dpe-g"><input type="checkbox" name="dpe-filter" value="g"><span>G</span></label>
-                    <label class="scanner-chip" style="margin-left:12px"><input type="checkbox" id="filter-dpe-safe"><span>Sans risque (A–D)</span></label>
+                    <label class="scanner-chip scanner-chip--offset"><input type="checkbox" id="filter-dpe-safe"><span>Sans risque (A–D)</span></label>
                   </div>
                 </div>
 
                 <!-- ── Section : TYPE + ÉTAT + ÉQUIPEMENTS ───────────────── -->
                 <div class="scanner-filter-section">
                   <div class="scanner-filter-section-title">TYPE ET ÉTAT DU BIEN</div>
-                  <div class="scanner-filter-row" style="flex-wrap:wrap;gap:24px">
+                  <div class="scanner-filter-row scanner-filter-row--wide">
                     <div class="scanner-filter-group">
                       <span class="scanner-filter-title">Type de bien</span>
                       <div class="scanner-filter-chips">
@@ -784,16 +981,16 @@
 
                 <!-- ── Section : PERFORMANCES INVESTISSEMENT ─────────────── -->
                 <div class="scanner-filter-section">
-                  <div class="scanner-filter-section-title">PERFORMANCES INVESTISSEMENT</div>
-                  <div class="scanner-filter-row" style="flex-wrap:wrap;gap:24px">
+                  <div class="scanner-filter-section-title">INDICATEURS D'INVESTISSEMENT</div>
+                  <div class="scanner-filter-row scanner-filter-row--wide">
                     <div class="scanner-filter-group">
                       <span class="scanner-filter-title">Score global</span>
                       <div class="scanner-filter-chips">
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Excellent 80+</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Bon 60–79</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Neutre 40–59</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Attention 20–39</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Faible &lt;20</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Très élevé 80+</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Élevé 60–79</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Intermédiaire 40–59</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Faible 20–39</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Très faible &lt;20</span></label>
                       </div>
                     </div>
                     <div class="scanner-filter-group">
@@ -810,8 +1007,8 @@
                 <!-- ── Section : BUDGET ET SURFACE ────────────────────────── -->
                 <div class="scanner-filter-section">
                   <div class="scanner-filter-section-title">BUDGET ET SURFACE</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:16px">
-                    <div class="scanner-range-group" style="flex:1;min-width:200px">
+                                    <div class="scanner-range-layout">
+                                        <div class="scanner-range-group scanner-range-group--flex scanner-range-group--wide">
                       <span class="scanner-filter-title">Prix (€)</span>
                       <div class="scanner-range-row">
                         <input type="number" id="prix-min" class="scanner-range-input" placeholder="Min" min="0" step="1000">
@@ -821,7 +1018,7 @@
                         <input type="number" id="prix-max" class="scanner-range-input" placeholder="Max" min="0" step="1000">
                       </div>
                     </div>
-                    <div class="scanner-range-group" style="flex:1;min-width:200px">
+                    <div class="scanner-range-group scanner-range-group--flex scanner-range-group--wide">
                       <span class="scanner-filter-title">Surface (m²)</span>
                       <div class="scanner-range-row">
                         <input type="number" id="surface-min" class="scanner-range-input" placeholder="Min" min="0" step="5">
@@ -837,8 +1034,8 @@
                 <!-- ── Section : RATIOS FINANCIERS ────────────────────────── -->
                 <div class="scanner-filter-section">
                   <div class="scanner-filter-section-title">RATIOS FINANCIERS</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:16px">
-                    <div class="scanner-range-group" style="flex:1;min-width:160px">
+                                    <div class="scanner-range-layout">
+                                        <div class="scanner-range-group scanner-range-group--flex">
                       <span class="scanner-filter-title">Renta brute min (%)</span>
                       <div class="scanner-range-row">
                         <input type="range" id="range-renta" class="scanner-range-slider" min="0" max="20" step="0.5" value="0">
@@ -846,7 +1043,7 @@
                         <span class="scanner-range-unit">%</span>
                       </div>
                     </div>
-                    <div class="scanner-range-group" style="flex:1;min-width:160px">
+                    <div class="scanner-range-group scanner-range-group--flex">
                       <span class="scanner-filter-title">CF net min (€/mois)</span>
                       <div class="scanner-range-row">
                         <input type="range" id="range-cf" class="scanner-range-slider" step="50" value="0">
@@ -854,14 +1051,14 @@
                         <span class="scanner-range-unit">€</span>
                       </div>
                     </div>
-                    <div class="scanner-range-group" style="flex:1;min-width:140px">
+                    <div class="scanner-range-group scanner-range-group--flex scanner-range-group--compact">
                       <span class="scanner-filter-title">DSCR min</span>
                       <div class="scanner-range-row">
                         <input type="range" id="range-dscr" class="scanner-range-slider" min="0" max="2" step="0.05" value="0">
                         <input type="number" id="dscr-min" class="scanner-range-input" placeholder="0" min="0" max="2" step="0.05">
                       </div>
                     </div>
-                    <div class="scanner-range-group" style="flex:1;min-width:140px">
+                    <div class="scanner-range-group scanner-range-group--flex scanner-range-group--compact">
                       <span class="scanner-filter-title">Score min (/100)</span>
                       <div class="scanner-range-row">
                         <input type="range" id="range-score-min" class="scanner-range-slider" min="0" max="100" step="5" value="0">
@@ -874,102 +1071,109 @@
 
                 <!-- ── Footer ─────────────────────────────────────────────── -->
                 <div class="scanner-filter-footer">
-                  <button id="scanner-filter-reset" class="scanner-btn scanner-btn--ghost" style="font-size:12px;padding:5px 16px">↺ Réinitialiser</button>
-                  <div style="flex:1"></div>
+                                    <button id="scanner-filter-reset" class="scanner-btn scanner-btn--ghost scanner-btn--compact">↺ Réinitialiser</button>
+                                    <div class="scanner-filter-footer-spacer"></div>
                   <button id="btn-voir-resultats" class="scanner-voir-resultats-btn">
                     VOIR LES ANNONCES (<span id="filter-result-count">—</span>)
                   </button>
                 </div>
               </aside>
 
-              <!-- Zone principale -->
               <div class="scanner-main-area">
-                <!-- Onglets Tableau / Carte -->
-                <div id="scanner-view-tabs" style="display:none;margin:12px 16px;gap:8px">
-                  <button id="tab-tableau" style="padding:6px 18px;border-radius:6px;border:1px solid var(--accent-gold,#C5A059);background:var(--accent-gold,#C5A059)22;color:var(--accent-gold,#C5A059);font-size:13px;cursor:pointer;font-weight:600">Tableau</button>
-                  <button id="tab-carte"   style="padding:6px 18px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer">Carte</button>
-                </div>
-
-                <!-- Conteneur carte -->
-                <div id="scanner-map-container" style="display:none;margin:0 16px;border-radius:12px;overflow:hidden;border:1px solid var(--border)">
-                  <div id="scanner-map" style="height:500px;width:100%"></div>
-                  <div id="scanner-map-offline" style="display:none;padding:12px;text-align:center;font-size:12px;color:var(--muted)">
+                                <div id="scanner-map-container" class="scanner-map-shell" style="display:none">
+                                    <div id="scanner-map" class="scanner-map-canvas"></div>
+                                    <div id="scanner-map-offline" class="scanner-map-offline" style="display:none">
                     Tuiles de carte indisponibles (connexion internet requise pour la carte).
                   </div>
-                  <div id="scanner-map-unloc" style="padding:8px 14px;font-size:12px;color:var(--muted);background:var(--surface-strong)"></div>
+                                    <div id="scanner-map-unloc" class="scanner-map-unloc"></div>
                 </div>
 
-                <!-- Tableau résultats -->
                 <div id="scanner-results" class="scanner-results-wrap" style="display:none"></div>
               </div>
 
               </div><!-- /#scanner-content-layout -->
 
-              <!-- État vide -->
               <div id="scanner-empty" class="scanner-empty">
-                <p>Aucun résultat. Lance un scan pour commencer.</p>
+                                <div class="scanner-empty__icon">◌</div>
+                                <h3 class="scanner-empty__title">Aucun lot exploitable pour l'instant</h3>
+                                <p class="scanner-empty__copy">Définis une zone dans le module Prochain scan pour constituer un lot, le qualifier, puis produire une short-list exploitable.</p>
+                                <div class="scanner-empty__steps">
+                                    <span>Cibler une zone</span>
+                                    <span>Lancer le scan</span>
+                                    <span>Qualifier avec l'IA</span>
+                                    <span>Décider</span>
+                                </div>
+                                <button id="scanner-empty-focus-target" type="button" class="scanner-btn scanner-btn--primary">Préparer un scan</button>
               </div>
             </section>
         </main>
 
         <div id="profile-modal" class="modal" aria-hidden="true">
-            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
-                <div class="modal-header">
-                    <div>
-                        <p class="brand-kicker">Profil du foyer</p>
-                        <h2 id="profile-modal-title">Définir le profil</h2>
-                        <p id="profile-modal-note" class="modal-note">Renseignez ce profil une fois, puis ajustez-le depuis l en-tête si nécessaire.</p>
+            <div class="modal-dialog modal-dialog--profile" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+                <div class="profile-sheet">
+                    <div class="profile-sheet__header">
+                        <div class="profile-sheet__copy">
+                            <p class="profile-sheet__eyebrow">Cadre du foyer</p>
+                            <h2 id="profile-modal-title">Profil investisseur</h2>
+                            <p id="profile-modal-note" class="modal-note profile-sheet__note">Renseigne ce profil avant de travailler un dossier pour fiabiliser la fiscalité, la capacité et les garde-fous de décision.</p>
+                        </div>
+                        <button type="button" id="profile-close" class="modal-close" aria-label="Fermer la fenêtre profil">Fermer</button>
                     </div>
-                    <button type="button" id="profile-close" class="modal-close" aria-label="Fermer la fenêtre profil">Fermer</button>
-                </div>
 
-                <form class="profile-form" id="profile-form">
-                    <label class="profile-field profile-field--wide" for="profile-select">
-                        <span class="status-label">Modèle</span>
-                        <select id="profile-select" name="profile-select" class="profile-input"></select>
-                    </label>
-
-                    <label class="profile-field profile-field--wide" for="profile-name">
-                        <span class="status-label">Nom</span>
-                        <input id="profile-name" name="profile-name" type="text" class="profile-input" maxlength="40" autocomplete="off">
-                    </label>
-
-                    <label class="profile-field" for="profile-income">
-                        <span class="status-label">Revenus annuels du foyer</span>
-                        <input id="profile-income" name="profile-income" type="number" class="profile-input" min="0" step="1000" inputmode="numeric">
-                    </label>
-
-                    <label class="profile-field" for="profile-adults">
-                        <span class="status-label">Adultes</span>
-                        <select id="profile-adults" name="profile-adults" class="profile-input">
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                        </select>
-                    </label>
-
-                    <label class="profile-field" for="profile-children">
-                        <span class="status-label">Enfants</span>
-                        <input id="profile-children" name="profile-children" type="number" class="profile-input" min="0" max="8" step="1" inputmode="numeric">
-                    </label>
-                </form>
-
-                <div class="profile-summary-grid">
-                    <div class="status-item">
-                        <span class="status-label">Parts fiscales</span>
-                        <strong id="profile-parts"></strong>
+                    <div class="profile-sheet__lead">
+                        <span class="profile-sheet__lead-label">Rôle</span>
+                        <strong>Fiscalité, capacité et garde-fous</strong>
+                        <p>Ce cadre pilote la lecture fiscale, la capacité d'emprunt du foyer et la robustesse affichée sur chaque dossier.</p>
                     </div>
-                    <div class="status-item">
-                        <span class="status-label">TMI estimée</span>
-                        <strong id="profile-tmi"></strong>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Composition</span>
-                        <strong id="profile-composition"></strong>
-                    </div>
-                </div>
 
-                <div class="modal-actions">
-                    <button type="button" id="profile-save" class="toolbar-button">Enregistrer</button>
+                    <div class="profile-summary-grid">
+                        <div class="status-item">
+                            <span class="status-label">Parts fiscales</span>
+                            <strong id="profile-parts"></strong>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">TMI estimée</span>
+                            <strong id="profile-tmi"></strong>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Composition</span>
+                            <strong id="profile-composition"></strong>
+                        </div>
+                    </div>
+
+                    <form class="profile-form" id="profile-form">
+                        <label class="profile-field profile-field--wide" for="profile-select">
+                            <span class="status-label">Modèle</span>
+                            <select id="profile-select" name="profile-select" class="profile-input"></select>
+                        </label>
+
+                        <label class="profile-field profile-field--wide" for="profile-name">
+                            <span class="status-label">Nom</span>
+                            <input id="profile-name" name="profile-name" type="text" class="profile-input" maxlength="40" autocomplete="off">
+                        </label>
+
+                        <label class="profile-field profile-field--wide" for="profile-income">
+                            <span class="status-label">Revenus annuels du foyer</span>
+                            <input id="profile-income" name="profile-income" type="number" class="profile-input" min="0" step="1000" inputmode="numeric">
+                        </label>
+
+                        <label class="profile-field" for="profile-adults">
+                            <span class="status-label">Adultes</span>
+                            <select id="profile-adults" name="profile-adults" class="profile-input">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                            </select>
+                        </label>
+
+                        <label class="profile-field" for="profile-children">
+                            <span class="status-label">Enfants</span>
+                            <input id="profile-children" name="profile-children" type="number" class="profile-input" min="0" max="8" step="1" inputmode="numeric">
+                        </label>
+                    </form>
+
+                    <div class="modal-actions profile-sheet__actions">
+                        <button type="button" id="profile-save" class="toolbar-button">Confirmer le profil</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -991,11 +1195,97 @@
 
     <script type="module" src="main.js"></script>
 
-<!-- Drawer détail bien -->
-<div id="detail-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:500" aria-hidden="true"></div>
-<aside id="detail-drawer" role="complementary" aria-label="Détail du bien"
-  style="display:none;position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);background:var(--surface);border-left:1px solid var(--border);z-index:501;overflow-y:auto;box-shadow:-8px 0 32px rgba(0,0,0,0.3);transition:transform .25s ease">
-  <div id="detail-content" style="padding:24px"></div>
+<div id="asset-detail-overlay" class="detail-overlay" aria-hidden="true"></div>
+<aside id="asset-detail-drawer" class="detail-drawer" role="complementary" aria-label="Détail portefeuille">
+    <div id="asset-detail-content" class="detail-drawer__content"></div>
 </aside>
+
+<!-- Drawer détail bien -->
+<div id="detail-overlay" class="detail-overlay" aria-hidden="true"></div>
+<aside id="detail-drawer" class="detail-drawer" role="complementary" aria-label="Détail du bien">
+    <div id="detail-content" class="detail-drawer__content"></div>
+</aside>
+<div id="modal-regimes" class="modal modal--regime" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-regimes-title">
+    <div class="modal-dialog modal-dialog--wide">
+        <div class="modal-header">
+            <h2 id="modal-regimes-title" class="modal-title">Les régimes fiscaux</h2>
+            <button type="button" class="modal-close" id="modal-regimes-close" aria-label="Fermer">✕</button>
+        </div>
+        <div class="modal-body modal-body--regime">
+            <div class="regime-card">
+                <div class="regime-card-icon">🏢</div>
+                <h3>SCI à l'IS</h3>
+                <p class="regime-card-sub">Société Civile Immobilière soumise à l'Impôt sur les Sociétés</p>
+                <p>Imposition du <strong>bénéfice comptable</strong> (loyers − charges − amortissement du bâti). Taux : <strong>15 %</strong> jusqu'à 42 500 €, <strong>25 %</strong> au-delà.</p>
+                <ul class="regime-list">
+                    <li class="regime-list-item regime-list-item--pro">Amortissement du bâti déductible (80 % sur 30 ans)</li>
+                    <li class="regime-list-item regime-list-item--pro">Très avantageux sur long horizon avec prix élevé</li>
+                    <li class="regime-list-item regime-list-item--con">Double imposition à la revente (IS + dividendes)</li>
+                    <li class="regime-list-item regime-list-item--con">Comptabilité obligatoire (expert-comptable)</li>
+                </ul>
+            </div>
+            <div class="regime-card">
+                <div class="regime-card-icon">🏠</div>
+                <h3>Micro-Foncier</h3>
+                <p class="regime-card-sub">Location nue · Revenus fonciers bruts &lt; 15 000 €/an</p>
+                <p>Abattement forfaitaire de <strong>30 %</strong> sur les loyers. Les <strong>70 % restants</strong> sont imposés à votre TMI + CSG/CRDS (17,2 %).</p>
+                <ul class="regime-list">
+                    <li class="regime-list-item regime-list-item--pro">Simple, sans comptabilité</li>
+                    <li class="regime-list-item regime-list-item--pro">Suffisant si peu de charges</li>
+                    <li class="regime-list-item regime-list-item--con">Abattement limité à 30 %</li>
+                    <li class="regime-list-item regime-list-item--con">Pas de déduction des intérêts d'emprunt</li>
+                </ul>
+            </div>
+            <div class="regime-card">
+                <div class="regime-card-icon">📋</div>
+                <h3>Foncier Réel</h3>
+                <p class="regime-card-sub">Location nue · Revenus &gt; 15 000 € ou sur option</p>
+                <p>Déduction de <strong>toutes les charges réelles</strong> : intérêts, travaux, charges copro, assurances, taxe foncière. Déficit imputable sur revenu global jusqu'à <strong>10 700 €/an</strong>.</p>
+                <ul class="regime-list">
+                    <li class="regime-list-item regime-list-item--pro">Très puissant avec gros crédit ou travaux</li>
+                    <li class="regime-list-item regime-list-item--pro">Déficit déductible du revenu global</li>
+                    <li class="regime-list-item regime-list-item--con">Déclaration 2044 obligatoire</li>
+                    <li class="regime-list-item regime-list-item--con">Pas d'amortissement du bâti</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+    <!-- Drawer échéancier crédit -->
+    <div id="credit-drawer-overlay" class="drawer-overlay" style="display:none" aria-hidden="true"></div>
+    <aside id="credit-drawer" class="drawer" style="display:none" role="dialog" aria-modal="true" aria-labelledby="credit-drawer-title">
+        <div class="drawer-inner">
+            <div class="drawer-head">
+                <h3 id="credit-drawer-title" class="drawer-title">Échéancier crédit</h3>
+                <button type="button" id="credit-drawer-close" class="drawer-close" aria-label="Fermer">✕</button>
+            </div>
+            <div class="drawer-body">
+                <p id="credit-drawer-asset-name" class="credit-drawer-asset-name"></p>
+                <form id="credit-drawer-form" class="credit-drawer-form" novalidate>
+                    <input type="hidden" id="credit-drawer-asset-id">
+                    <div class="form-field">
+                        <label class="form-label" for="credit-date-debut">Date de début du crédit</label>
+                        <input type="month" id="credit-date-debut" class="variables-input">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="credit-date-fin">Date de fin du crédit</label>
+                        <input type="month" id="credit-date-fin" class="variables-input">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="credit-mensualite">Mensualité réelle (€ / mois)</label>
+                        <input type="number" id="credit-mensualite" class="variables-input" min="0" step="10" placeholder="0">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="credit-date-revente">Revente envisagée <span class="form-label-optional">(optionnel)</span></label>
+                        <input type="month" id="credit-date-revente" class="variables-input">
+                    </div>
+                    <div class="drawer-actions">
+                        <button type="button" id="credit-drawer-cancel" class="btn-secondary">Annuler</button>
+                        <button type="submit" id="credit-drawer-save" class="btn-primary">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </aside>
 </body>
 </html>
