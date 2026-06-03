@@ -1,4 +1,4 @@
-import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts } from './calculs.js';
+import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
 import { initScanner, onScannerTabActivated } from './scanner.js';
 
@@ -326,6 +326,15 @@ const nodes = {
     profileIncome: document.getElementById('profile-income'),
     profileAdults: document.getElementById('profile-adults'),
     profileChildren: document.getElementById('profile-children'),
+    profileObjectifCF: document.getElementById('profile-objectif-cf'),
+    profileRevaloAnnuelle: document.getElementById('profile-revalo-annuelle'),
+    portfolioFiscal: document.getElementById('portfolio-fiscal'),
+    portfolioDebtRatios: document.getElementById('portfolio-debt-ratios'),
+    portfolioObjectif: document.getElementById('portfolio-objectif'),
+    portfolioProjection: document.getElementById('portfolio-projection'),
+    portfolioRepartition: document.getElementById('portfolio-repartition'),
+    portfolioCredits: document.getElementById('portfolio-credits'),
+    portfolioTimeline: document.getElementById('portfolio-timeline'),
     profileParts: document.getElementById('profile-parts'),
     profileTmi: document.getElementById('profile-tmi'),
     profileComposition: document.getElementById('profile-composition'),
@@ -2281,6 +2290,8 @@ function syncProfileForm() {
     nodes.profileIncome.value = String(state.profileData.income);
     nodes.profileAdults.value = String(state.profileData.adults);
     nodes.profileChildren.value = String(state.profileData.children);
+    if (nodes.profileObjectifCF) nodes.profileObjectifCF.value = String(state.profileData.objectifCF || 1000);
+    if (nodes.profileRevaloAnnuelle) nodes.profileRevaloAnnuelle.value = String(state.profileData.revaloAnnuelle || 2);
 }
 
 function syncVariablesForm() {
@@ -3028,6 +3039,270 @@ function buildAnalysisVisuals(analysisModel) {
     nodes.analysisPriceRentMatrix.innerHTML = buildPriceRentMatrixMarkup(analysisModel.priceRentMatrix);
 }
 
+function buildPortfolioFiscal(fiscal) {
+    if (!nodes.portfolioFiscal) return;
+    if (!fiscal || Object.values(fiscal.regimes).every(r => r.count === 0)) {
+        nodes.portfolioFiscal.innerHTML = '<p class="collection-empty">Aucun bien détenu pour calculer la fiscalité consolidée.</p>';
+        return;
+    }
+    const regimesActifs = Object.entries(fiscal.regimes).filter(([, r]) => r.count > 0);
+    nodes.portfolioFiscal.innerHTML = `
+        <div class="fiscal-shell">
+            <div class="decision-head">
+                <span class="status-label">TMI du foyer</span>
+                <strong class="status-pill status-pill--neutral">${fiscal.tmi} %</strong>
+            </div>
+            <div class="timeline-summary">
+                <div class="timeline-pill">
+                    <span>Total impôts / an</span>
+                    <strong>${formatPlainCurrency(fiscal.totalImpots)}</strong>
+                </div>
+                <div class="timeline-pill">
+                    <span>Total impôts / mois</span>
+                    <strong>${formatPlainCurrency(fiscal.totalImpots / 12)}</strong>
+                </div>
+            </div>
+            <div class="fiscal-regimes">
+                ${regimesActifs.map(([, r]) => `
+                    <article class="scenario-card scenario-card--neutral">
+                        <div class="lever-head">
+                            <strong>${escapeHtml(r.label)}</strong>
+                            <span class="status-pill status-pill--neutral">${r.count} bien${r.count > 1 ? 's' : ''}</span>
+                        </div>
+                        <p>Loyers : ${formatPlainCurrency(r.loyersAnnuels)} / an · Impôts : ${formatPlainCurrency(r.impots)} / an</p>
+                    </article>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function buildPortfolioDebtRatios(debtRatios) {
+    if (!nodes.portfolioDebtRatios) return;
+    if (!debtRatios) {
+        nodes.portfolioDebtRatios.innerHTML = '<p class="collection-empty">Aucun bien détenu pour calculer le taux d\'endettement.</p>';
+        return;
+    }
+    function gauge(ratio, seuil, tone, label, method) {
+        const pct = Math.min(100, (ratio / seuil) * 100);
+        return `
+            <div class="debt-gauge">
+                <div class="debt-gauge-head">
+                    <span class="debt-gauge-method">${escapeHtml(method)}</span>
+                    <strong class="status-pill status-pill--${tone}">${ratio.toFixed(1).replace('.', ',')} %</strong>
+                </div>
+                <div class="debt-gauge-bar">
+                    <div class="debt-gauge-fill debt-gauge-fill--${tone}" style="width:${pct.toFixed(1)}%"></div>
+                </div>
+                <div class="debt-gauge-footer">
+                    <span>${escapeHtml(label)}</span>
+                    <span>Seuil : ${seuil} %</span>
+                </div>
+            </div>
+        `;
+    }
+    nodes.portfolioDebtRatios.innerHTML = `
+        <div class="debt-ratios-shell">
+            ${gauge(debtRatios.hcsf.ratio, debtRatios.hcsf.seuil, debtRatios.hcsf.tone,
+                'Mensualités / (Revenus nets + 70 % loyers bruts)', 'Méthode HCSF 2021')}
+            ${gauge(debtRatios.differentielle.ratio, debtRatios.differentielle.seuil, debtRatios.differentielle.tone,
+                'Effort net immo / Revenus nets', 'Méthode différentielle')}
+        </div>
+    `;
+}
+
+function buildPortfolioObjectif(objectif) {
+    if (!nodes.portfolioObjectif) return;
+    const pctStr = objectif.pct.toFixed(0);
+    nodes.portfolioObjectif.innerHTML = `
+        <div class="objectif-shell">
+            <div class="decision-head">
+                <span class="status-label">Objectif mensuel</span>
+                <strong class="status-pill status-pill--${objectif.tone}">${formatSignedCurrency(objectif.target)}</strong>
+            </div>
+            <div class="objectif-progress">
+                <div class="objectif-bar">
+                    <div class="objectif-fill objectif-fill--${objectif.tone}" style="width:${pctStr}%"></div>
+                </div>
+                <div class="objectif-labels">
+                    <span class="objectif-current">${formatSignedCurrency(objectif.current)} actuellement</span>
+                    <span class="objectif-pct">${pctStr} %</span>
+                </div>
+            </div>
+            ${objectif.delta > 0 ? `
+                <p class="decision-hint">Écart : <strong>${formatSignedCurrency(objectif.delta)}</strong> / mois manquants${objectif.estimatedAssetsNeeded ? ` · ~${objectif.estimatedAssetsNeeded} bien${objectif.estimatedAssetsNeeded > 1 ? 's' : ''} supplémentaire${objectif.estimatedAssetsNeeded > 1 ? 's' : ''}` : ''}</p>
+            ` : `<p class="decision-hint">Objectif atteint.</p>`}
+        </div>
+    `;
+}
+
+function buildPortfolioProjection(projection) {
+    if (!nodes.portfolioProjection) return;
+    nodes.portfolioProjection.innerHTML = `
+        <div class="projection-shell">
+            <div class="decision-head">
+                <span class="status-label">Revalorisation estimée</span>
+                <strong class="status-pill status-pill--neutral">${projection.revaloAnnuelle} % / an</strong>
+            </div>
+            <p class="decision-hint">Valeur actuelle du parc : <strong>${formatPlainCurrency(projection.currentValue)}</strong></p>
+            <div class="timeline-summary">
+                <div class="timeline-pill">
+                    <span>Dans 5 ans</span>
+                    <strong>${formatPlainCurrency(projection.at5)}</strong>
+                </div>
+                <div class="timeline-pill">
+                    <span>Dans 10 ans</span>
+                    <strong>${formatPlainCurrency(projection.at10)}</strong>
+                </div>
+                <div class="timeline-pill">
+                    <span>Dans 15 ans</span>
+                    <strong>${formatPlainCurrency(projection.at15)}</strong>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function buildPortfolioRepartition(portfolioItems) {
+    if (!nodes.portfolioRepartition) return;
+    if (!portfolioItems.length) {
+        nodes.portfolioRepartition.innerHTML = '<p class="collection-empty">Aucun bien détenu pour afficher la répartition.</p>';
+        return;
+    }
+    const maxLoyer = Math.max(...portfolioItems.map(item => (item.model.loyersEncaisses || 0) / 12), 1);
+    nodes.portfolioRepartition.innerHTML = `
+        <div class="repartition-list">
+            ${portfolioItems.map(item => {
+                const loyer = (item.model.loyersEncaisses || 0) / 12;
+                const cf = item.metrics.cfNetNet || 0;
+                const loyerPct = Math.max(4, (loyer / maxLoyer) * 100);
+                const cfTone = cf >= 0 ? 'positive' : 'negative';
+                const cfPct = Math.max(4, (Math.abs(cf) / maxLoyer) * 100);
+                return `
+                    <div class="repartition-row">
+                        <div class="repartition-label">
+                            <strong>${escapeHtml(item.name)}</strong>
+                            <span class="repartition-city">${escapeHtml(item.city)}</span>
+                        </div>
+                        <div class="repartition-bars">
+                            <div class="repartition-bar-wrap" title="Loyer brut ${formatCurrency(loyer)}/mois">
+                                <div class="repartition-bar repartition-bar--loyer" style="width:${loyerPct.toFixed(1)}%"></div>
+                                <span class="repartition-val">${formatCurrency(loyer)}</span>
+                            </div>
+                            <div class="repartition-bar-wrap" title="CF net-net ${formatSignedCurrency(cf)}/mois">
+                                <div class="repartition-bar repartition-bar--cf repartition-bar--${cfTone}" style="width:${cfPct.toFixed(1)}%"></div>
+                                <span class="repartition-val ${cf >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(cf)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        <div class="repartition-legend">
+            <span class="repartition-legend-item repartition-legend-item--loyer">Loyer brut</span>
+            <span class="repartition-legend-item repartition-legend-item--cf">CF net-net</span>
+        </div>
+    `;
+}
+
+function buildPortfolioCredits(portfolioItems) {
+    if (!nodes.portfolioCredits) return;
+    const itemsWithCredit = portfolioItems.filter(item => item.creditSchedule || item.model.mensualiteTotale > 0);
+    if (!itemsWithCredit.length) {
+        nodes.portfolioCredits.innerHTML = '<p class="collection-empty">Aucun bien détenu avec un crédit configuré.</p>';
+        return;
+    }
+    nodes.portfolioCredits.innerHTML = `
+        <table class="analysis-table">
+            <thead>
+                <tr>
+                    <th>Bien</th>
+                    <th>Mensualité</th>
+                    <th>Capital restant dû</th>
+                    <th>Date de fin</th>
+                    <th>Source</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemsWithCredit.map(item => {
+                    const cs = item.creditSchedule;
+                    const mensualite = cs ? cs.mensualite : (item.model.mensualiteTotale || 0);
+                    const capitalRestant = cs ? capitalRestantDu(cs.mensualite, cs.dateFin) : null;
+                    const dateFin = cs?.dateFin ? cs.dateFin.replace('-', '/') : '--';
+                    const source = cs ? 'Échéancier réel' : 'Simulé';
+                    return `
+                        <tr>
+                            <td><strong>${escapeHtml(item.name)}</strong><div class="table-subline">${escapeHtml(item.city)}</div></td>
+                            <td><strong>${formatPlainCurrency(mensualite)}</strong></td>
+                            <td>${capitalRestant != null ? `<strong>${formatPlainCurrency(capitalRestant)}</strong>` : '--'}</td>
+                            <td>${escapeHtml(dateFin)}</td>
+                            <td><span class="status-pill status-pill--${cs ? 'positive' : 'neutral'}">${escapeHtml(source)}</span></td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function buildPortfolioTimeline(portfolioItems) {
+    if (!nodes.portfolioTimeline) return;
+    const itemsWithDates = portfolioItems.filter(item => item.creditSchedule?.dateDebut || item.creditSchedule?.dateFin);
+    if (!itemsWithDates.length) {
+        nodes.portfolioTimeline.innerHTML = '<p class="collection-empty">Configurez l\'échéancier crédit d\'au moins un bien pour afficher la chronologie.</p>';
+        return;
+    }
+
+    const now = new Date();
+    const parseYM = str => { if (!str) return null; const parts = str.split('-').map(Number); return new Date(parts[0], parts[1] - 1, 1); };
+
+    const allDates = itemsWithDates.flatMap(item => [
+        parseYM(item.creditSchedule?.dateDebut),
+        parseYM(item.creditSchedule?.dateFin),
+        parseYM(item.dateRevente)
+    ]).filter(Boolean);
+
+    const minDate = new Date(Math.min(...allDates.map(d => d.getTime()), now.getTime()));
+    const maxDate = new Date(Math.max(...allDates.map(d => d.getTime()), now.getTime()));
+    const totalMs = Math.max(1, maxDate - minDate);
+
+    function pct(date) { return ((date - minDate) / totalMs * 100).toFixed(2); }
+
+    const minYear = minDate.getFullYear();
+    const maxYear = maxDate.getFullYear();
+    const yearMarkers = [];
+    for (let y = minYear; y <= maxYear; y++) {
+        const d = new Date(y, 0, 1);
+        if (d >= minDate && d <= maxDate) yearMarkers.push({ year: y, pct: pct(d) });
+    }
+
+    nodes.portfolioTimeline.innerHTML = `
+        <div class="timeline-chart">
+            <div class="timeline-axis">
+                ${yearMarkers.map(m => `<span class="timeline-year" style="left:${m.pct}%">${m.year}</span>`).join('')}
+                <div class="timeline-now" style="left:${pct(now)}%" title="Aujourd'hui"></div>
+            </div>
+            ${itemsWithDates.map(item => {
+                const debut = parseYM(item.creditSchedule?.dateDebut);
+                const fin = parseYM(item.creditSchedule?.dateFin);
+                const revente = parseYM(item.dateRevente);
+                const left = debut ? parseFloat(pct(debut)) : 0;
+                const right = fin ? parseFloat(pct(fin)) : 100;
+                const width = Math.max(1, right - left);
+                return `
+                    <div class="timeline-row">
+                        <div class="timeline-row-label">${escapeHtml(item.name)}</div>
+                        <div class="timeline-row-track">
+                            <div class="timeline-bar" style="left:${left}%;width:${width}%" title="${escapeHtml(item.name)} · ${item.creditSchedule?.dateDebut || '?'} → ${item.creditSchedule?.dateFin || '?'}"></div>
+                            ${revente ? `<div class="timeline-marker-revente" style="left:${pct(revente)}%" title="Revente envisagée ${item.dateRevente}"></div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
 function renderCollections() {
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
@@ -3039,8 +3314,15 @@ function renderCollections() {
     buildPortfolioKpiBanner(collectionsView);
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
-    buildPortfolioPriorities(collectionsView.priorities);
     buildPortfolioAssetGrid(collectionsView);
+    buildPortfolioPriorities(collectionsView.priorities);
+    buildPortfolioFiscal(collectionsView.fiscal);
+    buildPortfolioDebtRatios(collectionsView.debtRatios);
+    buildPortfolioObjectif(collectionsView.objectif);
+    buildPortfolioProjection(collectionsView.projection);
+    buildPortfolioRepartition(collectionsView.portfolioItems);
+    buildPortfolioCredits(collectionsView.portfolioItems);
+    buildPortfolioTimeline(collectionsView.portfolioItems);
 }
 
 function renderWorkspaceContent() {
@@ -3308,7 +3590,9 @@ function updateProfileFromForm() {
         name: nodes.profileName.value,
         income: nodes.profileIncome.value,
         adults: nodes.profileAdults.value,
-        children: nodes.profileChildren.value
+        children: nodes.profileChildren.value,
+        objectifCF: nodes.profileObjectifCF?.value,
+        revaloAnnuelle: nodes.profileRevaloAnnuelle?.value
     });
     saveProfileData();
     emitStateUpdate();

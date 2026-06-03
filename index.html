@@ -1169,6 +1169,26 @@
                             <span class="status-label">Enfants</span>
                             <input id="profile-children" name="profile-children" type="number" class="profile-input" min="0" max="8" step="1" inputmode="numeric">
                         </label>
+                    <div class="form-field">
+                        <label class="form-label" for="profile-objectif-cf">
+                            Objectif CF mensuel net-net
+                            <button class="field-hint" type="button" tabindex="-1" data-tip="Le cash-flow net-net mensuel cible pour l ensemble du portefeuille.">?</button>
+                        </label>
+                        <div class="feasibility-input-row">
+                            <input type="number" id="profile-objectif-cf" class="variables-input" min="0" max="50000" step="100" placeholder="1000">
+                            <span class="feasibility-unit">€ / mois</span>
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="profile-revalo-annuelle">
+                            Revalorisation annuelle estimée
+                            <button class="field-hint" type="button" tabindex="-1" data-tip="Taux de revalorisation annuelle du prix des biens pour la projection patrimoniale.">?</button>
+                        </label>
+                        <div class="feasibility-input-row">
+                            <input type="number" id="profile-revalo-annuelle" class="variables-input" min="0" max="20" step="0.5" placeholder="2">
+                            <span class="feasibility-unit">% / an</span>
+                        </div>
+                    </div>
                     </form>
 
                     <div class="modal-actions profile-sheet__actions">
