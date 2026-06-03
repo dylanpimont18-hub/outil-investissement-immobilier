@@ -72,10 +72,10 @@ const PROFILE_OPTIONS = [
 ];
 
 const VARIABLE_DEFAULTS = {
-    'nom-bien': 'Bien à étudier',
+    'nom-bien': 'Nouvelle étude',
     'type-bien': 'appartement',
     'statut-bien': 'candidate',
-    ville: 'Ville non renseignée',
+    ville: 'Ville à préciser',
     prix: 107000,
     nego: 0,
     loyer: 700,
@@ -251,13 +251,21 @@ const state = {
 
 let analysisWindowRef = null;
 let syncChannel = null;
+let assetDetailCloseTimer = null;
+let profileModalReturnFocusTarget = null;
+let assetDetailReturnFocusTarget = null;
 
 const nodes = {
     themeToggle: document.getElementById('theme-toggle'),
     screenToggle: document.getElementById('screen-toggle'),
     profileTrigger: document.getElementById('profile-trigger'),
+    topbarStudyName: document.getElementById('topbar-study-name'),
+    topbarStudyMeta: document.getElementById('topbar-study-meta'),
+    topbarProfileLabel: document.getElementById('topbar-profile-label'),
+    topbarProfileMeta: document.getElementById('topbar-profile-meta'),
     workspaceTitle: document.getElementById('workspace-title'),
     workspaceSubtitle: document.getElementById('workspace-subtitle'),
+    workspaceHero: document.getElementById('workspace-hero'),
     workspaceBoard: document.getElementById('workspace-board'),
     variablesPanel: document.getElementById('variables-panel'),
     analysisPanel: document.getElementById('analysis-panel'),
@@ -290,15 +298,16 @@ const nodes = {
     analysisSummary: document.getElementById('analysis-summary'),
     analysisActionPlan: document.getElementById('analysis-action-plan'),
     analysisDetails: document.getElementById('analysis-details'),
+    portfolioHero: document.getElementById('portfolio-hero'),
     portfolioSummary: document.getElementById('portfolio-summary'),
-    portfolioDecision: document.getElementById('portfolio-decision'),
-    portfolioAlerts: document.getElementById('portfolio-alerts'),
-    portfolioCapacity: document.getElementById('portfolio-capacity'),
-    portfolioConcentration: document.getElementById('portfolio-concentration'),
     portfolioPriorities: document.getElementById('portfolio-priorities'),
-    acquisitionArbitrage: document.getElementById('acquisition-arbitrage'),
-    comparisonTable: document.getElementById('comparison-table'),
-    portfolioTable: document.getElementById('portfolio-table'),
+    portfolioKpiBanner: document.getElementById('portfolio-kpi-banner'),
+    portfolioAssetGridOwned: document.getElementById('portfolio-asset-grid-owned'),
+    portfolioAssetGridPipeline: document.getElementById('portfolio-asset-grid-pipeline'),
+    assetStatusBar: document.getElementById('asset-status-bar'),
+    assetDetailOverlay: document.getElementById('asset-detail-overlay'),
+    assetDetailDrawer: document.getElementById('asset-detail-drawer'),
+    assetDetailContent: document.getElementById('asset-detail-content'),
     profileModal: document.getElementById('profile-modal'),
     profileClose: document.getElementById('profile-close'),
     profileSave: document.getElementById('profile-save'),
@@ -316,6 +325,9 @@ const nodes = {
     fkpiRdtBrut: document.getElementById('fkpi-rdt-brut'),
     fkpiCfNet: document.getElementById('fkpi-cf-net'),
     fkpiDscr: document.getElementById('fkpi-dscr'),
+    financeLiveCredit: document.getElementById('finance-live-credit'),
+    financeLiveInsurance: document.getElementById('finance-live-insurance'),
+    financeLiveTotal: document.getElementById('finance-live-total'),
     guidedToggle: document.getElementById('guided-toggle'),
     modeToggle: document.getElementById('mode-toggle'),
     modeBtnGuided: document.getElementById('mode-btn-guided'),
@@ -354,7 +366,7 @@ function loadTheme() {
     if (savedTheme === 'light' || savedTheme === 'dark') {
         return savedTheme;
     }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'dark';
 }
 
 function loadScreens() {
@@ -670,6 +682,22 @@ function saveAssetRecords() {
     localStorage.setItem(STORAGE_KEYS.assetRecords, JSON.stringify(state.assetRecords));
 }
 
+function showToast(message, tone = 'positive') {
+    const existing = document.getElementById('app-toast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = 'app-toast';
+    el.className = `app-toast app-toast--${tone}`;
+    el.textContent = message;
+    document.body.appendChild(el);
+    el.getBoundingClientRect();
+    el.classList.add('app-toast--visible');
+    setTimeout(() => {
+        el.classList.remove('app-toast--visible');
+        el.addEventListener('transitionend', () => el.remove(), { once: true });
+    }, 3000);
+}
+
 function saveActiveAssetId() {
     if (state.activeAssetId) {
         localStorage.setItem(STORAGE_KEYS.activeAssetId, state.activeAssetId);
@@ -778,6 +806,23 @@ function formatCompactCurrency(value) {
 
 function formatPlainCurrency(value) {
     return formatCurrency(value).replace(/\u00A0/g, ' ');
+}
+
+function formatShortDateTime(value) {
+    if (!value) {
+        return '—';
+    }
+
+    try {
+        return new Intl.DateTimeFormat('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        }).format(new Date(value));
+    } catch (error) {
+        return '—';
+    }
 }
 
 function getMetricClass(value) {
@@ -910,6 +955,108 @@ function getCurrentAssetName() {
 
 function getCurrentAssetStatus() {
     return getOwnershipLabel(state.variablesData['statut-bien']);
+}
+
+function getProfileDisplayName() {
+    return state.profileConfigured ? state.profileData.name : 'Profil incomplet';
+}
+
+function getProfileContextSummary() {
+    const composition = getProfileComposition(state.profileData);
+
+    if (state.profileConfigured) {
+        return `Profil : ${state.profileData.name} · ${formatCurrency(state.profileData.income)} · ${composition}`;
+    }
+
+    return `Profil provisoire · ${formatCurrency(state.profileData.income)} · ${composition}`;
+}
+
+function getWorkspaceModeLabel({ useLocalFallback = false } = {}) {
+    if (IS_ANALYSIS_WINDOW) return 'Vue analyse synchronisée';
+    if (state.screens === 1) return 'Vue intégrée';
+    if (useLocalFallback) return 'Vue locale';
+    return 'Vue séparée';
+}
+
+function buildWorkspaceHero(analysisModel, { tmi, composition, useLocalFallback = false } = {}) {
+    if (!nodes.workspaceHero) {
+        return;
+    }
+
+    const { acquisitionDecision, metrics, confidenceModel, scenarioModel, decisionThresholds } = analysisModel;
+    const cityLabel = state.variablesData.ville || VARIABLE_DEFAULTS.ville;
+    const typeLabel = getTypeBienLabel(state.variablesData['type-bien']);
+    const priceGap = acquisitionDecision.currentPrice - acquisitionDecision.maxOfferPrice;
+    const priceGapLabel = priceGap <= 0 ? 'Marge sous plafond' : 'Écart au plafond';
+    const priceGapValue = priceGap === 0 ? 'Aligné' : formatPlainCurrency(Math.abs(priceGap));
+    const dscrTone = metrics.dscr >= decisionThresholds.minDscr
+        ? 'positive'
+        : metrics.dscr >= Math.max(0.85, decisionThresholds.minDscr - 0.15)
+            ? 'watch'
+            : 'negative';
+    const actionNote = priceGap <= 0
+        ? 'Prix affiché compatible avec le plafond cible.'
+        : `${priceGapLabel} : ${priceGapValue}`;
+    const profileTone = state.profileConfigured ? 'ready' : 'pending';
+
+    nodes.workspaceHero.innerHTML = `
+        <div class="workspace-hero-card workspace-hero-card--decision workspace-hero-card--${acquisitionDecision.tone}">
+            <div class="workspace-hero-decision__main">
+                <div class="workspace-hero-decision__eyebrow">
+                    <span class="workspace-hero-decision__kicker">Évaluation du dossier</span>
+                    <span class="workspace-hero-decision__mode">${escapeHtml(getWorkspaceModeLabel({ useLocalFallback }))}</span>
+                    <span class="workspace-hero-decision__profile workspace-hero-decision__profile--${profileTone}">${state.profileConfigured ? 'Profil validé' : 'Profil incomplet'}</span>
+                </div>
+                <div class="workspace-hero-decision__heading">
+                    <span class="workspace-hero-decision__study">${escapeHtml(getCurrentAssetName())}</span>
+                    <h2>${escapeHtml(acquisitionDecision.label)}</h2>
+                </div>
+                <p class="workspace-hero-decision__summary">${escapeHtml(acquisitionDecision.summary)}</p>
+                <div class="workspace-hero-decision__action">
+                    <span>Recommandation</span>
+                    <strong>${escapeHtml(acquisitionDecision.action)}</strong>
+                    <small>${escapeHtml(actionNote)}</small>
+                </div>
+                <div class="workspace-hero-decision__facts">
+                    <article class="workspace-hero-decision__fact">
+                        <span>Dossier</span>
+                        <strong>${escapeHtml(cityLabel)} · ${escapeHtml(typeLabel)} · ${escapeHtml(getCurrentAssetStatus())}</strong>
+                    </article>
+                    <article class="workspace-hero-decision__fact">
+                        <span>Profil</span>
+                        <strong>${escapeHtml(getProfileDisplayName())} · ${escapeHtml(composition)} · TMI ${tmi} %</strong>
+                    </article>
+                    <article class="workspace-hero-decision__fact">
+                        <span>Contrôles</span>
+                        <strong>Fiabilité ${escapeHtml(confidenceModel.label)} · Stress ${escapeHtml(scenarioModel.label)}</strong>
+                    </article>
+                </div>
+            </div>
+            <aside class="workspace-hero-decision__aside">
+                <div class="workspace-hero-decision__scoreline">
+                    <span class="workspace-hero-score-label">Indice de décision</span>
+                    <div class="workspace-hero-decision__scorepack">
+                        <strong class="workspace-hero-score-value workspace-hero-score-value--${acquisitionDecision.tone}">${acquisitionDecision.score}<small>/100</small></strong>
+                        <span class="decision-badge decision-badge--${acquisitionDecision.tone}">${escapeHtml(acquisitionDecision.label)}</span>
+                    </div>
+                </div>
+                <div class="workspace-hero-decision__kpis">
+                    <article class="workspace-hero-decision__kpi">
+                        <span>Seuil d'offre</span>
+                        <strong class="workspace-hero-decision__kpi-value workspace-hero-decision__kpi-value--gold">${formatPlainCurrency(acquisitionDecision.maxOfferPrice)}</strong>
+                    </article>
+                    <article class="workspace-hero-decision__kpi">
+                        <span>Cash-flow net / mois</span>
+                        <strong class="workspace-hero-decision__kpi-value workspace-hero-decision__kpi-value--${metrics.cfNetNet >= 0 ? 'positive' : 'negative'}">${formatSignedCurrency(metrics.cfNetNet)}</strong>
+                    </article>
+                    <article class="workspace-hero-decision__kpi">
+                        <span>DSCR</span>
+                        <strong class="workspace-hero-decision__kpi-value workspace-hero-decision__kpi-value--${dscrTone}">${formatRatio(metrics.dscr)}</strong>
+                    </article>
+                </div>
+            </aside>
+        </div>
+    `;
 }
 
 function getCurrentAnalysisModel() {
@@ -1056,10 +1203,10 @@ function buildPriceRentMatrixMarkup(matrix) {
     return `
         <div class="matrix-shell">
             <div class="matrix-legend">
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--excellent"></span>Très favorable</span>
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--positive"></span>Acheter</span>
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--watch"></span>Négocier</span>
-                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--negative"></span>Refuser</span>
+                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--excellent"></span>Favorable</span>
+                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--positive"></span>Recevable</span>
+                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--watch"></span>Réviser</span>
+                <span class="matrix-legend-item"><span class="matrix-legend-swatch matrix-legend-swatch--negative"></span>Écarter</span>
             </div>
             <div class="matrix-scroll">
                 <div class="matrix-grid" style="grid-template-columns: minmax(132px, 1.15fr) repeat(${matrix.columnRents.length}, minmax(92px, 1fr));">
@@ -1149,27 +1296,287 @@ function buildSensitivityTable(sensitivity) {
 function buildAssetActionButtons(assetId, scope) {
     return `
         <div class="table-actions">
+            <button type="button" class="table-action" data-action="preview-asset" data-scope="${scope}" data-id="${assetId}">Voir</button>
             <button type="button" class="table-action" data-action="load-asset" data-id="${assetId}">Ouvrir</button>
             <button type="button" class="table-action" data-action="remove-asset" data-scope="${scope}" data-id="${assetId}">Retirer</button>
         </div>
     `;
 }
 
+function getAssetRecordById(assetId) {
+    return state.assetRecords.find(item => item.id === assetId) || null;
+}
+
+function getAssetDetailScopeMeta(asset, scope) {
+    const effectiveScope = scope === 'portfolio' ? 'portfolio' : 'comparison';
+    const inBothScopes = asset.inComparison && asset.inPortfolio;
+    const isOwned = asset.variablesData?.['statut-bien'] === 'owned';
+
+    if (effectiveScope === 'portfolio') {
+        return {
+            scope: effectiveScope,
+            eyebrow: 'Fiche portefeuille',
+            scopeLabel: isOwned ? 'Actif détenu' : (inBothScopes ? 'Actif suivi et arbitré' : 'Actif suivi au portefeuille'),
+            primaryDecisionLabel: 'Lecture d exploitation',
+            secondaryDecisionLabel: 'Lecture acquisition',
+            removeLabel: 'Retirer du portefeuille'
+        };
+    }
+
+    return {
+        scope: effectiveScope,
+        eyebrow: 'Fiche comparateur',
+        scopeLabel: inBothScopes ? 'Dossier déjà lié au portefeuille' : 'Dossier à arbitrer',
+        primaryDecisionLabel: 'Lecture acquisition',
+        secondaryDecisionLabel: 'Lecture d exploitation',
+        removeLabel: 'Retirer du comparateur'
+    };
+}
+
+function buildAssetDetailMetricCard(value, label, note = '') {
+    return `
+        <article class="detail-kpi-card">
+            <div class="detail-kpi-card__value">${value}</div>
+            <div class="detail-kpi-card__label">${escapeHtml(label)}</div>
+            ${note ? `<div class="detail-kpi-card__note">${escapeHtml(note)}</div>` : ''}
+        </article>
+    `;
+}
+
+function buildAssetDetailInfoCard(label, value) {
+    return `
+        <div class="detail-info-card">
+            <span class="detail-info-card__label">${escapeHtml(label)}</span>
+            <span class="detail-info-card__value">${escapeHtml(String(value))}</span>
+        </div>
+    `;
+}
+
+function buildAssetDetailContent(asset, requestedScope) {
+    const scopeMeta = getAssetDetailScopeMeta(asset, requestedScope);
+    const assetInputs = sanitizeVariablesData(asset.variablesData);
+    const analysisModel = computeAnalysisViewModel({
+        ...assetInputs,
+        revenus: state.profileData.income,
+        adults: state.profileData.adults,
+        children: state.profileData.children
+    });
+    const { metrics, acquisitionDecision, decision, confidenceModel, scenarioModel, decisionJournal } = analysisModel;
+    const primaryDecision = scopeMeta.scope === 'portfolio' ? decision : acquisitionDecision;
+    const secondaryDecision = scopeMeta.scope === 'portfolio' ? acquisitionDecision : decision;
+    const thesis = decisionJournal.thesis || decisionJournal.suggestedThesis;
+    const nextStep = decisionJournal.nextStep || decisionJournal.suggestedNextStep;
+    const monthlyRent = analysisModel.annual?.loyersEncaisses != null ? analysisModel.annual.loyersEncaisses / 12 : null;
+    const debtMonthly = analysisModel.monthly?.mensualiteTotale;
+    const checkpointsHtml = Array.isArray(decision.checkpoints) && decision.checkpoints.length
+        ? decision.checkpoints.map(checkpoint => `
+            <li>
+                <div>
+                    <span>${escapeHtml(checkpoint.label)}</span>
+                    <small>${escapeHtml(checkpoint.target)}</small>
+                </div>
+                <strong class="status-pill status-pill--${checkpoint.tone}">${formatCheckpointValue(checkpoint)}</strong>
+            </li>
+        `).join('')
+        : '<li><div><span>Lecture de contrôle</span><small>Aucune anomalie remontée</small></div><strong class="status-pill status-pill--neutral">Stable</strong></li>';
+
+    return `
+        <article class="detail-sheet asset-detail-sheet">
+            <header class="detail-sheet__header">
+                <div class="detail-sheet__copy">
+                    <div class="detail-sheet__eyebrow">${escapeHtml(scopeMeta.eyebrow)}</div>
+                    <h2 class="detail-sheet__title">${escapeHtml(assetInputs['nom-bien'] || VARIABLE_DEFAULTS['nom-bien'])}</h2>
+                    <div class="detail-sheet__meta">${escapeHtml(assetInputs.ville || VARIABLE_DEFAULTS.ville)} · ${escapeHtml(getTypeBienLabel(assetInputs['type-bien']))} · ${escapeHtml(getOwnershipLabel(assetInputs['statut-bien']))} · mis à jour ${formatShortDateTime(asset.updatedAt)}</div>
+                    <div class="asset-detail-chip-row">
+                        <span class="collection-table-chip">${escapeHtml(scopeMeta.scopeLabel)}</span>
+                        <span class="collection-table-chip">${confidenceModel.score}/100 fiabilité</span>
+                        <span class="collection-table-chip">Stress ${escapeHtml(scenarioModel.label)}</span>
+                        <span class="collection-table-chip">Régime ${escapeHtml(getRegimeLabel(assetInputs.regime))}</span>
+                    </div>
+                </div>
+                <div class="detail-sheet__actions">
+                    <span class="status-pill status-pill--${primaryDecision.tone}">${escapeHtml(scopeMeta.primaryDecisionLabel)}</span>
+                    <strong class="decision-badge decision-badge--${primaryDecision.tone}">${escapeHtml(primaryDecision.label)}</strong>
+                    <button id="asset-detail-close" class="detail-close" type="button">Fermer</button>
+                </div>
+            </header>
+
+            <section class="detail-kpi-grid">
+                ${buildAssetDetailMetricCard(`${acquisitionDecision.score}/100`, 'Score achat', acquisitionDecision.priceBand || 'Lecture de prix')}
+                ${buildAssetDetailMetricCard(formatSignedCurrency(metrics.cfNetNet), 'CF net / mois', primaryDecision.action || '')}
+                ${buildAssetDetailMetricCard(formatRatio(metrics.dscr), 'DSCR', decision.label)}
+                ${buildAssetDetailMetricCard(formatPlainCurrency(acquisitionDecision.maxOfferPrice), 'Offre plafond', formatPlainCurrency(acquisitionDecision.currentPrice))}
+                ${buildAssetDetailMetricCard(monthlyRent != null ? `${formatPlainCurrency(monthlyRent)}/mois` : '—', 'Loyers encaissés')}
+                ${buildAssetDetailMetricCard(debtMonthly != null ? `${formatPlainCurrency(debtMonthly)}/mois` : '—', 'Dette mensuelle')}
+            </section>
+
+            <section class="detail-section detail-section--split">
+                <div class="detail-section__pane">
+                    <div class="detail-section__label">Verdict de dossier</div>
+                    <div class="decision-card asset-detail-card">
+                        <div class="decision-head">
+                            <span class="status-label">${escapeHtml(scopeMeta.primaryDecisionLabel)}</span>
+                            <strong class="decision-badge decision-badge--${primaryDecision.tone}">${escapeHtml(primaryDecision.label)}</strong>
+                        </div>
+                        <p class="analysis-verdict">${escapeHtml(primaryDecision.summary)}</p>
+                        <p class="decision-hint">Action recommandée : <strong>${escapeHtml(primaryDecision.action)}</strong></p>
+                        <div class="asset-detail-secondary-decision">
+                            <span>${escapeHtml(scopeMeta.secondaryDecisionLabel)}</span>
+                            <strong class="status-pill status-pill--${secondaryDecision.tone}">${escapeHtml(secondaryDecision.label)}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="detail-section__pane">
+                    <div class="detail-section__label">Hypothèses structurantes</div>
+                    <div class="detail-info-grid">
+                        ${buildAssetDetailInfoCard('Prix affiché', formatPlainCurrency(acquisitionDecision.currentPrice))}
+                        ${buildAssetDetailInfoCard('Loyer cible', formatPlainCurrency(assetInputs.loyer) + ' / mois')}
+                        ${buildAssetDetailInfoCard('Apport', formatPlainCurrency(assetInputs.apport))}
+                        ${buildAssetDetailInfoCard('Travaux', formatPlainCurrency(assetInputs.travaux))}
+                        ${buildAssetDetailInfoCard('Taux', `${assetInputs['taux-input']} %`) }
+                        ${buildAssetDetailInfoCard('Durée', `${assetInputs.duree} ans`) }
+                        ${buildAssetDetailInfoCard('DPE', String(assetInputs.dpe || 'NR').toUpperCase())}
+                        ${buildAssetDetailInfoCard('Créé le', formatShortDateTime(asset.createdAt))}
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-section detail-section--split">
+                <div class="detail-section__pane">
+                    <div class="detail-section__label">Thèse d investissement</div>
+                    <blockquote class="detail-quote">${formatMultilineText(thesis)}</blockquote>
+                </div>
+                <div class="detail-section__pane">
+                    <div class="detail-section__label">Prochaine étape</div>
+                    <div class="asset-detail-note">${formatMultilineText(nextStep)}</div>
+                </div>
+            </section>
+
+            <section class="detail-section">
+                <div class="detail-section__label">Points de contrôle</div>
+                <ul class="decision-checkpoints asset-detail-checkpoints">${checkpointsHtml}</ul>
+            </section>
+
+            <footer class="detail-sheet__footer">
+                <button id="asset-detail-load" class="detail-action-button detail-action-button--primary" type="button">Ouvrir dans l'étude</button>
+                <button id="asset-detail-remove" class="detail-action-button detail-action-button--secondary" type="button">${escapeHtml(scopeMeta.removeLabel)}</button>
+            </footer>
+        </article>
+    `;
+}
+
+function renderAssetDetailContent(asset, scope) {
+    if (!nodes.assetDetailContent) {
+        return;
+    }
+
+    nodes.assetDetailContent.innerHTML = buildAssetDetailContent(asset, scope);
+    nodes.assetDetailContent.querySelector('#asset-detail-close')?.addEventListener('click', closeAssetDetailDrawer);
+    nodes.assetDetailContent.querySelector('#asset-detail-load')?.addEventListener('click', () => {
+        closeAssetDetailDrawer();
+        loadAssetIntoWorkspace(asset.id);
+    });
+    nodes.assetDetailContent.querySelector('#asset-detail-remove')?.addEventListener('click', () => {
+        closeAssetDetailDrawer();
+        removeAssetFromScope(asset.id, scope);
+    });
+}
+
+function openAssetDetailDrawer(assetId, scope) {
+    const asset = getAssetRecordById(assetId);
+    if (!asset || !nodes.assetDetailOverlay || !nodes.assetDetailDrawer || !nodes.assetDetailContent) {
+        return;
+    }
+
+    if (assetDetailCloseTimer) {
+        clearTimeout(assetDetailCloseTimer);
+        assetDetailCloseTimer = null;
+    }
+
+    assetDetailReturnFocusTarget = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    renderAssetDetailContent(asset, scope);
+    nodes.assetDetailOverlay.style.display = 'block';
+    nodes.assetDetailDrawer.style.display = 'block';
+    nodes.assetDetailOverlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
+    void nodes.assetDetailOverlay.offsetWidth;
+    void nodes.assetDetailDrawer.offsetWidth;
+    nodes.assetDetailOverlay.classList.add('is-open');
+    nodes.assetDetailDrawer.classList.add('is-open');
+    nodes.assetDetailOverlay.onclick = closeAssetDetailDrawer;
+    window.requestAnimationFrame(() => {
+        nodes.assetDetailContent.querySelector('#asset-detail-close')?.focus();
+    });
+}
+
+function closeAssetDetailDrawer() {
+    const focusTarget = assetDetailReturnFocusTarget && document.contains(assetDetailReturnFocusTarget)
+        ? assetDetailReturnFocusTarget
+        : null;
+
+    nodes.assetDetailOverlay?.classList.remove('is-open');
+    nodes.assetDetailDrawer?.classList.remove('is-open');
+    if (nodes.assetDetailOverlay) {
+        nodes.assetDetailOverlay.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('drawer-open');
+    focusTarget?.focus();
+    if (assetDetailCloseTimer) {
+        clearTimeout(assetDetailCloseTimer);
+    }
+    assetDetailCloseTimer = setTimeout(() => {
+        if (nodes.assetDetailOverlay) {
+            nodes.assetDetailOverlay.style.display = 'none';
+        }
+        if (nodes.assetDetailDrawer) {
+            nodes.assetDetailDrawer.style.display = 'none';
+        }
+        assetDetailReturnFocusTarget = null;
+        assetDetailCloseTimer = null;
+    }, 220);
+}
+
 function buildEmptyTableMarkup(message) {
     return `<p class="collection-empty">${message}</p>`;
 }
 
-function buildCollectionMetricCards(summary, capacity, concentration) {
+function buildCollectionTableShell({
+    eyebrow,
+    title,
+    summary,
+    chips = [],
+    emptyMessage,
+    tableMarkup,
+}) {
+    const chipsMarkup = chips.length
+        ? `<div class="collection-table-meta">${chips.map(chip => `<span class="collection-table-chip">${escapeHtml(chip)}</span>`).join('')}</div>`
+        : '';
+
+    return `
+        <div class="collection-table-panel">
+            <div class="collection-table-head">
+                <div class="collection-table-copy">
+                    <div class="collection-table-kicker">${escapeHtml(eyebrow)}</div>
+                    <div class="collection-table-title">${escapeHtml(title)}</div>
+                    <p class="collection-table-summary">${escapeHtml(summary)}</p>
+                </div>
+                ${chipsMarkup}
+            </div>
+            ${tableMarkup ? `<div class="collection-table-scroll">${tableMarkup}</div>` : `<div class="collection-table-empty">${escapeHtml(emptyMessage || '')}</div>`}
+        </div>
+    `;
+}
+
+function buildCollectionMetricCards(dashboard) {
     const cards = [
-        { label: 'Biens suivis', value: String(summary.assetCount), cssClass: '' },
-        { label: 'Biens détenus', value: String(summary.ownedCount), cssClass: '' },
-        { label: 'CF consolidé', value: formatSignedCurrency(summary.totalCashflow), cssClass: getMetricClass(summary.totalCashflow) },
-        { label: 'Fiscalité locative', value: formatPlainCurrency(summary.consolidatedTaxAnnual), cssClass: summary.consolidatedTaxAnnual > 0 ? 'is-watch' : 'is-positive' },
-        { label: 'Dette mensuelle', value: formatPlainCurrency(summary.totalDebtMonthly), cssClass: '' },
-        { label: 'Valeur créée à 10 ans', value: formatSignedCurrency(summary.totalTraction), cssClass: getMetricClass(summary.totalTraction) },
-        { label: 'Marge d\'achat', value: formatSignedCurrency(capacity.remainingEffort), cssClass: getDecisionClass(capacity.tone) },
-        { label: 'Ville la plus exposée', value: concentration.cityCount ? `${Math.round(concentration.topCityShare)} %` : '--', cssClass: getDecisionClass(concentration.tone) },
-        { label: 'Acquisitions prêtes', value: String(summary.readyAcquisitions), cssClass: summary.readyAcquisitions > 0 ? 'is-positive' : '' }
+        { label: 'Biens suivis', value: String(dashboard.assetCount), cssClass: '' },
+        { label: 'Biens détenus', value: String(dashboard.ownedCount), cssClass: '' },
+        { label: 'CF consolidé', value: formatSignedCurrency(dashboard.totalCashflow), cssClass: getMetricClass(dashboard.totalCashflow) },
+        { label: 'Fiscalité locative', value: formatPlainCurrency(dashboard.consolidatedTaxAnnual), cssClass: dashboard.consolidatedTaxAnnual > 0 ? 'is-watch' : 'is-positive' },
+        { label: 'Dette mensuelle', value: formatPlainCurrency(dashboard.totalDebtMonthly), cssClass: '' },
+        { label: 'Valeur créée à 10 ans', value: formatSignedCurrency(dashboard.totalTraction), cssClass: getMetricClass(dashboard.totalTraction) },
     ];
 
     nodes.portfolioSummary.innerHTML = cards.map(card => `
@@ -1180,121 +1587,74 @@ function buildCollectionMetricCards(summary, capacity, concentration) {
     `).join('');
 }
 
-function buildPortfolioDecision(decision) {
-    nodes.portfolioDecision.innerHTML = `
-        <div class="decision-card">
-            <div class="decision-head">
-                <span class="status-label">Vision consolidée</span>
-                <strong class="decision-badge decision-badge--${decision.tone}">${decision.label}</strong>
-            </div>
-            <p class="analysis-verdict">${decision.summary}</p>
-            <p class="decision-hint">Étape recommandée : <strong>${decision.action}</strong></p>
-            ${decision.checkpoints.length ? `
-                <ul class="decision-checkpoints">
-                    ${decision.checkpoints.map(checkpoint => `
-                        <li>
-                            <div>
-                                <span>${checkpoint.label}</span>
-                                <small>${checkpoint.target}</small>
-                            </div>
-                            <strong class="status-pill status-pill--${checkpoint.tone}">${formatCheckpointValue(checkpoint)}</strong>
-                        </li>
-                    `).join('')}
-                </ul>
-            ` : '<p class="collection-empty">Ajoutez des biens pour activer la lecture consolidée du portefeuille.</p>'}
-        </div>
-    `;
-}
+function buildPortfolioHero(collectionsView) {
+    if (!nodes.portfolioHero) return;
 
-function buildPortfolioAlerts(alerts) {
-    if (!alerts.length) {
-        nodes.portfolioAlerts.innerHTML = '<p class="collection-empty">Aucune alerte prioritaire pour l\'instant.</p>';
-        return;
+    const { dashboard } = collectionsView;
+    const assetCount = dashboard.assetCount || 0;
+
+    let tone = 'neutral', label = 'À initialiser', summary = 'Ajoutez un premier actif pour obtenir une synthèse consolidée.', action = 'Enregistrer un dossier dans le comparateur ou le portefeuille.';
+    if (assetCount > 0) {
+        if (dashboard.totalCashflow < 0 || dashboard.dscr < 1) {
+            tone = 'negative'; label = 'Sous tension';
+            summary = 'Le portefeuille consomme de la trésorerie ou ne couvre plus sa dette.';
+            action = 'Traiter les biens les plus faibles avant toute nouvelle acquisition.';
+        } else if (dashboard.totalCashflow < 150 || dashboard.dscr < 1.1) {
+            tone = 'watch'; label = 'À consolider';
+            summary = 'Le portefeuille tient globalement, mais certains équilibres doivent encore être stabilisés.';
+            action = 'Sécuriser les actifs les moins réguliers avant extension.';
+        } else {
+            tone = 'positive'; label = 'Conforme';
+            summary = 'Le portefeuille couvre sa dette et conserve une marge consolidée exploitable.';
+            action = 'Examiner uniquement les acquisitions qui améliorent l équilibre global.';
+        }
     }
 
-    nodes.portfolioAlerts.innerHTML = `
-        <div class="alert-list">
-            ${alerts.map(alert => `
-                <article class="alert-card alert-card--${alert.tone}">
-                    <div class="lever-head">
-                        <strong>${alert.title}</strong>
-                        <span class="status-pill status-pill--${alert.tone}">${alert.tone === 'negative' ? 'Alerte' : 'Surveillance'}</span>
-                    </div>
-                    <p>${alert.detail}</p>
-                </article>
-            `).join('')}
+    nodes.portfolioHero.innerHTML = `
+        <div class="workspace-hero-card workspace-hero-card--${tone}">
+            <div class="workspace-hero-copy">
+                <div class="workspace-hero-eyebrow">
+                    <span class="workspace-hero-kicker">Synthèse portefeuille</span>
+                    <span class="status-pill status-pill--${tone}">${escapeHtml(label)}</span>
+                </div>
+                <h2>${assetCount > 0 ? `${assetCount} actif${assetCount > 1 ? 's' : ''} suivi${assetCount > 1 ? 's' : ''}` : 'Portefeuille à initialiser'}</h2>
+                <p class="workspace-hero-summary">${escapeHtml(summary)}</p>
+                <div class="workspace-hero-action">
+                    <span>Point de contrôle</span>
+                    <strong>${escapeHtml(action)}</strong>
+                </div>
+                <div class="workspace-hero-meta">
+                    <span class="workspace-hero-chip">${dashboard.ownedCount} détenu${dashboard.ownedCount > 1 ? 's' : ''}</span>
+                    <span class="workspace-hero-chip">${escapeHtml(getProfileDisplayName())}</span>
+                </div>
+            </div>
+            <aside class="workspace-hero-score">
+                <span class="workspace-hero-score-label">Actifs suivis</span>
+                <strong class="workspace-hero-score-value workspace-hero-score-value--${tone}">${assetCount}<small>${assetCount > 1 ? ' biens' : ' bien'}</small></strong>
+                <span class="decision-badge decision-badge--${tone}">${escapeHtml(label)}</span>
+                <div class="workspace-hero-mini-grid">
+                    <article class="workspace-hero-mini-card">
+                        <span>CF consolidé</span>
+                        <strong class="value-${dashboard.totalCashflow >= 0 ? 'positive' : 'negative'}">${formatSignedCurrency(dashboard.totalCashflow)}</strong>
+                    </article>
+                    <article class="workspace-hero-mini-card">
+                        <span>Dette mensuelle</span>
+                        <strong>${formatPlainCurrency(dashboard.totalDebtMonthly)}</strong>
+                    </article>
+                    <article class="workspace-hero-mini-card">
+                        <span>DSCR consolidé</span>
+                        <strong class="value-${dashboard.dscr >= 1.1 ? 'positive' : dashboard.dscr >= 1 ? '' : 'negative'}">${dashboard.dscr.toFixed(2).replace('.', ',')}</strong>
+                    </article>
+                    <article class="workspace-hero-mini-card">
+                        <span>Fiscalité / an</span>
+                        <strong>${formatPlainCurrency(dashboard.consolidatedTaxAnnual)}</strong>
+                    </article>
+                </div>
+            </aside>
         </div>
     `;
 }
 
-function buildPortfolioCapacity(capacity) {
-    nodes.portfolioCapacity.innerHTML = `
-        <div class="capacity-shell">
-            <div class="decision-head">
-                <span class="status-label">Capacité d'achat</span>
-                <strong class="status-pill status-pill--${capacity.tone}">${capacity.label}</strong>
-            </div>
-            <p class="decision-hint">${capacity.summary}</p>
-            <div class="buybox-kpis">
-                <article class="buybox-kpi">
-                    <span>Effort cible</span>
-                    <strong>${formatPlainCurrency(capacity.allowedEffort)}</strong>
-                </article>
-                <article class="buybox-kpi ${getDecisionClass(capacity.tone)}">
-                    <span>Marge disponible</span>
-                    <strong>${formatSignedCurrency(capacity.remainingEffort)}</strong>
-                </article>
-                <article class="buybox-kpi ${capacity.financedAmount > 0 ? 'is-positive' : 'is-neutral'}">
-                    <span>Budget finançable</span>
-                    <strong>${formatPlainCurrency(capacity.financedAmount)}</strong>
-                </article>
-                <article class="buybox-kpi ${capacity.acquisitionBudget > 0 ? 'is-positive' : 'is-neutral'}">
-                    <span>Budget total mobilisable</span>
-                    <strong>${formatPlainCurrency(capacity.acquisitionBudget)}</strong>
-                </article>
-            </div>
-        </div>
-    `;
-}
-
-function buildPortfolioConcentration(concentration) {
-    nodes.portfolioConcentration.innerHTML = `
-        <div class="concentration-shell">
-            <div class="decision-head">
-                <span class="status-label">Concentration des loyers</span>
-                <strong class="status-pill status-pill--${concentration.tone}">${concentration.label}</strong>
-            </div>
-            <p class="decision-hint">${concentration.summary}</p>
-            ${concentration.cities.length ? `
-                <div class="timeline-summary">
-                    <div class="timeline-pill">
-                        <span>Villes suivies</span>
-                        <strong>${concentration.cityCount}</strong>
-                    </div>
-                    <div class="timeline-pill">
-                        <span>Top ville</span>
-                        <strong>${Math.round(concentration.topCityShare)} %</strong>
-                    </div>
-                    <div class="timeline-pill">
-                        <span>Top bien</span>
-                        <strong>${Math.round(concentration.topAssetShare)} %</strong>
-                    </div>
-                </div>
-                <div class="concentration-list">
-                    ${concentration.cities.map(item => `
-                        <article class="scenario-card scenario-card--${concentration.tone}">
-                            <div class="lever-head">
-                                <strong>${escapeHtml(item.label)}</strong>
-                                <span class="status-pill status-pill--${concentration.tone}">${Math.round(item.share)} %</span>
-                            </div>
-                            <p>${item.count} bien${item.count > 1 ? 's' : ''} · ${formatPlainCurrency(item.monthlyRent)} / mois</p>
-                        </article>
-                    `).join('')}
-                </div>
-            ` : '<p class="collection-empty">Renseignez au moins une ville pour lire la concentration du risque.</p>'}
-        </div>
-    `;
-}
 
 function buildPortfolioPriorities(priorities) {
     if (!priorities.length) {
@@ -1328,119 +1688,333 @@ function buildPortfolioPriorities(priorities) {
     `;
 }
 
-function buildAcquisitionArbitrage(acquisitions) {
-    if (!acquisitions.length) {
-        nodes.acquisitionArbitrage.innerHTML = '<p class="collection-empty">Aucun candidat à arbitrer tant qu aucun bien n est enregistré au comparateur.</p>';
+
+function buildPortfolioKpiBanner(collectionsView) {
+    if (!nodes.portfolioKpiBanner) return;
+
+    const { dashboard, capacity, decision, portfolioItems } = collectionsView;
+
+    if (!dashboard.assetCount) {
+        nodes.portfolioKpiBanner.innerHTML = '';
         return;
     }
 
-    nodes.acquisitionArbitrage.innerHTML = `
-        <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Dossier</th>
-                    <th>Décision</th>
-                    <th>Arbitrage</th>
-                    <th>Δ CF</th>
-                    <th>Δ fiscalité</th>
-                    <th>DSCR simulé</th>
-                    <th>Marge restante</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${acquisitions.map(item => `
-                    <tr>
-                        <td>
-                            <strong>${escapeHtml(item.name)}</strong>
-                            <div class="table-subline">${item.summary}</div>
-                        </td>
-                        <td><span class="status-pill status-pill--${item.recommendation.tone}">${item.decisionLabel}</span></td>
-                        <td><span class="status-pill status-pill--${item.recommendation.tone}">${item.recommendation.label}</span></td>
-                        <td><strong class="${item.deltaCashflow >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.deltaCashflow)}</strong></td>
-                        <td><strong class="${item.deltaTaxAnnual <= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(-item.deltaTaxAnnual)}</strong></td>
-                        <td>${formatRatio(item.scenarioDscr)}</td>
-                        <td><strong class="${item.scenarioCapacity >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.scenarioCapacity)}</strong></td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
+    const avgRdtBrut = portfolioItems.length
+        ? portfolioItems.reduce((s, i) => s + (i.metrics.rentaBrute || 0), 0) / portfolioItems.length
+        : 0;
+
+    const cfTone = dashboard.totalCashflow >= 0 ? 'success' : 'danger';
+    const dscrTone = dashboard.dscr >= 1.1 ? 'success' : dashboard.dscr >= 1 ? 'watch' : 'danger';
+    const scoreRank = decision.rank ?? 0;
+    const scoreTone = scoreRank >= 3 ? 'positive' : scoreRank >= 2 ? 'neutral' : scoreRank >= 1 ? 'watch' : 'negative';
+    const scoreValue = [15, 35, 55, 75, 90][Math.min(4, scoreRank)];
+
+    nodes.portfolioKpiBanner.innerHTML = `
+        <div class="portfolio-health-bar">
+            <div class="portfolio-health-score portfolio-health-score--${scoreTone}">${scoreValue}</div>
+            <div class="portfolio-health-copy">
+                <div class="portfolio-health-title">Score santé portefeuille · ${escapeHtml(decision.label)}</div>
+                <div class="portfolio-health-note">${escapeHtml(decision.summary || decision.action || '')}</div>
+            </div>
+            <div class="portfolio-health-meta">${dashboard.ownedCount} bien${dashboard.ownedCount > 1 ? 's' : ''} détenu${dashboard.ownedCount > 1 ? 's' : ''} · ${collectionsView.comparisonItems.length} suivi${collectionsView.comparisonItems.length > 1 ? 's' : ''}</div>
+        </div>
+        <div class="portfolio-kpi-banner">
+            <div class="portfolio-kpi-card portfolio-kpi-card--${cfTone === 'success' ? 'success' : 'neutral'}">
+                <div class="portfolio-kpi-label">CF net-net</div>
+                <div class="portfolio-kpi-value portfolio-kpi-value--${cfTone}">${formatSignedCurrency(dashboard.totalCashflow)}</div>
+                <div class="portfolio-kpi-sub">/ mois consolidé</div>
+            </div>
+            <div class="portfolio-kpi-card portfolio-kpi-card--gold">
+                <div class="portfolio-kpi-label">Rendement</div>
+                <div class="portfolio-kpi-value portfolio-kpi-value--gold">${avgRdtBrut.toFixed(1).replace('.', ',')} %</div>
+                <div class="portfolio-kpi-sub">brut moyen</div>
+            </div>
+            <div class="portfolio-kpi-card portfolio-kpi-card--info">
+                <div class="portfolio-kpi-label">Patrimoine</div>
+                <div class="portfolio-kpi-value portfolio-kpi-value--info">${Math.round(dashboard.totalValue / 1000)} k€</div>
+                <div class="portfolio-kpi-sub">coût total investi</div>
+            </div>
+            <div class="portfolio-kpi-card portfolio-kpi-card--${dscrTone === 'success' ? 'success' : dscrTone}">
+                <div class="portfolio-kpi-label">DSCR moyen</div>
+                <div class="portfolio-kpi-value portfolio-kpi-value--${dscrTone}">${dashboard.dscr.toFixed(2).replace('.', ',')}</div>
+                <div class="portfolio-kpi-sub">couverture dette</div>
+            </div>
+            <div class="portfolio-kpi-card portfolio-kpi-card--neutral">
+                <div class="portfolio-kpi-label">Loyers / mois</div>
+                <div class="portfolio-kpi-value">${formatCurrency(dashboard.totalRentMonthly)}</div>
+                <div class="portfolio-kpi-sub">bruts encaissés</div>
+            </div>
+            <div class="portfolio-kpi-card portfolio-kpi-card--purple">
+                <div class="portfolio-kpi-label">Capacité restante</div>
+                <div class="portfolio-kpi-value portfolio-kpi-value--purple">${Math.round((capacity.acquisitionBudget || 0) / 1000)} k€</div>
+                <div class="portfolio-kpi-sub">endettement estimé</div>
+            </div>
+        </div>
     `;
+}
+
+function buildPortfolioAssetCard(item, isPipeline) {
+    const cf = item.metrics.cfNetNet || 0;
+    const tone = isPipeline
+        ? (item.analysisModel.acquisitionDecision?.tone || 'neutral')
+        : (item.analysisModel.decision?.tone || 'neutral');
+    const cfTone = cf > 0 ? 'positive' : cf < 0 ? 'negative' : 'watch';
+
+    const loyerMensuel = (item.model.loyersEncaisses || 0) / 12;
+    const creditMensuel = item.model.mensualiteTotale || (loyerMensuel * 0.55);
+    const chargesMensuel = (item.model.chargesExploitationAnnuelles || 0) / 12;
+    const netMensuel = cf;
+    const totalFlux = Math.max(loyerMensuel, 1);
+
+    function segWidth(val) {
+        return Math.max(4, Math.min(60, (Math.abs(val) / totalFlux) * 100)).toFixed(1) + '%';
+    }
+
+    const prix = item.variablesData?.['prix']
+        ? item.variablesData['prix'] - (item.variablesData['nego'] || 0)
+        : item.metrics.coutTotal || 0;
+    const regime = item.variablesData?.['regime'] || '';
+    const decisionLabel = isPipeline
+        ? (item.analysisModel.acquisitionDecision?.label || '')
+        : (item.analysisModel.decision?.label || '');
+    const decisionTone = isPipeline
+        ? (item.analysisModel.acquisitionDecision?.tone || 'neutral')
+        : (item.analysisModel.decision?.tone || 'neutral');
+    const decisionValueTone = decisionTone === 'excellent' || decisionTone === 'positive' ? 'positive'
+        : decisionTone === 'negative' ? 'negative' : 'watch';
+
+    const detailParts = [
+        loyerMensuel > 0 ? `Loyers ${formatCurrency(loyerMensuel)}` : null,
+        creditMensuel > 0 ? `Crédit ${formatCurrency(creditMensuel)}` : null,
+        chargesMensuel > 0 ? `Charges ${formatCurrency(chargesMensuel)}` : null,
+        regime ? escapeHtml(regime.replace('micro-foncier','Micro-foncier').replace('reel','Réel').replace('sci-is','SCI-IS')) : null,
+    ].filter(Boolean).join(' · ');
+
+    return `
+        <div class="asset-card asset-card--${tone}" data-asset-id="${escapeHtml(item.id)}">
+            <div class="asset-card__inner">
+                <div class="asset-card__header">
+                    <div>
+                        <div class="asset-card__name">${escapeHtml(item.name)}</div>
+                        <div class="asset-card__meta">${escapeHtml(item.typeBien || '')} · ${escapeHtml(item.city || '')}${item.isActive ? ' · <strong>En cours</strong>' : ''}</div>
+                    </div>
+                    <div class="asset-card__cf">
+                        <span class="asset-card__cf-value asset-card__cf-value--${cfTone}">${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €</span>
+                        <span class="asset-card__cf-label">/mois net-net</span>
+                    </div>
+                </div>
+                <div class="asset-card__waterfall" title="Loyers → Crédit → Charges → Net">
+                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--income"  style="flex:${segWidth(loyerMensuel)}"></div>
+                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--expense" style="flex:${segWidth(creditMensuel)}"></div>
+                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--charges" style="flex:${segWidth(chargesMensuel)}"></div>
+                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--${netMensuel >= 0 ? 'net-pos' : 'net-neg'}" style="flex:${segWidth(Math.abs(netMensuel))}"></div>
+                </div>
+                <div class="asset-card__kpis">
+                    <div class="asset-card__kpi">
+                        <span class="asset-card__kpi-value asset-card__kpi-value--gold">${(item.metrics.rentaBrute || 0).toFixed(1).replace('.', ',')} %</span>
+                        <span class="asset-card__kpi-label">Rdt brut</span>
+                    </div>
+                    <div class="asset-card__kpi">
+                        <span class="asset-card__kpi-value ${(item.metrics.dscr || 0) < 1 ? 'asset-card__kpi-value--negative' : ''}">${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')}</span>
+                        <span class="asset-card__kpi-label">DSCR</span>
+                    </div>
+                    <div class="asset-card__kpi">
+                        <span class="asset-card__kpi-value asset-card__kpi-value--info">${Math.round(prix / 1000)} k€</span>
+                        <span class="asset-card__kpi-label">Prix net</span>
+                    </div>
+                    <div class="asset-card__kpi">
+                        <span class="asset-card__kpi-value asset-card__kpi-value--${decisionValueTone}">${escapeHtml(decisionLabel)}</span>
+                        <span class="asset-card__kpi-label">Décision</span>
+                    </div>
+                </div>
+                ${detailParts ? `<div class="asset-card__detail">${detailParts}</div>` : ''}
+                <div class="asset-card__actions">
+                    <button type="button" class="asset-card__action${isPipeline ? ' asset-card__action--primary' : ''}" data-action="open-asset" data-id="${escapeHtml(item.id)}">↩ Ouvrir</button>
+                    <button type="button" class="asset-card__action" data-action="preview-asset" data-scope="${isPipeline ? 'comparison' : 'portfolio'}" data-id="${escapeHtml(item.id)}">Fiche</button>
+                    <button type="button" class="asset-card__action" data-action="pdf-asset" data-id="${escapeHtml(item.id)}">PDF</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function buildPortfolioAssetGrid(collectionsView) {
+    const { portfolioItems, comparisonItems } = collectionsView;
+    const pipelineItems = comparisonItems.filter(item => !item.inPortfolio);
+
+    if (nodes.portfolioAssetGridOwned) {
+        if (!portfolioItems.length) {
+            nodes.portfolioAssetGridOwned.innerHTML = `
+                <div class="portfolio-asset-section-head">
+                    <span class="portfolio-asset-section-title">Parc détenu</span>
+                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--neutral">0 bien</span>
+                </div>
+                <p class="collection-empty">Aucun bien détenu enregistré. Ajoutez un bien avec le statut "Déjà au portefeuille".</p>
+            `;
+        } else {
+            nodes.portfolioAssetGridOwned.innerHTML = `
+                <div class="portfolio-asset-section-head">
+                    <span class="portfolio-asset-section-title">Parc détenu</span>
+                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--success">${portfolioItems.length} bien${portfolioItems.length > 1 ? 's' : ''}</span>
+                </div>
+                <div class="portfolio-asset-grid">
+                    ${portfolioItems.map(item => buildPortfolioAssetCard(item, false)).join('')}
+                </div>
+            `;
+        }
+    }
+
+    if (nodes.portfolioAssetGridPipeline) {
+        if (!pipelineItems.length) {
+            nodes.portfolioAssetGridPipeline.innerHTML = `
+                <div class="portfolio-asset-section-head">
+                    <span class="portfolio-asset-section-title">Pipeline d'acquisition</span>
+                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--watch">0 dossier</span>
+                </div>
+                <p class="collection-empty">Aucun dossier dans le comparateur. Enregistrez une étude depuis Saisie &amp; Analyse.</p>
+            `;
+        } else {
+            const placeholder = pipelineItems.length < 6
+                ? `<div class="asset-card asset-card--placeholder">
+                    <div style="text-align:center">
+                        <span style="font-size:22px;color:var(--border);display:block;margin-bottom:4px">+</span>
+                        <span style="font-size:10px;color:var(--muted)">Enregistrer une étude<br>depuis le simulateur</span>
+                    </div>
+                </div>` : '';
+            nodes.portfolioAssetGridPipeline.innerHTML = `
+                <div class="portfolio-asset-section-head">
+                    <span class="portfolio-asset-section-title">Pipeline d'acquisition</span>
+                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--watch">${pipelineItems.length} dossier${pipelineItems.length > 1 ? 's' : ''}</span>
+                </div>
+                <div class="portfolio-asset-grid">
+                    ${pipelineItems.map(item => buildPortfolioAssetCard(item, true)).join('')}
+                    ${placeholder}
+                </div>
+            `;
+        }
+    }
 }
 
 function buildComparisonTable(items) {
+    const positiveCount = items.filter(item => {
+        const tone = item.analysisModel.acquisitionDecision.tone;
+        return tone === 'positive' || tone === 'excellent';
+    }).length;
+    const activeCount = items.filter(item => item.isActive).length;
+    const uniqueCities = new Set(items.map(item => item.city).filter(Boolean)).size;
+
     if (!items.length) {
-        nodes.comparisonTable.innerHTML = buildEmptyTableMarkup('Aucun dossier dans le comparateur pour l\'instant.');
+        nodes.comparisonTable.innerHTML = buildCollectionTableShell({
+            eyebrow: 'Pipeline d acquisition',
+            title: 'Comparateur actif',
+            summary: 'Le comparateur se remplit avec les opportunités à étudier avant arbitrage final.',
+            chips: ['0 dossier', '0 ville couverte'],
+            emptyMessage: 'Aucun dossier n est encore chargé dans le comparateur.',
+            tableMarkup: '',
+        });
         return;
     }
 
-    nodes.comparisonTable.innerHTML = `
-        <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Dossier</th>
-                    <th>Statut</th>
-                    <th>Décision</th>
-                    <th>CF / mois</th>
-                    <th>DSCR</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${items.map(item => `
-                    <tr class="${item.isActive ? 'table-row-active' : ''}">
-                        <td>
-                            <strong>${escapeHtml(item.name)}</strong>
-                            <div class="table-subline">${escapeHtml(item.city || 'Ville non renseignée')}</div>
-                            ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
-                        </td>
-                        <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
-                        <td><span class="status-pill status-pill--${item.analysisModel.acquisitionDecision.tone}">${item.analysisModel.acquisitionDecision.label}</span></td>
-                        <td><strong class="${item.metrics.cfNetNet >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.metrics.cfNetNet)}</strong></td>
-                        <td>${formatRatio(item.metrics.dscr)}</td>
-                        <td>${buildAssetActionButtons(item.id, 'comparison')}</td>
+    nodes.comparisonTable.innerHTML = buildCollectionTableShell({
+        eyebrow: 'Pipeline d acquisition',
+        title: 'Comparateur actif',
+        summary: `${items.length} dossier${items.length > 1 ? 's' : ''} restent en file d étude avant passage au portefeuille ou arbitrage.`,
+        chips: [
+            `${positiveCount} dossier${positiveCount > 1 ? 's' : ''} favorable${positiveCount > 1 ? 's' : ''}`,
+            `${activeCount} étude ouverte`,
+            `${uniqueCities} ville${uniqueCities > 1 ? 's' : ''} couverte${uniqueCities > 1 ? 's' : ''}`,
+        ],
+        tableMarkup: `
+            <table class="analysis-table analysis-table--collection">
+                <thead>
+                    <tr>
+                        <th>Dossier</th>
+                        <th>Statut</th>
+                        <th>Décision</th>
+                        <th>CF / mois</th>
+                        <th>DSCR</th>
+                        <th>Actions</th>
                     </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
+                </thead>
+                <tbody>
+                    ${items.map(item => `
+                        <tr class="${item.isActive ? 'table-row-active' : ''}">
+                            <td>
+                                <strong>${escapeHtml(item.name)}</strong>
+                                <div class="table-subline">${escapeHtml(item.city || 'Ville à préciser')}</div>
+                                ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
+                            </td>
+                            <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
+                            <td><span class="status-pill status-pill--${item.analysisModel.acquisitionDecision.tone}">${item.analysisModel.acquisitionDecision.label}</span></td>
+                            <td><strong class="${item.metrics.cfNetNet >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.metrics.cfNetNet)}</strong></td>
+                            <td>${formatRatio(item.metrics.dscr)}</td>
+                            <td>${buildAssetActionButtons(item.id, 'comparison')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `,
+    });
 }
 
 function buildPortfolioTable(items) {
+    const totalCashflow = items.reduce((sum, item) => sum + (Number(item.metrics.cfNetNet) || 0), 0);
+    const totalDebt = items.reduce((sum, item) => sum + (Number(item.analysisModel.monthly.mensualiteTotale) || 0), 0);
+    const uniqueCities = new Set(items.map(item => item.city).filter(Boolean)).size;
+
     if (!items.length) {
-        nodes.portfolioTable.innerHTML = buildEmptyTableMarkup('Aucun bien au portefeuille pour l\'instant.');
+        nodes.portfolioTable.innerHTML = buildCollectionTableShell({
+            eyebrow: 'Parc détenu',
+            title: 'Portefeuille stabilisé',
+            summary: 'Les actifs déjà détenus doivent être enregistrés ici pour nourrir la lecture consolidée.',
+            chips: ['0 actif', '0 ville couverte'],
+            emptyMessage: 'Aucun actif n est encore enregistré dans le portefeuille.',
+            tableMarkup: '',
+        });
         return;
     }
 
-    nodes.portfolioTable.innerHTML = `
-        <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Bien</th>
-                    <th>Statut</th>
-                    <th>CF / mois</th>
-                    <th>Loyers / mois</th>
-                    <th>Dette / mois</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${items.map(item => `
-                    <tr class="${item.isActive ? 'table-row-active' : ''}">
-                        <td>
-                            <strong>${escapeHtml(item.name)}</strong>
-                            <div class="table-subline">${escapeHtml(item.city || 'Ville non renseignée')} · ${item.analysisModel.decision.label}</div>
-                            ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
-                        </td>
-                        <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
-                        <td><strong class="${item.metrics.cfNetNet >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.metrics.cfNetNet)}</strong></td>
-                        <td>${formatPlainCurrency(item.analysisModel.annual.loyersEncaisses / 12)}</td>
-                        <td>${formatPlainCurrency(item.analysisModel.monthly.mensualiteTotale)}</td>
-                        <td>${buildAssetActionButtons(item.id, 'portfolio')}</td>
+    nodes.portfolioTable.innerHTML = buildCollectionTableShell({
+        eyebrow: 'Parc détenu',
+        title: 'Portefeuille stabilisé',
+        summary: `${items.length} actif${items.length > 1 ? 's' : ''} alimentent désormais la lecture consolidée du portefeuille et de sa capacité d achat.`,
+        chips: [
+            `${items.length} actif${items.length > 1 ? 's' : ''}`,
+            `CF consolidé ${formatSignedCurrency(totalCashflow)}`,
+            `${uniqueCities} ville${uniqueCities > 1 ? 's' : ''} couverte${uniqueCities > 1 ? 's' : ''}`,
+            `Dette ${formatPlainCurrency(totalDebt)}/mois`,
+        ],
+        tableMarkup: `
+            <table class="analysis-table analysis-table--collection">
+                <thead>
+                    <tr>
+                        <th>Bien</th>
+                        <th>Statut</th>
+                        <th>CF / mois</th>
+                        <th>Loyers / mois</th>
+                        <th>Dette / mois</th>
+                        <th>Actions</th>
                     </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
+                </thead>
+                <tbody>
+                    ${items.map(item => `
+                        <tr class="${item.isActive ? 'table-row-active' : ''}">
+                            <td>
+                                <strong>${escapeHtml(item.name)}</strong>
+                                <div class="table-subline">${escapeHtml(item.city || 'Ville à préciser')} · ${item.analysisModel.decision.label}</div>
+                                ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
+                            </td>
+                            <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
+                            <td><strong class="${item.metrics.cfNetNet >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.metrics.cfNetNet)}</strong></td>
+                            <td>${formatPlainCurrency(item.analysisModel.annual.loyersEncaisses / 12)}</td>
+                            <td>${formatPlainCurrency(item.analysisModel.monthly.mensualiteTotale)}</td>
+                            <td>${buildAssetActionButtons(item.id, 'portfolio')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `,
+    });
 }
 
 function buildCollectionsView() {
@@ -1453,10 +2027,12 @@ function buildCollectionsView() {
 
 function createOrUpdateCurrentAsset(flags) {
     if (!validateDecisionJournalBeforeSave()) {
+        showToast('Remplissez la thèse et la prochaine étape avant d\'enregistrer.', 'negative');
         return;
     }
 
     const existingIndex = state.assetRecords.findIndex(asset => asset.id === state.activeAssetId);
+    const isNew = existingIndex < 0;
     const now = Date.now();
     const baseRecord = existingIndex >= 0 ? state.assetRecords[existingIndex] : null;
     const assetId = baseRecord?.id || createAssetId();
@@ -1480,6 +2056,26 @@ function createOrUpdateCurrentAsset(flags) {
     saveActiveAssetId();
     emitStateUpdate();
     render({ syncVariables: false, syncProfile: false });
+
+    if (flags.inPortfolio) {
+        showToast(isNew ? 'Dossier ajouté au portefeuille.' : 'Portefeuille mis à jour.');
+    } else if (flags.inComparison) {
+        showToast(isNew ? 'Dossier enregistré dans le comparateur.' : 'Comparateur mis à jour.');
+    }
+
+    // Flash de confirmation sur le bouton cliqué
+    const flashBtn = flags.inComparison ? nodes.saveComparison : nodes.savePortfolio;
+    if (flashBtn) {
+        const originalText = flashBtn.textContent;
+        flashBtn.classList.add('is-saved-flash');
+        flashBtn.textContent = flags.inComparison
+            ? (isNew ? '✓ Enregistré dans le comparateur' : '✓ Comparateur mis à jour')
+            : (isNew ? '✓ Ajouté au portefeuille' : '✓ Portefeuille mis à jour');
+        setTimeout(() => {
+            flashBtn.classList.remove('is-saved-flash');
+            flashBtn.textContent = originalText;
+        }, 2000);
+    }
 }
 
 function loadAssetIntoWorkspace(assetId) {
@@ -1494,6 +2090,9 @@ function loadAssetIntoWorkspace(assetId) {
     saveActiveAssetId();
     emitStateUpdate();
     render({ syncVariables: true, syncProfile: false });
+    // Navigate to Saisie & Analyse tab
+    const workspaceTab = document.querySelector('.workspace-tab[data-target="workspace-panel"]');
+    if (workspaceTab && !IS_ANALYSIS_WINDOW) workspaceTab.click();
 }
 
 export function saveCurrentStudy() {
@@ -1555,6 +2154,11 @@ function handleAssetTableAction(event) {
     const assetId = button.dataset.id;
     const action = button.dataset.action;
 
+    if (action === 'preview-asset') {
+        openAssetDetailDrawer(assetId, button.dataset.scope);
+        return;
+    }
+
     if (action === 'load-asset') {
         loadAssetIntoWorkspace(assetId);
         return;
@@ -1578,7 +2182,7 @@ function applyTheme() {
 
     const studyChip = document.getElementById('topbar-study-name');
     if (studyChip) {
-        studyChip.textContent = state.variablesData?.['nom-bien'] || '—';
+        studyChip.textContent = getCurrentAssetName();
     }
 }
 
@@ -1621,6 +2225,53 @@ function syncAssetActionLabels() {
     nodes.savePortfolio.textContent = isSaved
         ? (state.variablesData['statut-bien'] === 'owned' ? 'Mettre a jour le bien detenu' : 'Mettre a jour le portefeuille')
         : (state.variablesData['statut-bien'] === 'owned' ? 'Ajouter comme bien detenu' : 'Ajouter au portefeuille');
+
+    // Barre de statut
+    if (nodes.assetStatusBar) {
+        const savedRecord = state.activeAssetId
+            ? state.assetRecords.find(r => r.id === state.activeAssetId)
+            : null;
+
+        let barState, dotClass, text, badgesHtml;
+
+        if (!savedRecord) {
+            barState = 'new';
+            dotClass = 'new';
+            text = 'Nouvelle étude · pas encore enregistrée';
+            badgesHtml = '';
+        } else {
+            const currentJson = JSON.stringify(sanitizeVariablesData(state.variablesData));
+            const savedJson = JSON.stringify(sanitizeVariablesData(savedRecord.variablesData));
+            const isModified = currentJson !== savedJson;
+
+            if (isModified) {
+                barState = 'modified';
+                dotClass = 'modified';
+                text = 'Modifié · non sauvegardé';
+            } else {
+                const mins = Math.round((Date.now() - (savedRecord.updatedAt || Date.now())) / 60000);
+                barState = 'saved';
+                dotClass = 'saved';
+                text = mins < 1 ? 'À jour · vient d\'être sauvegardé'
+                    : mins < 60 ? `À jour · sauvegardé il y a ${mins} min`
+                    : 'À jour · sauvegardé';
+            }
+
+            const badges = [];
+            if (savedRecord.inComparison) badges.push('<span class="asset-status-badge asset-status-badge--comparison">Comparateur ✓</span>');
+            if (savedRecord.inPortfolio) badges.push('<span class="asset-status-badge asset-status-badge--portfolio">Portefeuille ✓</span>');
+            badgesHtml = badges.join('');
+        }
+
+        nodes.assetStatusBar.className = `asset-status-bar asset-status-bar--${barState}`;
+        nodes.assetStatusBar.innerHTML = `
+            <div class="asset-status-bar__left">
+                <span class="asset-status-bar__dot asset-status-bar__dot--${dotClass}">${dotClass === 'saved' ? '✓' : dotClass === 'modified' ? '●' : '○'}</span>
+                <span class="asset-status-bar__text">${text}</span>
+            </div>
+            <div class="asset-status-bar__badges">${badgesHtml}</div>
+        `;
+    }
 }
 
 function detachCurrentAsset() {
@@ -1643,7 +2294,20 @@ function setProfileConfigured() {
     localStorage.setItem(STORAGE_KEYS.profileConfigured, '1');
 }
 
+function canDismissProfileModal() {
+    return state.profileConfigured;
+}
+
 function openProfileModal() {
+    const activeElement = document.activeElement;
+    const canRestoreToActiveElement = activeElement instanceof HTMLElement
+        && activeElement !== document.body
+        && activeElement !== document.documentElement
+        && !nodes.profileModal?.contains(activeElement);
+
+    profileModalReturnFocusTarget = canRestoreToActiveElement
+        ? activeElement
+        : nodes.profileTrigger;
     state.isProfileModalOpen = true;
     render({ syncProfile: false, syncVariables: false });
     window.requestAnimationFrame(() => {
@@ -1651,13 +2315,40 @@ function openProfileModal() {
     });
 }
 
-function closeProfileModal(markConfigured = true) {
-    state.isProfileModalOpen = false;
-    if (markConfigured) {
-        setProfileConfigured();
-        emitStateUpdate();
+function dismissProfileModal() {
+    const focusTarget = profileModalReturnFocusTarget && document.contains(profileModalReturnFocusTarget)
+        ? profileModalReturnFocusTarget
+        : nodes.profileTrigger;
+
+    if (focusTarget instanceof HTMLElement) {
+        focusTarget.focus();
+    } else if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
     }
-    render({ syncProfile: false, syncVariables: false });
+
+    window.requestAnimationFrame(() => {
+        state.isProfileModalOpen = false;
+        render({ syncProfile: false, syncVariables: false });
+
+        window.requestAnimationFrame(() => {
+            focusTarget?.focus();
+            profileModalReturnFocusTarget = null;
+        });
+    });
+}
+
+function confirmProfileModal() {
+    setProfileConfigured();
+    emitStateUpdate();
+    dismissProfileModal();
+}
+
+function closeProfileModal() {
+    if (!canDismissProfileModal()) {
+        return;
+    }
+
+    dismissProfileModal();
 }
 
 function applyProfilePreset(profileKey) {
@@ -1757,6 +2448,19 @@ function renderFormKpiBar(analysisModel) {
     const dscr = metrics.dscr ?? 0;
     nodes.fkpiDscr.textContent = dscr.toFixed(2).replace('.', ',');
     nodes.fkpiDscr.className = 'form-kpi-bar__value';
+}
+
+function renderFinanceLiveSummary(analysisModel) {
+    if (!nodes.financeLiveCredit || !nodes.financeLiveInsurance || !nodes.financeLiveTotal) return;
+
+    const monthly = analysisModel.monthly || {};
+    const credit = Number(monthly.credit) || 0;
+    const assurance = Number(monthly.assurance) || 0;
+    const total = Number(monthly.mensualiteTotale) || 0;
+
+    nodes.financeLiveCredit.textContent = `${formatPlainCurrency(credit)} / mois`;
+    nodes.financeLiveInsurance.textContent = `${formatPlainCurrency(assurance)} / mois`;
+    nodes.financeLiveTotal.textContent = `${formatPlainCurrency(total)} / mois`;
 }
 
 function renderCFWaterfall(analysisModel) {
@@ -1873,7 +2577,7 @@ function buildAnalysisMetrics(analysisModel) {
             barPct: confidenceModel.score
         },
         {
-            label: 'Zone solide',
+            label: 'Seuil favorable',
             value: formatPlainCurrency(acquisitionDecision.solidOfferPrice),
             rawValue: acquisitionDecision.solidOfferPrice,
             cssClass: acquisitionDecision.currentPrice <= acquisitionDecision.solidOfferPrice + 500 ? 'is-positive' : 'is-neutral',
@@ -1903,14 +2607,27 @@ function buildAnalysisMetrics(analysisModel) {
 
 function buildAnalysisStickySummary(analysisModel) {
     const { acquisitionDecision, confidenceModel, scenarioModel } = analysisModel;
+    const negotiationGap = Math.max(0, acquisitionDecision.negotiationToTenable || 0);
 
     nodes.analysisStickySummary.innerHTML = `
-        <div class="analysis-sticky-card">
+        <div class="analysis-sticky-card analysis-sticky-card--${acquisitionDecision.tone}">
             <div class="analysis-sticky-copy">
-                <span class="status-label">En un coup d œil</span>
+                <div class="analysis-sticky-overline">
+                    <span class="status-label">Tableau de bord décisionnel</span>
+                    <div class="analysis-sticky-pill-row">
+                        <strong class="status-pill status-pill--${confidenceModel.tone}">Fiabilité ${confidenceModel.label}</strong>
+                        <strong class="status-pill status-pill--${scenarioModel.tone}">Stress ${scenarioModel.label}</strong>
+                    </div>
+                </div>
                 <div class="analysis-sticky-head">
-                    <strong class="decision-badge decision-badge--${acquisitionDecision.tone}">${acquisitionDecision.label}</strong>
-                    <p class="analysis-sticky-action">${escapeHtml(acquisitionDecision.action)}</p>
+                    <div class="analysis-sticky-main">
+                        <strong class="decision-badge decision-badge--${acquisitionDecision.tone}">${acquisitionDecision.label}</strong>
+                        <p class="analysis-sticky-note">${escapeHtml(acquisitionDecision.summary)}</p>
+                    </div>
+                    <div class="analysis-sticky-action">
+                        <span>Action</span>
+                        <strong>${escapeHtml(acquisitionDecision.action)}</strong>
+                    </div>
                 </div>
             </div>
             <div class="analysis-sticky-kpis">
@@ -1919,16 +2636,16 @@ function buildAnalysisStickySummary(analysisModel) {
                     <strong>${acquisitionDecision.score}/100</strong>
                 </article>
                 <article class="analysis-sticky-kpi">
-                    <span>Offre plafond</span>
+                    <span>Offre cible</span>
                     <strong>${formatPlainCurrency(acquisitionDecision.maxOfferPrice)}</strong>
                 </article>
                 <article class="analysis-sticky-kpi">
-                    <span>Fiabilité</span>
-                    <strong>${confidenceModel.label}</strong>
+                    <span>Prix affiché</span>
+                    <strong>${formatPlainCurrency(acquisitionDecision.currentPrice)}</strong>
                 </article>
                 <article class="analysis-sticky-kpi">
-                    <span>Stress</span>
-                    <strong>${scenarioModel.label}</strong>
+                    <span>Baisse à viser</span>
+                    <strong>${negotiationGap > 0 ? formatPlainCurrency(negotiationGap) : 'Aucune'}</strong>
                 </article>
             </div>
         </div>
@@ -2237,15 +2954,11 @@ function renderCollections() {
 
     nodes.collectionPanel.hidden = false;
     const collectionsView = buildCollectionsView();
-    buildCollectionMetricCards(collectionsView.dashboard, collectionsView.capacity, collectionsView.concentration);
-    buildPortfolioDecision(collectionsView.decision);
-    buildPortfolioAlerts(collectionsView.alerts);
-    buildPortfolioCapacity(collectionsView.capacity);
-    buildPortfolioConcentration(collectionsView.concentration);
+    buildPortfolioKpiBanner(collectionsView);
+    buildPortfolioHero(collectionsView);
+    buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioPriorities(collectionsView.priorities);
-    buildAcquisitionArbitrage(collectionsView.acquisitions);
-    buildComparisonTable(collectionsView.comparisonItems);
-    buildPortfolioTable(collectionsView.portfolioItems);
+    buildPortfolioAssetGrid(collectionsView);
 }
 
 function renderWorkspaceContent() {
@@ -2266,36 +2979,44 @@ function renderWorkspaceContent() {
     nodes.workspaceBoard.dataset.layout = (!IS_ANALYSIS_WINDOW && state.screens === 2 && useLocalFallback) ? '2' : '1';
 
     if (IS_ANALYSIS_WINDOW) {
-        nodes.workspaceTitle.textContent = 'Vue analyse détachée';
-        nodes.workspaceSubtitle.textContent = 'Fenêtre secondaire synchronisée avec la saisie de la fenêtre principale.';
-        nodes.analysisKicker.textContent = 'Analyse détachée';
-        nodes.analysisSubtitle.textContent = 'Cette vue se met à jour dès qu une hypothèse change dans la fenêtre principale.';
-    } else if (state.screens === 1) {
-        nodes.workspaceTitle.textContent = 'Vue simple écran';
-        nodes.workspaceSubtitle.textContent = 'La saisie et l\'analyse restent sur une seule page, dans un flux continu.';
+        nodes.workspaceTitle.textContent = 'Analyse synchronisée';
+        nodes.workspaceSubtitle.textContent = 'Cette fenêtre affiche les résultats calculés à partir de la saisie principale.';
         nodes.analysisKicker.textContent = 'Analyse';
-        nodes.analysisSubtitle.textContent = 'Décision, robustesse et leviers d\'action s enchaînent juste après la saisie.';
+        nodes.analysisSubtitle.textContent = 'Décision, sensibilité et contrôles sont recalculés en temps réel.';
+    } else if (state.screens === 1) {
+        nodes.workspaceTitle.textContent = 'Étude active';
+        nodes.workspaceSubtitle.textContent = 'Les hypothèses et les résultats sont présentés dans une même vue.';
+        nodes.analysisKicker.textContent = 'Analyse';
+        nodes.analysisSubtitle.textContent = 'Les indicateurs, scénarios et contrôles suivent chaque modification.';
     } else if (useLocalFallback) {
-        nodes.workspaceTitle.textContent = 'Vue double écran';
-        nodes.workspaceSubtitle.textContent = 'La fenêtre secondaire a été bloquée. L\'analyse reste visible ici en mode secours.';
+        nodes.workspaceTitle.textContent = 'Étude active';
+        nodes.workspaceSubtitle.textContent = 'La fenêtre séparée n a pas pu s ouvrir. Les résultats restent affichés localement.';
         nodes.analysisKicker.textContent = 'Analyse locale';
-        nodes.analysisSubtitle.textContent = 'La lecture décisionnelle reste disponible ici en attendant l\'ouverture de la fenêtre dédiée.';
+        nodes.analysisSubtitle.textContent = 'Les résultats sont calculés ici tant que la vue séparée n est pas ouverte.';
     } else {
-        nodes.workspaceTitle.textContent = 'Vue double écran';
-        nodes.workspaceSubtitle.textContent = 'La fenêtre principale conserve la saisie. L\'analyse s ouvre dans une fenêtre secondaire synchronisée.';
-        nodes.analysisKicker.textContent = 'Analyse détachée';
-        nodes.analysisSubtitle.textContent = 'Cette vue met l\'accent sur la décision, la robustesse et les leviers d\'action.';
+        nodes.workspaceTitle.textContent = 'Paramétrage';
+        nodes.workspaceSubtitle.textContent = 'Cette fenêtre regroupe les hypothèses. Les résultats sont affichés dans la vue séparée.';
+        nodes.analysisKicker.textContent = 'Analyse séparée';
+        nodes.analysisSubtitle.textContent = 'Décision, sensibilité et contrôles restent synchronisés dans la seconde fenêtre.';
     }
 
-    nodes.variablesKicker.textContent = state.screens === 1 ? 'Saisie' : 'Écran 1';
-    const studyChip = document.getElementById('topbar-study-name');
-    if (studyChip) studyChip.textContent = state.variablesData['nom-bien'] || '—';
+    nodes.variablesKicker.textContent = state.screens === 1 ? 'Hypothèses' : 'Paramétrage';
+    if (nodes.topbarStudyName) {
+        nodes.topbarStudyName.textContent = getCurrentAssetName();
+    }
+    if (nodes.topbarStudyMeta) {
+        nodes.topbarStudyMeta.textContent = `${state.variablesData.ville || VARIABLE_DEFAULTS.ville} · ${getTypeBienLabel(state.variablesData['type-bien'])} · ${getCurrentAssetStatus()}`;
+    }
     nodes.variablesSubtitle.textContent = state.screens === 1
-        ? 'Toutes les hypothèses restent modifiables en tête de page.'
-        : 'Toutes les hypothèses restent pilotées depuis la fenêtre principale.';
-    nodes.variablesContext.textContent = `Étude active : ${getCurrentAssetName()} · ${getCurrentAssetStatus()} · Foyer : ${state.profileData.name} · ${formatCurrency(state.profileData.income)} · ${composition} · TMI ${tmi} %.`;
+        ? 'Hypothèses, coûts et financement peuvent être ajustés en continu.'
+        : 'Cette vue centralise les hypothèses, coûts et paramètres de financement.';
+    nodes.variablesContext.textContent = `Dossier : ${getCurrentAssetName()} · ${state.variablesData.ville || VARIABLE_DEFAULTS.ville} · ${getCurrentAssetStatus()} · ${getProfileContextSummary()} · TMI ${tmi} %.`;
 
-    if (showVariables) renderFormKpiBar(analysisModel);
+    buildWorkspaceHero(analysisModel, { tmi, composition, useLocalFallback });
+    if (showVariables) {
+        renderFormKpiBar(analysisModel);
+        renderFinanceLiveSummary(analysisModel);
+    }
     buildAnalysisStickySummary(analysisModel);
     renderCFWaterfall(analysisModel);
     buildAnalysisMetrics(analysisModel);
@@ -2322,12 +3043,24 @@ function renderModalState() {
         children: state.profileData.children
     });
 
-    nodes.profileTrigger.textContent = `Foyer : ${state.profileData.name}`;
+    if (nodes.topbarProfileLabel) {
+        nodes.topbarProfileLabel.textContent = state.profileConfigured ? state.profileData.name : 'Profil du foyer';
+    }
+    if (nodes.topbarProfileMeta) {
+        nodes.topbarProfileMeta.textContent = state.profileConfigured
+            ? `${formatCurrency(state.profileData.income)} · ${getProfileComposition(state.profileData)}`
+            : 'Configuration requise pour les calculs';
+    }
+    nodes.profileTrigger.classList.toggle('is-pending', !state.profileConfigured);
     nodes.profileParts.textContent = `${parts.toLocaleString('fr-FR')} part${parts > 1 ? 's' : ''}`;
     nodes.profileTmi.textContent = `${tmi} %`;
     nodes.profileComposition.textContent = getProfileComposition(state.profileData);
-    nodes.profileModalNote.textContent = profile.note;
-    nodes.profileSave.textContent = state.profileConfigured ? 'Fermer' : 'Enregistrer le profil';
+    nodes.profileModal.dataset.onboarding = state.profileConfigured ? 'false' : 'true';
+    nodes.profileClose.hidden = !state.profileConfigured;
+    nodes.profileModalNote.textContent = state.profileConfigured
+        ? `Cadre actif : ${profile.note}`
+        : `Étape requise : ${profile.note}`;
+    nodes.profileSave.textContent = state.profileConfigured ? 'Fermer le panneau' : 'Valider le profil';
 
     nodes.profileModal.classList.toggle('open', state.isProfileModalOpen);
     nodes.profileModal.setAttribute('aria-hidden', String(!state.isProfileModalOpen));
@@ -2463,7 +3196,7 @@ function render(options = {}) {
 
     applyTheme();
     if (!IS_ANALYSIS_WINDOW) renderModeSwitch(state.sparkMode);
-    nodes.screenToggle.textContent = state.screens === 1 ? 'Affichage : 1 écran' : 'Affichage : 2 écrans';
+    nodes.screenToggle.textContent = state.screens === 1 ? '1 écran' : '2 écrans';
 
     if (syncProfile) {
         syncProfileForm();
@@ -2475,6 +3208,17 @@ function render(options = {}) {
 
     renderWorkspaceContent();
     renderModalState();
+    calculateFeasibilityStrategy();
+}
+
+function debounce(callback, delay = 250) {
+    let timerId = null;
+    return (...args) => {
+        window.clearTimeout(timerId);
+        timerId = window.setTimeout(() => {
+            callback(...args);
+        }, delay);
+    };
 }
 
 function updateProfileFromForm() {
@@ -2557,7 +3301,14 @@ function bindEvents() {
     nodes.screenToggle.addEventListener('click', handleScreenToggle);
     nodes.profileTrigger.addEventListener('click', openProfileModal);
     nodes.profileClose.addEventListener('click', () => closeProfileModal());
-    nodes.profileSave.addEventListener('click', () => closeProfileModal());
+    nodes.profileSave.addEventListener('click', () => {
+        if (state.profileConfigured) {
+            closeProfileModal();
+            return;
+        }
+
+        confirmProfileModal();
+    });
 
     nodes.profileModal.addEventListener('click', event => {
         if (event.target === nodes.profileModal) {
@@ -2568,6 +3319,11 @@ function bindEvents() {
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && state.isProfileModalOpen) {
             closeProfileModal();
+            return;
+        }
+
+        if (event.key === 'Escape' && nodes.assetDetailDrawer?.classList.contains('is-open')) {
+            closeAssetDetailDrawer();
         }
     });
 
@@ -2577,7 +3333,8 @@ function bindEvents() {
 
     nodes.profileForm.addEventListener('input', updateProfileFromForm);
     nodes.profileForm.addEventListener('change', updateProfileFromForm);
-    nodes.variablesForm.addEventListener('input', updateVariablesFromForm);
+    const debouncedUpdateVariablesFromForm = debounce(updateVariablesFromForm, 250);
+    nodes.variablesForm.addEventListener('input', debouncedUpdateVariablesFromForm);
     nodes.variablesForm.addEventListener('change', updateVariablesFromForm);
 
     document.getElementById('type-bien')?.addEventListener('change', e => {
@@ -2605,8 +3362,8 @@ function bindEvents() {
     nodes.saveComparison.addEventListener('click', () => createOrUpdateCurrentAsset({ inComparison: true }));
     nodes.savePortfolio.addEventListener('click', () => createOrUpdateCurrentAsset({ inPortfolio: true }));
     nodes.exportDecisionPdf.addEventListener('click', handleDecisionSummaryExport);
-    nodes.comparisonTable.addEventListener('click', handleAssetTableAction);
-    nodes.portfolioTable.addEventListener('click', handleAssetTableAction);
+    if (nodes.portfolioAssetGridOwned) nodes.portfolioAssetGridOwned.addEventListener('click', handlePortfolioCardAction);
+    if (nodes.portfolioAssetGridPipeline) nodes.portfolioAssetGridPipeline.addEventListener('click', handlePortfolioCardAction);
 
     if (nodes.modeToggle && !IS_ANALYSIS_WINDOW) {
         nodes.modeToggle.addEventListener('click', e => {
@@ -2630,14 +3387,45 @@ function bindEvents() {
 
 }
 
+function handlePortfolioCardAction(event) {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+
+    const assetId = button.dataset.id;
+    const action = button.dataset.action;
+
+    if (action === 'open-asset') {
+        loadAssetIntoWorkspace(assetId);
+        return;
+    }
+
+    if (action === 'preview-asset') {
+        openAssetDetailDrawer(assetId, button.dataset.scope || 'portfolio');
+        return;
+    }
+
+    if (action === 'pdf-asset') {
+        loadAssetIntoWorkspace(assetId);
+        // Attendre le prochain render puis déclencher l'export PDF
+        setTimeout(() => handleDecisionSummaryExport(), 300);
+        return;
+    }
+
+    if (action === 'remove-asset') {
+        removeAssetFromScope(assetId, button.dataset.scope || 'portfolio');
+    }
+}
+
 function initWorkspaceTabs() {
     const tabs = document.querySelectorAll('.workspace-tab');
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
     const scannerPanel = document.getElementById('scanner-panel');
+    const feasibilityPanel = document.getElementById('feasibility-panel');
 
     collectionPanel.style.display = 'none';
     if (scannerPanel) scannerPanel.style.display = 'none';
+    if (feasibilityPanel) feasibilityPanel.style.display = 'none';
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -2647,6 +3435,7 @@ function initWorkspaceTabs() {
             workspacePanel.style.display = 'none';
             collectionPanel.style.display = 'none';
             if (scannerPanel) scannerPanel.style.display = 'none';
+            if (feasibilityPanel) feasibilityPanel.style.display = 'none';
 
             if (target === 'collection-panel') {
                 collectionPanel.style.display = '';
@@ -2656,6 +3445,12 @@ function initWorkspaceTabs() {
                     scannerPanel.style.display = '';
                     scannerPanel.style.animation = 'tabFadeIn 200ms ease-out';
                     onScannerTabActivated();
+                }
+            } else if (target === 'feasibility-panel') {
+                if (feasibilityPanel) {
+                    feasibilityPanel.style.display = '';
+                    feasibilityPanel.style.animation = 'tabFadeIn 200ms ease-out';
+                    calculateFeasibilityStrategy();
                 }
             } else {
                 workspacePanel.style.display = '';
@@ -2683,15 +3478,165 @@ function initAccordion() {
     });
 }
 
+function calculateFeasibilityStrategy() {
+    const variablesData = state.variablesData || {};
+    const tmi = state.profileData ? (state.profileData.tmi || 30) : 30;
+
+    const targetCF = parseFloat(document.getElementById('feasibility-target-cf')?.value) || 0;
+    const prixMaxEl = document.getElementById('feasibility-prix-max');
+    const loyerMinEl = document.getElementById('feasibility-loyer-min');
+    if (!prixMaxEl || !loyerMinEl) return;
+
+    const loyerEstime = parseFloat(document.getElementById('feasibility-loyer-estime')?.value) || 0;
+
+    const agence = variablesData.agence || 0;
+    const inputs = { ...variablesData };
+
+    // Recherche dichotomique : prix max pour atteindre targetCF avec loyerEstime
+    let minPrice = 1; let maxPrice = 2000000; let bestPrice = 0;
+    const cfAtMin = computeCFForFeasibility(1, loyerEstime, inputs, tmi);
+    if (cfAtMin < targetCF) {
+        prixMaxEl.textContent = 'Impossible pour ce niveau de loyer';
+        prixMaxEl.className = 'feasibility-result-value feasibility-result-value--impossible';
+    } else {
+        for (let i = 0; i < 50; i++) {
+            const mid = (minPrice + maxPrice) / 2;
+            if (computeCFForFeasibility(mid, loyerEstime, inputs, tmi) >= targetCF) {
+                bestPrice = mid; minPrice = mid;
+            } else { maxPrice = mid; }
+        }
+        const prixFaiMax = bestPrice + agence;
+        prixMaxEl.textContent = Math.round(prixFaiMax).toLocaleString('fr-FR') + ' €';
+        prixMaxEl.className = 'feasibility-result-value feasibility-result-value--positive';
+    }
+
+    // Recherche dichotomique : loyer min pour atteindre targetCF avec prixAnnonce
+    const prixAnnonceFai = parseFloat(document.getElementById('feasibility-prix-annonce')?.value) || 0;
+    const prixNetVendeur = prixAnnonceFai - agence;
+
+    if (computeCFForFeasibility(prixNetVendeur, 10000, inputs, tmi) < targetCF) {
+        loyerMinEl.textContent = 'Impossible avec ce prix';
+        loyerMinEl.className = 'feasibility-result-value feasibility-result-value--impossible';
+    } else {
+        let minRent = 1; let maxRent = 10000; let bestRent = 10000;
+        for (let i = 0; i < 50; i++) {
+            const mid = (minRent + maxRent) / 2;
+            if (computeCFForFeasibility(prixNetVendeur, mid, inputs, tmi) >= targetCF) {
+                bestRent = mid; maxRent = mid;
+            } else { minRent = mid; }
+        }
+        loyerMinEl.textContent = Math.round(bestRent).toLocaleString('fr-FR') + ' €/mois';
+        loyerMinEl.className = 'feasibility-result-value feasibility-result-value--positive';
+    }
+}
+
+function computeCFForFeasibility(prixNet, loyer, inputs, tmi) {
+    const notaire = prixNet * ((inputs.notaire || 7.5) / 100);
+    const fraisFixes = (inputs.agence || 0) + (inputs.travaux || 0) + (inputs.meubles || 0) + (inputs['frais-bancaires'] || 0);
+    const coutTotal = prixNet + notaire + fraisFixes;
+    const montantFinance = Math.max(0, coutTotal - (inputs.apport || 0));
+
+    const nMois = (inputs.duree || 20) * 12;
+    const tauxMensuel = ((inputs['taux-input'] || 3.5) / 100) / 12;
+    let mensualiteCredit = 0;
+    if (tauxMensuel > 0 && nMois > 0) {
+        mensualiteCredit = (montantFinance * tauxMensuel) / (1 - Math.pow(1 + tauxMensuel, -nMois));
+    } else if (nMois > 0) {
+        mensualiteCredit = montantFinance / nMois;
+    }
+    const mensualiteAssurance = (montantFinance * ((inputs.assurance || 0.25) / 100)) / 12;
+    const mensualiteTotale = mensualiteCredit + mensualiteAssurance;
+
+    const vacance = (inputs.vacance || 5) / 100;
+    const loyersEncaisses = loyer * 12 * (1 - vacance);
+    const charges = (inputs.copro || 0) * 12 + (inputs.fonciere || 0) + (inputs.pno || 0) + loyersEncaisses * ((inputs.gestion || 0) / 100);
+
+    const interets1an = montantFinance * tauxMensuel * 12;
+    let impots = 0;
+    const regime = inputs.regime || 'micro-foncier';
+    if (regime === 'micro-foncier') {
+        impots = loyersEncaisses * 0.7 * ((tmi / 100) + 0.172);
+    } else if (regime === 'reel') {
+        const revNets = Math.max(0, loyersEncaisses - charges - mensualiteAssurance * 12 - interets1an - (inputs.travaux || 0) - (inputs['frais-bancaires'] || 0));
+        impots = revNets * ((tmi / 100) + 0.172);
+    } else if (regime === 'sci-is') {
+        const amort = prixNet * 0.80 / 30;
+        const benefice = loyersEncaisses - charges - mensualiteAssurance * 12 - interets1an - amort;
+        if (benefice > 0) impots = Math.min(benefice, 42500) * 0.15 + Math.max(0, benefice - 42500) * 0.25;
+    }
+
+    return (loyersEncaisses / 12) - mensualiteTotale - (charges / 12) - (impots / 12);
+}
+
+// Synchronisation sliders
+function initSliders() {
+    const pairs = [
+        { input: 'taux-input', slider: 'taux-slider' },
+        { input: 'duree', slider: 'duree-slider' },
+    ];
+    pairs.forEach(({ input, slider }) => {
+        const inputEl = document.getElementById(input);
+        const sliderEl = document.getElementById(slider);
+        if (!inputEl || !sliderEl) return;
+
+        // Sync slider → input
+        sliderEl.addEventListener('input', () => {
+            inputEl.value = sliderEl.value;
+            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
+        // Sync input → slider
+        inputEl.addEventListener('input', () => {
+            const val = parseFloat(inputEl.value);
+            if (!isNaN(val)) sliderEl.value = Math.min(Math.max(val, parseFloat(sliderEl.min)), parseFloat(sliderEl.max));
+        });
+
+        // Init slider depuis valeur input
+        const initVal = parseFloat(inputEl.value);
+        if (!isNaN(initVal)) sliderEl.value = Math.min(Math.max(initVal, parseFloat(sliderEl.min)), parseFloat(sliderEl.max));
+    });
+}
+
 populateProfiles();
 setupCrossWindowSync();
 bindEvents();
 render();
+if (!IS_ANALYSIS_WINDOW && !state.profileConfigured) {
+    openProfileModal();
+}
 applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 initScanner({ saveCurrentStudy });
 initAccordion();
 initTutoBar();
+initSliders();
+
+// Event listeners faisabilité
+['feasibility-target-cf', 'feasibility-loyer-estime', 'feasibility-prix-annonce'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', calculateFeasibilityStrategy);
+});
+
+// Modal régimes fiscaux
+const btnRegimeModal = document.getElementById('btn-regime-modal');
+const modalRegimes = document.getElementById('modal-regimes');
+const modalRegimesClose = document.getElementById('modal-regimes-close');
+if (btnRegimeModal && modalRegimes) {
+    btnRegimeModal.addEventListener('click', () => {
+        modalRegimes.setAttribute('aria-hidden', 'false');
+        modalRegimes.classList.add('is-open');
+    });
+    modalRegimesClose?.addEventListener('click', () => {
+        modalRegimes.setAttribute('aria-hidden', 'true');
+        modalRegimes.classList.remove('is-open');
+    });
+    modalRegimes.addEventListener('click', (e) => {
+        if (e.target === modalRegimes) {
+            modalRegimes.setAttribute('aria-hidden', 'true');
+            modalRegimes.classList.remove('is-open');
+        }
+    });
+}
 
 if (!IS_ANALYSIS_WINDOW && state.screens === 2) {
     openAnalysisWindow({ focus: false });
@@ -2700,6 +3645,3 @@ if (!IS_ANALYSIS_WINDOW && state.screens === 2) {
     }
 }
 
-if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
-    openProfileModal();
-}
