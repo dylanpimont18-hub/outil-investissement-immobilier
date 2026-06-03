@@ -593,7 +593,9 @@ function sanitizeProfileData(rawProfile) {
         name: normalizeLegacyCopy(rawProfile.name || 'Profil') || 'Profil',
         income: Math.max(0, Number(rawProfile.income) || 0),
         adults: Math.min(2, Math.max(1, Number(rawProfile.adults) || 1)),
-        children: Math.max(0, Math.round(Number(rawProfile.children) || 0))
+        children: Math.max(0, Math.round(Number(rawProfile.children) || 0)),
+        objectifCF: Math.max(0, Number(rawProfile.objectifCF) || 1000),
+        revaloAnnuelle: Math.max(0, Math.min(20, Number(rawProfile.revaloAnnuelle) || 2))
     };
 }
 
@@ -656,11 +658,20 @@ function sanitizeAssetRecord(rawAsset) {
         return null;
     }
 
+    const raw = rawAsset.creditSchedule;
+    const creditSchedule = (raw && typeof raw === 'object') ? {
+        dateDebut: typeof raw.dateDebut === 'string' ? raw.dateDebut : '',
+        dateFin: typeof raw.dateFin === 'string' ? raw.dateFin : '',
+        mensualite: Math.max(0, Number(raw.mensualite) || 0)
+    } : null;
+
     return {
         id: typeof rawAsset.id === 'string' && rawAsset.id ? rawAsset.id : createAssetId(),
         variablesData: sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...(rawAsset.variablesData || {}) }),
         inComparison: Boolean(rawAsset.inComparison),
         inPortfolio: Boolean(rawAsset.inPortfolio),
+        creditSchedule: creditSchedule,
+        dateRevente: typeof rawAsset.dateRevente === 'string' ? rawAsset.dateRevente : '',
         createdAt: Number(rawAsset.createdAt) || Date.now(),
         updatedAt: Number(rawAsset.updatedAt) || Date.now()
     };
@@ -2021,7 +2032,9 @@ function buildCollectionsView() {
     return computePortfolioViewModel(state.assetRecords, {
         income: state.profileData.income,
         adults: state.profileData.adults,
-        children: state.profileData.children
+        children: state.profileData.children,
+        objectifCF: state.profileData.objectifCF,
+        revaloAnnuelle: state.profileData.revaloAnnuelle
     }, state.activeAssetId, state.variablesData);
 }
 
@@ -2041,6 +2054,8 @@ function createOrUpdateCurrentAsset(flags) {
         variablesData: sanitizeVariablesData(state.variablesData),
         inComparison: Boolean(baseRecord?.inComparison) || Boolean(flags.inComparison),
         inPortfolio: Boolean(baseRecord?.inPortfolio) || Boolean(flags.inPortfolio),
+        creditSchedule: baseRecord?.creditSchedule ?? null,
+        dateRevente: baseRecord?.dateRevente ?? '',
         createdAt: baseRecord?.createdAt || now,
         updatedAt: now
     };
