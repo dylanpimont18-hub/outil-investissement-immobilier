@@ -1246,6 +1246,99 @@ function buildPortfolioPriorities(portfolioItems) {
         .slice(0, 5);
 }
 
+export function capitalRestantDu(mensualite, dateFinStr) {
+    if (!dateFinStr) return null;
+    const parts = dateFinStr.split('-').map(Number);
+    const finYear = parts[0];
+    const finMonth = parts[1];
+    if (!finYear || !finMonth) return null;
+    const now = new Date();
+    const monthsRemaining = Math.max(0,
+        (finYear - now.getFullYear()) * 12 + (finMonth - 1 - now.getMonth())
+    );
+    return Math.round(mensualite * monthsRemaining);
+}
+
+function computeDebtRatios(mensualitesTotales, totalRentMonthly, income) {
+    const revenuMensuel = Math.max(1, income / 12);
+
+    const hcsfDenum = revenuMensuel + 0.7 * totalRentMonthly;
+    const hcsfRatio = hcsfDenum > 0 ? (mensualitesTotales / hcsfDenum) * 100 : 0;
+    const hcsfTone = hcsfRatio <= 28 ? 'positive' : hcsfRatio <= 35 ? 'watch' : 'negative';
+
+    const effortNet = Math.max(0, mensualitesTotales - totalRentMonthly);
+    const diffRatio = (effortNet / revenuMensuel) * 100;
+    const diffTone = diffRatio <= 20 ? 'positive' : diffRatio <= 33 ? 'watch' : 'negative';
+
+    return {
+        hcsf: { ratio: hcsfRatio, seuil: 35, tone: hcsfTone },
+        differentielle: { ratio: diffRatio, seuil: 33, tone: diffTone }
+    };
+}
+
+function computePortfolioFiscal(portfolioItems, tmi) {
+    const tauxGlobal = (tmi / 100) + CSG_CRDS_RATE;
+    const regimes = {
+        'micro-foncier': { label: 'Micro-foncier', count: 0, loyersAnnuels: 0, impots: 0 },
+        'reel': { label: 'Foncier Réel', count: 0, loyersAnnuels: 0, impots: 0 },
+        'sci-is': { label: 'SCI à l\'IS', count: 0, loyersAnnuels: 0, impots: 0 }
+    };
+    let totalImpots = 0;
+
+    portfolioItems.forEach(item => {
+        const snap = item.taxSnapshot;
+        const regime = snap.regime || 'micro-foncier';
+        const r = regimes[regime] || regimes['micro-foncier'];
+        r.count++;
+        r.loyersAnnuels += item.model.loyersEncaisses;
+
+        let itemTax = 0;
+        if (snap.regime === 'micro-foncier') {
+            itemTax = Math.max(0, snap.taxableBase * tauxGlobal);
+        } else if (snap.regime === 'reel') {
+            if (snap.taxableBase > 0) {
+                itemTax = snap.taxableBase * tauxGlobal;
+            } else if (snap.deficitHorsInterets < 0) {
+                itemTax = -(Math.min(10700, Math.abs(snap.deficitHorsInterets)) * (tmi / 100));
+            }
+        } else {
+            itemTax = snap.taxableBase > 0
+                ? Math.min(snap.taxableBase, 42500) * 0.15 + Math.max(0, snap.taxableBase - 42500) * 0.25
+                : 0;
+        }
+        r.impots += itemTax;
+        totalImpots += itemTax;
+    });
+
+    return { totalImpots, tmi, regimes };
+}
+
+function computeProjectionPatrimoniale(portfolioItems, revaloAnnuelle) {
+    const r = Math.max(0, (revaloAnnuelle || 2)) / 100;
+    const currentValue = portfolioItems.reduce((sum, item) => {
+        const prix = Math.max(0, (item.variablesData?.['prix'] || 0) - (item.variablesData?.['nego'] || 0));
+        return sum + prix;
+    }, 0);
+    return {
+        currentValue,
+        at5: Math.round(currentValue * Math.pow(1 + r, 5)),
+        at10: Math.round(currentValue * Math.pow(1 + r, 10)),
+        at15: Math.round(currentValue * Math.pow(1 + r, 15)),
+        revaloAnnuelle: revaloAnnuelle || 2
+    };
+}
+
+function computeProgressionObjectif(dashboard, objectifCF) {
+    const current = dashboard.totalCashflow;
+    const target = Math.max(1, objectifCF || 1000);
+    const pct = Math.min(100, Math.max(0, (current / target) * 100));
+    const delta = target - current;
+    const avgCF = dashboard.assetCount > 0 ? current / dashboard.assetCount : 0;
+    const estimatedAssetsNeeded = delta > 0 && avgCF > 50 ? Math.ceil(delta / avgCF) : null;
+    const tone = pct >= 100 ? 'excellent' : pct >= 75 ? 'positive' : pct >= 40 ? 'watch' : 'neutral';
+    return { current, target, pct, delta, estimatedAssetsNeeded, tone };
+}
+
 function buildPortfolioDashboard(portfolioItems, tmi, income) {
     if (!portfolioItems.length) {
         return {
@@ -1333,7 +1426,10 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
             model,
             taxSnapshot,
             inComparison: Boolean(asset.inComparison),
-            inPortfolio: Boolean(asset.inPortfolio)
+            inPortfolio: Boolean(asset.inPortfolio),
+            creditSchedule: asset.creditSchedule || null,
+            dateRevente: asset.dateRevente || '',
+            variablesData: asset.variablesData,
         };
     });
 
@@ -1358,11 +1454,20 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
     const dashboard = buildPortfolioDashboard(portfolioItems, tmi, income);
     const priorities = buildPortfolioPriorities(portfolioItems);
 
+    const mensualitesTotales = portfolioItems.reduce((sum, item) => {
+        const m = item.creditSchedule ? item.creditSchedule.mensualite : (item.model.mensualiteTotale || 0);
+        return sum + m;
+    }, 0);
+
     return {
         comparisonItems,
         portfolioItems,
         dashboard,
-        priorities
+        priorities,
+        fiscal: computePortfolioFiscal(portfolioItems, tmi),
+        debtRatios: computeDebtRatios(mensualitesTotales, dashboard.totalRentMonthly, income),
+        projection: computeProjectionPatrimoniale(portfolioItems, householdProfile.revaloAnnuelle || 2),
+        objectif: computeProgressionObjectif(dashboard, householdProfile.objectifCF || 1000)
     };
 }
 
