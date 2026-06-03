@@ -304,6 +304,14 @@ const nodes = {
     portfolioKpiBanner: document.getElementById('portfolio-kpi-banner'),
     portfolioAssetGridOwned: document.getElementById('portfolio-asset-grid-owned'),
     portfolioAssetGridPipeline: document.getElementById('portfolio-asset-grid-pipeline'),
+    creditDrawerOverlay: document.getElementById('credit-drawer-overlay'),
+    creditDrawer: document.getElementById('credit-drawer'),
+    creditDrawerAssetId: document.getElementById('credit-drawer-asset-id'),
+    creditDrawerAssetName: document.getElementById('credit-drawer-asset-name'),
+    creditDateDebut: document.getElementById('credit-date-debut'),
+    creditDateFin: document.getElementById('credit-date-fin'),
+    creditMensualite: document.getElementById('credit-mensualite'),
+    creditDateRevente: document.getElementById('credit-date-revente'),
     assetStatusBar: document.getElementById('asset-status-bar'),
     assetDetailOverlay: document.getElementById('asset-detail-overlay'),
     assetDetailDrawer: document.getElementById('asset-detail-drawer'),
@@ -1549,6 +1557,64 @@ function closeAssetDetailDrawer() {
     }, 220);
 }
 
+function openCreditDrawer(assetId) {
+    const asset = getAssetRecordById(assetId);
+    if (!asset || !nodes.creditDrawer) return;
+
+    const cs = asset.creditSchedule;
+    nodes.creditDrawerAssetId.value = assetId;
+    nodes.creditDrawerAssetName.textContent = asset.variablesData['nom-bien'] || 'Bien';
+    nodes.creditDateDebut.value = cs?.dateDebut || '';
+    nodes.creditDateFin.value = cs?.dateFin || '';
+    nodes.creditMensualite.value = cs?.mensualite != null ? String(cs.mensualite) : '';
+    nodes.creditDateRevente.value = asset.dateRevente || '';
+
+    nodes.creditDrawerOverlay.style.display = 'block';
+    nodes.creditDrawer.style.display = 'block';
+    nodes.creditDrawerOverlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
+    void nodes.creditDrawer.offsetWidth;
+    nodes.creditDrawerOverlay.classList.add('is-open');
+    nodes.creditDrawer.classList.add('is-open');
+    nodes.creditDrawerOverlay.onclick = closeCreditDrawer;
+    window.requestAnimationFrame(() => nodes.creditDateDebut?.focus());
+}
+
+function closeCreditDrawer() {
+    nodes.creditDrawerOverlay?.classList.remove('is-open');
+    nodes.creditDrawer?.classList.remove('is-open');
+    nodes.creditDrawerOverlay?.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('drawer-open');
+    setTimeout(() => {
+        if (nodes.creditDrawerOverlay) nodes.creditDrawerOverlay.style.display = 'none';
+        if (nodes.creditDrawer) nodes.creditDrawer.style.display = 'none';
+    }, 220);
+}
+
+function handleCreditDrawerSave(event) {
+    event.preventDefault();
+    const assetId = nodes.creditDrawerAssetId.value;
+    const assetIndex = state.assetRecords.findIndex(a => a.id === assetId);
+    if (assetIndex < 0) { closeCreditDrawer(); return; }
+
+    const mensualite = Math.max(0, Number(nodes.creditMensualite.value) || 0);
+    const dateDebut = nodes.creditDateDebut.value || '';
+    const dateFin = nodes.creditDateFin.value || '';
+    const dateRevente = nodes.creditDateRevente.value || '';
+
+    const creditSchedule = (mensualite > 0 || dateDebut || dateFin)
+        ? { dateDebut, dateFin, mensualite }
+        : null;
+
+    const existing = state.assetRecords[assetIndex];
+    state.assetRecords.splice(assetIndex, 1, { ...existing, creditSchedule, dateRevente, updatedAt: Date.now() });
+    saveAssetRecords();
+    closeCreditDrawer();
+    emitStateUpdate();
+    render({ syncVariables: false, syncProfile: false });
+    showToast('Échéancier crédit enregistré.');
+}
+
 function buildEmptyTableMarkup(message) {
     return `<p class="collection-empty">${message}</p>`;
 }
@@ -1843,6 +1909,7 @@ function buildPortfolioAssetCard(item, isPipeline) {
                     <button type="button" class="asset-card__action${isPipeline ? ' asset-card__action--primary' : ''}" data-action="open-asset" data-id="${escapeHtml(item.id)}">↩ Ouvrir</button>
                     <button type="button" class="asset-card__action" data-action="preview-asset" data-scope="${isPipeline ? 'comparison' : 'portfolio'}" data-id="${escapeHtml(item.id)}">Fiche</button>
                     <button type="button" class="asset-card__action" data-action="pdf-asset" data-id="${escapeHtml(item.id)}">PDF</button>
+                    ${!isPipeline ? `<button type="button" class="asset-card__action${item.creditSchedule ? ' asset-card__action--has-credit' : ''}" data-action="edit-credit" data-id="${escapeHtml(item.id)}">Crédit${item.creditSchedule ? ' ✓' : ''}</button>` : ''}
                 </div>
             </div>
         </div>
@@ -3379,6 +3446,9 @@ function bindEvents() {
     nodes.exportDecisionPdf.addEventListener('click', handleDecisionSummaryExport);
     if (nodes.portfolioAssetGridOwned) nodes.portfolioAssetGridOwned.addEventListener('click', handlePortfolioCardAction);
     if (nodes.portfolioAssetGridPipeline) nodes.portfolioAssetGridPipeline.addEventListener('click', handlePortfolioCardAction);
+    document.getElementById('credit-drawer-close')?.addEventListener('click', closeCreditDrawer);
+    document.getElementById('credit-drawer-cancel')?.addEventListener('click', closeCreditDrawer);
+    document.getElementById('credit-drawer-form')?.addEventListener('submit', handleCreditDrawerSave);
 
     if (nodes.modeToggle && !IS_ANALYSIS_WINDOW) {
         nodes.modeToggle.addEventListener('click', e => {
@@ -3423,6 +3493,11 @@ function handlePortfolioCardAction(event) {
         loadAssetIntoWorkspace(assetId);
         // Attendre le prochain render puis déclencher l'export PDF
         setTimeout(() => handleDecisionSummaryExport(), 300);
+        return;
+    }
+
+    if (action === 'edit-credit') {
+        openCreditDrawer(assetId);
         return;
     }
 
