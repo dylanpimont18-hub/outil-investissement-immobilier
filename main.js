@@ -3194,7 +3194,7 @@ function buildPortfolioProjection(projection) {
                 <strong class="status-pill status-pill--neutral">${projection.revaloAnnuelle} % / an</strong>
             </div>
             <div class="projection-svg-shell">
-                <svg viewBox="0 0 400 120" preserveAspectRatio="none">
+                <svg viewBox="0 0 400 128" preserveAspectRatio="none">
                     <path d="${grossAreaPath}" fill="#C5A059" fill-opacity="0.1"/>
                     <path d="${grossPath}" fill="none" stroke="#C5A059" stroke-width="2" stroke-dasharray="6 3"/>
                     <path d="${netAreaPath}" fill="#4ade80" fill-opacity="0.15"/>
@@ -3448,6 +3448,7 @@ function buildPortfolioSimulator(collectionsView) {
     const pipelineItems = collectionsView.comparisonItems.filter(item => !item.inPortfolio);
 
     if (!pipelineItems.length) {
+        _simulatedIds.clear();
         nodes.portfolioSimulator.innerHTML = `
             <div class="analysis-block">
                 <h4>Simulateur de croissance</h4>
@@ -3475,6 +3476,12 @@ function buildPortfolioSimulator(collectionsView) {
     }
 
     function renderSimulatorContent() {
+        // Prune stale IDs
+        const validIds = new Set(pipelineItems.map(item => item.id));
+        for (const id of _simulatedIds) {
+            if (!validIds.has(id)) _simulatedIds.delete(id);
+        }
+
         const simView = computeSimulated();
         const current = collectionsView;
 
