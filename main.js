@@ -300,6 +300,7 @@ const nodes = {
     analysisActionPlan: document.getElementById('analysis-action-plan'),
     analysisDetails: document.getElementById('analysis-details'),
     portfolioHero: document.getElementById('portfolio-hero'),
+    portfolioSimulator: document.getElementById('portfolio-simulator'),
     portfolioSummary: document.getElementById('portfolio-summary'),
     portfolioPriorities: document.getElementById('portfolio-priorities'),
     portfolioKpiBanner: document.getElementById('portfolio-kpi-banner'),
@@ -3157,27 +3158,66 @@ function buildPortfolioObjectif(objectif) {
 
 function buildPortfolioProjection(projection) {
     if (!nodes.portfolioProjection) return;
+    const seriesGross = projection.seriesGross;
+    const seriesNet = projection.seriesNet;
+    if (!seriesGross || !seriesGross.length) {
+        nodes.portfolioProjection.innerHTML = `
+            <div class="projection-shell">
+                <div class="decision-head">
+                    <span class="status-label">Revalorisation estimée</span>
+                    <strong class="status-pill status-pill--neutral">${projection.revaloAnnuelle} % / an</strong>
+                </div>
+                <p class="decision-hint">Valeur actuelle du parc : <strong>${formatPlainCurrency(projection.currentValue)}</strong></p>
+                <div class="timeline-summary">
+                    <div class="timeline-pill"><span>Dans 5 ans</span><strong>${formatPlainCurrency(projection.at5)}</strong></div>
+                    <div class="timeline-pill"><span>Dans 10 ans</span><strong>${formatPlainCurrency(projection.at10)}</strong></div>
+                    <div class="timeline-pill"><span>Dans 15 ans</span><strong>${formatPlainCurrency(projection.at15)}</strong></div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    const maxVal = Math.max(...seriesGross, ...seriesNet.map(v => Math.max(0, v)), 1);
+    const xScale = t => (t / 15) * 380 + 10;
+    const yScale = v => 110 - (Math.max(0, v) / maxVal) * 100;
+    const buildPath = series => series.map((v, t) => `${t === 0 ? 'M' : 'L'} ${xScale(t).toFixed(1)},${yScale(v).toFixed(1)}`).join(' ');
+    const grossPath = buildPath(seriesGross);
+    const netPath = buildPath(seriesNet);
+    const grossAreaPath = `${grossPath} L ${xScale(15).toFixed(1)},115 L ${xScale(0).toFixed(1)},115 Z`;
+    const netAreaPath = `${netPath} L ${xScale(15).toFixed(1)},115 L ${xScale(0).toFixed(1)},115 Z`;
+    const markerTs = [0, 5, 10, 15];
+    const markers = markerTs.map(t => `<circle cx="${xScale(t).toFixed(1)}" cy="${yScale(seriesGross[t]).toFixed(1)}" r="3" fill="#C5A059"/>`).join('');
     nodes.portfolioProjection.innerHTML = `
         <div class="projection-shell">
             <div class="decision-head">
                 <span class="status-label">Revalorisation estimée</span>
                 <strong class="status-pill status-pill--neutral">${projection.revaloAnnuelle} % / an</strong>
             </div>
-            <p class="decision-hint">Valeur actuelle du parc : <strong>${formatPlainCurrency(projection.currentValue)}</strong></p>
-            <div class="timeline-summary">
-                <div class="timeline-pill">
-                    <span>Dans 5 ans</span>
-                    <strong>${formatPlainCurrency(projection.at5)}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Dans 10 ans</span>
-                    <strong>${formatPlainCurrency(projection.at10)}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Dans 15 ans</span>
-                    <strong>${formatPlainCurrency(projection.at15)}</strong>
-                </div>
+            <div class="projection-svg-shell">
+                <svg viewBox="0 0 400 120" preserveAspectRatio="none">
+                    <path d="${grossAreaPath}" fill="#C5A059" fill-opacity="0.1"/>
+                    <path d="${grossPath}" fill="none" stroke="#C5A059" stroke-width="2" stroke-dasharray="6 3"/>
+                    <path d="${netAreaPath}" fill="#4ade80" fill-opacity="0.15"/>
+                    <path d="${netPath}" fill="none" stroke="#4ade80" stroke-width="2"/>
+                    ${markers}
+                    <line x1="${xScale(0).toFixed(1)}" y1="10" x2="${xScale(0).toFixed(1)}" y2="115" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 2"/>
+                    <text x="${xScale(0).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">Auj.</text>
+                    <text x="${xScale(5).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">+5 ans</text>
+                    <text x="${xScale(10).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">+10 ans</text>
+                    <text x="${xScale(15).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">+15 ans</text>
+                </svg>
             </div>
+            <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;color:var(--muted)">
+                <span><span style="display:inline-block;width:16px;border-top:2px dashed #C5A059;vertical-align:middle;margin-right:4px"></span>Valeur brute</span>
+                <span><span style="display:inline-block;width:16px;border-top:2px solid #4ade80;vertical-align:middle;margin-right:4px"></span>Valeur nette (−dette)</span>
+            </div>
+            <div class="timeline-summary">
+                <div class="timeline-pill"><span>Aujourd'hui</span><strong>${formatPlainCurrency(projection.currentValue)}</strong></div>
+                <div class="timeline-pill"><span>Dans 5 ans</span><strong>${formatPlainCurrency(projection.at5)}</strong></div>
+                <div class="timeline-pill"><span>Dans 10 ans</span><strong>${formatPlainCurrency(projection.at10)}</strong></div>
+                <div class="timeline-pill"><span>Dans 15 ans</span><strong>${formatPlainCurrency(projection.at15)}</strong></div>
+            </div>
+            ${seriesNet[15] > 0 ? `<p class="decision-hint">Equity dans 15 ans : <strong style="color:#4ade80">${formatPlainCurrency(seriesNet[15])}</strong></p>` : ''}
         </div>
     `;
 }
@@ -3400,6 +3440,160 @@ function buildPortfolioTimeline(portfolioItems) {
     `;
 }
 
+let _simulatedIds = new Set();
+
+function buildPortfolioSimulator(collectionsView) {
+    if (!nodes.portfolioSimulator) return;
+
+    const pipelineItems = collectionsView.comparisonItems.filter(item => !item.inPortfolio);
+
+    if (!pipelineItems.length) {
+        nodes.portfolioSimulator.innerHTML = `
+            <div class="analysis-block">
+                <h4>Simulateur de croissance</h4>
+                <div class="simulator-empty">Ajoutez des dossiers dans le comparateur pour simuler leur impact sur le portefeuille.</div>
+            </div>
+        `;
+        return;
+    }
+
+    function computeSimulated() {
+        if (_simulatedIds.size === 0) return null;
+        const simulatedRecords = state.assetRecords.map(record => {
+            if (_simulatedIds.has(record.id)) {
+                return { ...record, inPortfolio: true };
+            }
+            return record;
+        });
+        return computePortfolioViewModel(simulatedRecords, {
+            income: state.profileData.income,
+            adults: state.profileData.adults,
+            children: state.profileData.children,
+            objectifCF: state.profileData.objectifCF,
+            revaloAnnuelle: state.profileData.revaloAnnuelle
+        }, state.activeAssetId, state.variablesData);
+    }
+
+    function renderSimulatorContent() {
+        const simView = computeSimulated();
+        const current = collectionsView;
+
+        const currentHcsf = current.debtRatios?.hcsf;
+        const currentDiff = current.debtRatios?.differentielle;
+        const currentHcsfPill = currentHcsf
+            ? `<span class="hcsf-pill hcsf-pill--${currentHcsf.ratio <= 35 ? 'ok' : 'over'}">${currentHcsf.ratio.toFixed(1).replace('.', ',')} %</span>`
+            : '—';
+
+        let simulatedCol = `<div class="simulator-state"><span class="simulator-state-label">Avec sélection</span><p style="color:var(--muted);font-size:12px">Cochez un bien pour simuler.</p></div>`;
+        if (simView) {
+            const simHcsf = simView.debtRatios?.hcsf;
+            const simDiff = simView.debtRatios?.differentielle;
+            const cfDelta = simView.dashboard.totalCashflow - current.dashboard.totalCashflow;
+            const simHcsfPill = simHcsf
+                ? `<span class="hcsf-pill hcsf-pill--${simHcsf.ratio <= 35 ? 'ok' : 'over'}">${simHcsf.ratio.toFixed(1).replace('.', ',')} % ${simHcsf.ratio > 35 ? '⚠' : '✓'}</span>`
+                : '—';
+            simulatedCol = `
+                <div class="simulator-state simulator-state--simulated">
+                    <span class="simulator-state-label">Avec sélection</span>
+                    <div class="simulator-kpi">
+                        <span class="simulator-kpi-label">CF / mois</span>
+                        <span class="simulator-kpi-value" style="color:${simView.dashboard.totalCashflow >= 0 ? '#4ade80' : '#f87171'}">${formatSignedCurrency(simView.dashboard.totalCashflow)}</span>
+                    </div>
+                    <div class="simulator-kpi">
+                        <span class="simulator-kpi-label">Delta CF</span>
+                        <span class="simulator-kpi-value" style="color:${cfDelta >= 0 ? '#4ade80' : '#f87171'}">${cfDelta >= 0 ? '+' : ''}${Math.round(cfDelta).toLocaleString('fr-FR')} €</span>
+                    </div>
+                    <div class="simulator-kpi">
+                        <span class="simulator-kpi-label">DSCR</span>
+                        <span class="simulator-kpi-value">${simView.dashboard.dscr.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                    <div class="simulator-kpi">
+                        <span class="simulator-kpi-label">HCSF</span>
+                        <span class="simulator-kpi-value">${simHcsfPill}</span>
+                    </div>
+                    <div class="simulator-kpi">
+                        <span class="simulator-kpi-label">Taux diff.</span>
+                        <span class="simulator-kpi-value">${simDiff ? simDiff.ratio.toFixed(1).replace('.', ',') + ' %' : '—'}</span>
+                    </div>
+                    <div class="simulator-kpi">
+                        <span class="simulator-kpi-label">Capacité</span>
+                        <span class="simulator-kpi-value">${Math.round((simView.capacity?.acquisitionBudget || 0) / 1000)} k€</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        nodes.portfolioSimulator.innerHTML = `
+            <section class="analysis-block">
+                <h4>Simulateur de croissance</h4>
+                <div class="simulator-shell">
+                    <div class="simulator-cols">
+                        <div>
+                            <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Sélectionner les biens à intégrer :</p>
+                            <div class="simulator-check-list">
+                                ${pipelineItems.map(item => {
+                                    const cf = item.metrics?.cfNetNet || 0;
+                                    const checked = _simulatedIds.has(item.id) ? 'checked' : '';
+                                    return `
+                                        <label class="simulator-check-item">
+                                            <input type="checkbox" data-sim-id="${escapeHtml(item.id)}" ${checked}>
+                                            <span class="simulator-check-name">${escapeHtml(item.name)}</span>
+                                            <span class="simulator-check-cf" style="color:${cf >= 0 ? '#4ade80' : '#f87171'}">${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €</span>
+                                        </label>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                        <div class="simulator-compare">
+                            <div class="simulator-compare-cols">
+                                <div class="simulator-state">
+                                    <span class="simulator-state-label">État actuel</span>
+                                    <div class="simulator-kpi">
+                                        <span class="simulator-kpi-label">CF / mois</span>
+                                        <span class="simulator-kpi-value" style="color:${current.dashboard.totalCashflow >= 0 ? '#4ade80' : '#f87171'}">${formatSignedCurrency(current.dashboard.totalCashflow)}</span>
+                                    </div>
+                                    <div class="simulator-kpi">
+                                        <span class="simulator-kpi-label">Delta CF</span>
+                                        <span class="simulator-kpi-value" style="color:var(--muted)">—</span>
+                                    </div>
+                                    <div class="simulator-kpi">
+                                        <span class="simulator-kpi-label">DSCR</span>
+                                        <span class="simulator-kpi-value">${current.dashboard.dscr.toFixed(2).replace('.', ',')}</span>
+                                    </div>
+                                    <div class="simulator-kpi">
+                                        <span class="simulator-kpi-label">HCSF</span>
+                                        <span class="simulator-kpi-value">${currentHcsfPill}</span>
+                                    </div>
+                                    <div class="simulator-kpi">
+                                        <span class="simulator-kpi-label">Taux diff.</span>
+                                        <span class="simulator-kpi-value">${currentDiff ? currentDiff.ratio.toFixed(1).replace('.', ',') + ' %' : '—'}</span>
+                                    </div>
+                                    <div class="simulator-kpi">
+                                        <span class="simulator-kpi-label">Capacité</span>
+                                        <span class="simulator-kpi-value">${Math.round((current.capacity?.acquisitionBudget || 0) / 1000)} k€</span>
+                                    </div>
+                                </div>
+                                ${simulatedCol}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+
+        nodes.portfolioSimulator.querySelectorAll('input[data-sim-id]').forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                const id = checkbox.dataset.simId;
+                if (checkbox.checked) _simulatedIds.add(id);
+                else _simulatedIds.delete(id);
+                renderSimulatorContent();
+            });
+        });
+    }
+
+    renderSimulatorContent();
+}
+
 function renderCollections() {
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
@@ -3408,6 +3602,7 @@ function renderCollections() {
 
     nodes.collectionPanel.hidden = false;
     const collectionsView = buildCollectionsView();
+    buildPortfolioSimulator(collectionsView);
     buildPortfolioKpiBanner(collectionsView);
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
