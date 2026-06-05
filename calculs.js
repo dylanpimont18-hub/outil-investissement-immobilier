@@ -1286,7 +1286,8 @@ export function capitalRestantDu(mensualite, dateFinStr, refDate = null) {
     return Math.round(mensualite * monthsRemaining);
 }
 
-function computeDebtRatios(mensualitesTotales, totalRentMonthly, income) {
+function computeDebtRatios(mensualitesImmo, autresMensualites, totalRentMonthly, income) {
+    const mensualitesTotales = mensualitesImmo + autresMensualites;
     const revenuMensuel = Math.max(1, income / 12);
 
     const hcsfDenum = revenuMensuel + 0.7 * totalRentMonthly;
@@ -1298,6 +1299,9 @@ function computeDebtRatios(mensualitesTotales, totalRentMonthly, income) {
     const diffTone = diffRatio <= 20 ? 'positive' : diffRatio <= 33 ? 'watch' : 'negative';
 
     return {
+        mensualitesImmo,
+        autresMensualites,
+        mensualitesTotales,
         hcsf: { ratio: hcsfRatio, seuil: 35, tone: hcsfTone },
         differentielle: { ratio: diffRatio, seuil: 33, tone: diffTone }
     };
@@ -1531,9 +1535,11 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
         rentaNetNet: portfolioRentaNetNet
     });
 
+    const autresMensualites = (householdProfile.autresCredits || []).reduce((sum, c) => sum + (c.mensualite || 0), 0);
+
     // Remaining acquisition capacity (35% debt ratio rule, amortization factor from reference loan params)
     const maxMonthlyDebt = income > 0 ? (income / 12) * 0.35 : 0;
-    const remainingMonthlyCapacity = Math.max(0, maxMonthlyDebt - dashboard.totalDebtMonthly);
+    const remainingMonthlyCapacity = Math.max(0, maxMonthlyDebt - dashboard.totalDebtMonthly - autresMensualites);
     const refTaux = referenceInputs['taux'] || 3.5;
     const refDuree = referenceInputs['duree'] || 20;
     const factor = amortizationFactor(refTaux, refDuree);
@@ -1547,7 +1553,7 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
         capacity,
         priorities,
         fiscal: computePortfolioFiscal(portfolioItems, tmi),
-        debtRatios: computeDebtRatios(mensualitesTotales, dashboard.totalRentMonthly, income),
+        debtRatios: computeDebtRatios(mensualitesTotales, autresMensualites, dashboard.totalRentMonthly, income),
         projection: computeProjectionPatrimoniale(portfolioItems, householdProfile.revaloAnnuelle || 2),
         objectif: computeProgressionObjectif(dashboard, householdProfile.objectifCF || 1000)
     };
