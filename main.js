@@ -76,6 +76,7 @@ const VARIABLE_DEFAULTS = {
     'type-bien': 'appartement',
     'statut-bien': 'candidate',
     ville: 'Ville à préciser',
+    adresse: '',
     prix: 107000,
     nego: 0,
     loyer: 700,
@@ -634,6 +635,7 @@ function sanitizeVariablesData(rawVariables) {
         'type-bien': TYPE_BIEN_VALUES.has(rawVariables['type-bien']) ? rawVariables['type-bien'] : 'appartement',
         'statut-bien': OWNERSHIP_VALUES.has(rawVariables['statut-bien']) ? rawVariables['statut-bien'] : 'candidate',
         ville: normalizeLegacyCopy(rawVariables.ville || VARIABLE_DEFAULTS.ville) || VARIABLE_DEFAULTS.ville,
+        adresse: String(rawVariables.adresse || '').trim(),
         prix: Math.max(0, Number(rawVariables.prix) || 0),
         nego: Math.max(0, Number(rawVariables.nego) || 0),
         loyer: Math.max(0, Number(rawVariables.loyer) || 0),
@@ -947,6 +949,14 @@ function syncDecisionJournalValidity(options = {}) {
     return { thesisMessage, nextStepMessage };
 }
 
+function openAccordionForField(field) {
+    const section = field.closest('.accord-section');
+    if (!section || section.dataset.open === 'true') return;
+    section.dataset.open = 'true';
+    const btn = section.querySelector('.accord-head');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+}
+
 function validateDecisionJournalBeforeSave() {
     const { thesisField, nextStepField } = getDecisionJournalFields();
     if (thesisField) {
@@ -959,12 +969,14 @@ function validateDecisionJournalBeforeSave() {
     const { thesisMessage, nextStepMessage } = syncDecisionJournalValidity({ force: true });
 
     if (thesisMessage && thesisField) {
+        openAccordionForField(thesisField);
         thesisField.reportValidity();
         thesisField.focus();
         return false;
     }
 
     if (nextStepMessage && nextStepField) {
+        openAccordionForField(nextStepField);
         nextStepField.reportValidity();
         nextStepField.focus();
         return false;
@@ -2088,7 +2100,7 @@ function buildPortfolioTable(items) {
                         <tr class="${item.isActive ? 'table-row-active' : ''}">
                             <td>
                                 <strong>${escapeHtml(item.name)}</strong>
-                                <div class="table-subline">${escapeHtml(item.city || 'Ville à préciser')} · ${item.analysisModel.decision.label}</div>
+                                <div class="table-subline">${escapeHtml(item.city || 'Ville à préciser')} · ${item.analysisModel.decision?.label || '—'}</div>
                                 ${item.typeBien ? `<span class="type-badge type-badge--${item.typeBien}">${getTypeBienLabel(item.typeBien)}</span>` : ''}
                             </td>
                             <td><span class="status-pill status-pill--neutral">${item.statusLabel}</span></td>
@@ -2115,8 +2127,11 @@ function buildCollectionsView() {
 }
 
 function createOrUpdateCurrentAsset(flags) {
-    if (!validateDecisionJournalBeforeSave()) {
-        showToast('Remplissez la thèse et la prochaine étape avant d\'enregistrer.', 'negative');
+    const nomBien = String(state.variablesData['nom-bien'] || '').trim();
+    if (!nomBien) {
+        const nomField = nodes.variablesForm?.elements?.namedItem('nom-bien');
+        if (nomField) { nomField.focus(); }
+        showToast('Le nom du bien est requis pour enregistrer.', 'negative');
         return;
     }
 
@@ -2146,7 +2161,11 @@ function createOrUpdateCurrentAsset(flags) {
     saveAssetRecords();
     saveActiveAssetId();
     emitStateUpdate();
-    render({ syncVariables: false, syncProfile: false });
+    try {
+        render({ syncVariables: false, syncProfile: false });
+    } catch (err) {
+        console.error('[Spark] render() after save failed:', err);
+    }
 
     if (flags.inPortfolio) {
         showToast(isNew ? 'Dossier ajouté au portefeuille.' : 'Portefeuille mis à jour.');
@@ -3163,14 +3182,18 @@ function buildPortfolioProjection(projection) {
     `;
 }
 
+let _portfolioMap = null;
+
 function buildPortfolioRepartition(portfolioItems) {
     if (!nodes.portfolioRepartition) return;
     if (!portfolioItems.length) {
         nodes.portfolioRepartition.innerHTML = '<p class="collection-empty">Aucun bien détenu pour afficher la répartition.</p>';
         return;
     }
+    const hasAddresses = portfolioItems.some(item => String(item.variablesData?.adresse || '').trim());
     const maxLoyer = Math.max(...portfolioItems.map(item => (item.model.loyersEncaisses || 0) / 12), 1);
     nodes.portfolioRepartition.innerHTML = `
+        ${hasAddresses ? '<div id="portfolio-map-canvas" class="portfolio-map-canvas"></div>' : ''}
         <div class="repartition-list">
             ${portfolioItems.map(item => {
                 const loyer = (item.model.loyersEncaisses || 0) / 12;
@@ -3203,6 +3226,80 @@ function buildPortfolioRepartition(portfolioItems) {
             <span class="repartition-legend-item repartition-legend-item--cf">CF net-net</span>
         </div>
     `;
+    if (hasAddresses) {
+        buildPortfolioMap(portfolioItems);
+    }
+}
+
+async function buildPortfolioMap(portfolioItems) {
+    const canvas = document.getElementById('portfolio-map-canvas');
+    if (!canvas || typeof L === 'undefined') return;
+
+    if (_portfolioMap) {
+        _portfolioMap.remove();
+        _portfolioMap = null;
+    }
+
+    const withAddress = portfolioItems.filter(item => String(item.variablesData?.adresse || '').trim());
+    if (!withAddress.length) return;
+
+    _portfolioMap = L.map(canvas, { center: [46.8, 1.7], zoom: 6 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18,
+    }).addTo(_portfolioMap);
+
+    const payload = withAddress.map(item => ({
+        id: item.id,
+        query: [
+            String(item.variablesData.adresse || '').trim(),
+            String(item.variablesData.ville || '').trim(),
+            'France',
+        ].filter(Boolean).join(', '),
+    }));
+
+    let geoData = {};
+    try {
+        const resp = await fetch('/api/geocode/portfolio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        geoData = await resp.json();
+    } catch (e) {
+        console.warn('Géocodage portefeuille échoué', e);
+    }
+
+    const bounds = [];
+    for (const item of withAddress) {
+        const coord = geoData[item.id];
+        if (!coord || !coord.lat) continue;
+        const cf = item.metrics?.cfNetNet || 0;
+        const loyer = (item.model?.loyersEncaisses || 0) / 12;
+        const adresse = escapeHtml(String(item.variablesData?.adresse || '').trim());
+        const ville = escapeHtml(String(item.variablesData?.ville || '').trim());
+        const marker = L.circleMarker([coord.lat, coord.lng], {
+            radius: 10,
+            fillColor: '#C5A059',
+            fillOpacity: 0.92,
+            color: '#fff',
+            weight: 2,
+        });
+        marker.bindPopup(`
+            <strong>${escapeHtml(item.name)}</strong><br>
+            <span style="font-size:11px;color:#888">${adresse}${adresse && ville ? ', ' : ''}${ville}</span><br>
+            <span>CF : <strong>${cf >= 0 ? '+' : ''}${Math.round(cf)} €/mois</strong></span><br>
+            <span>Loyer : ${Math.round(loyer)} €/mois</span>
+        `);
+        marker.addTo(_portfolioMap);
+        bounds.push([coord.lat, coord.lng]);
+    }
+
+    if (bounds.length === 1) {
+        _portfolioMap.setView(bounds[0], 14);
+    } else if (bounds.length > 1) {
+        _portfolioMap.fitBounds(bounds, { padding: [30, 30] });
+    }
 }
 
 function buildPortfolioCredits(portfolioItems) {
@@ -3795,6 +3892,7 @@ function initWorkspaceTabs() {
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
     const scannerPanel = document.getElementById('scanner-panel');
+    console.log('[Spark] initWorkspaceTabs — tabs:', tabs.length, 'workspacePanel:', !!workspacePanel, 'collectionPanel:', !!collectionPanel);
     const feasibilityPanel = document.getElementById('feasibility-panel');
 
     collectionPanel.style.display = 'none';
@@ -3803,6 +3901,7 @@ function initWorkspaceTabs() {
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            console.log('[Spark] Tab clicked:', tab.dataset.target);
             tabs.forEach(t => t.classList.remove('is-active'));
             tab.classList.add('is-active');
             const target = tab.dataset.target;
@@ -3814,6 +3913,7 @@ function initWorkspaceTabs() {
             if (target === 'collection-panel') {
                 collectionPanel.style.display = '';
                 collectionPanel.style.animation = 'tabFadeIn 200ms ease-out';
+                if (_portfolioMap) { window.requestAnimationFrame(() => _portfolioMap.invalidateSize()); }
             } else if (target === 'scanner-panel') {
                 if (scannerPanel) {
                     scannerPanel.style.display = '';
@@ -3971,16 +4071,23 @@ function initSliders() {
     });
 }
 
+console.log('[Spark] Init start');
 populateProfiles();
 setupCrossWindowSync();
 bindEvents();
-render();
-if (!IS_ANALYSIS_WINDOW && !state.profileConfigured) {
-    openProfileModal();
+try {
+    render();
+    console.log('[Spark] render() OK');
+} catch (err) {
+    console.error('[Spark] Erreur au render initial :', err);
+    showToast('Erreur au démarrage — consultez la console.', 'negative');
 }
 applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 initScanner({ saveCurrentStudy });
+if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
+    setTimeout(() => openProfileModal(), 400);
+}
 initAccordion();
 initTutoBar();
 initSliders();
