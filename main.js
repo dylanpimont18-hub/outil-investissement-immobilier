@@ -336,6 +336,15 @@ const nodes = {
     portfolioProjection: document.getElementById('portfolio-projection'),
     portfolioRepartition: document.getElementById('portfolio-repartition'),
     portfolioCredits: document.getElementById('portfolio-credits'),
+    autreCreditDrawerOverlay: document.getElementById('autre-credit-drawer-overlay'),
+    autreCreditDrawer: document.getElementById('autre-credit-drawer'),
+    autreCreditDrawerId: document.getElementById('autre-credit-drawer-id'),
+    autreCreditLibelle: document.getElementById('autre-credit-libelle'),
+    autreCreditMensualite: document.getElementById('autre-credit-mensualite'),
+    autreCreditMensualiteHa: document.getElementById('autre-credit-mensualite-ha'),
+    autreCreditDateDebut: document.getElementById('autre-credit-date-debut'),
+    autreCreditDateFin: document.getElementById('autre-credit-date-fin'),
+    autreCreditCrd: document.getElementById('autre-credit-crd'),
     portfolioTimeline: document.getElementById('portfolio-timeline'),
     profileParts: document.getElementById('profile-parts'),
     profileTmi: document.getElementById('profile-tmi'),
@@ -614,7 +623,8 @@ function sanitizeProfileData(rawProfile) {
         adults: Math.min(2, Math.max(1, Number(rawProfile.adults) || 1)),
         children: Math.max(0, Math.round(Number(rawProfile.children) || 0)),
         objectifCF: Math.max(0, Number(rawProfile.objectifCF) || 1000),
-        revaloAnnuelle: Math.max(0, Math.min(20, Number(rawProfile.revaloAnnuelle) || 2))
+        revaloAnnuelle: Math.max(0, Math.min(20, Number(rawProfile.revaloAnnuelle) || 2)),
+        autresCredits: Array.isArray(rawProfile.autresCredits) ? rawProfile.autresCredits : []
     };
 }
 
@@ -2123,7 +2133,8 @@ function buildCollectionsView() {
         adults: state.profileData.adults,
         children: state.profileData.children,
         objectifCF: state.profileData.objectifCF,
-        revaloAnnuelle: state.profileData.revaloAnnuelle
+        revaloAnnuelle: state.profileData.revaloAnnuelle,
+        autresCredits: state.profileData.autresCredits
     }, state.activeAssetId, state.variablesData);
 }
 
@@ -3891,7 +3902,8 @@ function updateProfileFromForm() {
         adults: nodes.profileAdults.value,
         children: nodes.profileChildren.value,
         objectifCF: nodes.profileObjectifCF?.value,
-        revaloAnnuelle: nodes.profileRevaloAnnuelle?.value
+        revaloAnnuelle: nodes.profileRevaloAnnuelle?.value,
+        autresCredits: state.profileData.autresCredits
     });
     saveProfileData();
     emitStateUpdate();
