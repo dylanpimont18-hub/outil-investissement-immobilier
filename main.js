@@ -4094,7 +4094,6 @@ function initWorkspaceTabs() {
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
     const scannerPanel = document.getElementById('scanner-panel');
-    console.log('[Spark] initWorkspaceTabs — tabs:', tabs.length, 'workspacePanel:', !!workspacePanel, 'collectionPanel:', !!collectionPanel);
     const feasibilityPanel = document.getElementById('feasibility-panel');
 
     collectionPanel.style.display = 'none';
@@ -4103,7 +4102,6 @@ function initWorkspaceTabs() {
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            console.log('[Spark] Tab clicked:', tab.dataset.target);
             tabs.forEach(t => t.classList.remove('is-active'));
             tab.classList.add('is-active');
             const target = tab.dataset.target;
