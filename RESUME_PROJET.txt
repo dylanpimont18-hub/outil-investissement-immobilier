@@ -1,0 +1,206 @@
+============================================================
+SPARK INVESTISSEMENT — RÉSUMÉ DU PROJET
+============================================================
+Application desktop d'analyse d'investissement locatif (marché français).
+Distribué en .exe Windows via PyInstaller. Aucune connexion internet requise
+pour le fonctionnement de l'interface : serveur Flask local + fenêtre PyWebView.
+
+
+============================================================
+1. FONCTIONNALITÉS PRINCIPALES
+============================================================
+
+── MODULE ANALYSE (onglet "Saisie & Analyse") ──────────────────────────────
+
+Formulaire de saisie structuré en trois zones de priorité :
+
+  ESSENTIEL — Acquisition & financement
+    • Prix affiché vendeur + négociation visée (%)
+    • Loyer cible mensuel
+    • Frais de notaire (%), frais d'agence, budget travaux, budget mobilier
+    • Apport, taux d'intérêt, durée du prêt, assurance emprunteur, frais bancaires
+    → Simulation en direct de la mensualité (crédit + assurance) pendant la saisie
+
+  IMPORTANT — Exploitation & fiscalité
+    • Vacance locative (%), charges de copropriété, taxe foncière, assurance PNO
+    • Honoraires de gestion locative (%)
+    • Régime fiscal : Micro-foncier / Foncier réel / SCI à l'IS
+
+  AVANCÉ — Vérifications, seuils & journal
+    • DPE (classe A→G)
+    • Loyer de marché (comparaison cohérence)
+    • Risque copropriété (stable / à surveiller / sous tension)
+    • Fiabilité des hypothèses (loyer, charges, travaux, documents) : vérifiée / estimée / inconnue
+    • Seuils de décision personnalisables :
+        – Cash-flow minimum / mois
+        – DSCR minimum
+        – Vacance maximale (%)
+        – Écart max au marché (%)
+        – Taux d'effort maximal du foyer (%)
+
+Moteur de calcul (calculs.js — fonctions pures, zéro DOM) :
+    • Rendement brut et net
+    • Cash-flow net mensuel
+    • DSCR (Debt Service Coverage Ratio)
+    • GRM (Gross Rent Multiplier)
+    • CoC (Cash-on-Cash return)
+    • Modèle financier année par année (amortissement, fiscalité)
+    • Fiscalité précise selon le régime :
+        – Micro-foncier : abattement 30 %
+        – Foncier réel : déduction charges + intérêts + déficit foncier plafonné 10 700 €
+        – SCI IS : amortissement 30 ans (80 % valeur), IS 15 % / 25 %
+    • Calcul du TMI (barème 2024, quotient familial)
+    • Score de décision composite (0–100) basé sur : CF, DSCR, rendement net-net,
+      écart prix/offre plafond, score de confiance des hypothèses, stress-tests
+    • Décision en 5 tons : excellent / positive / neutral / watch / negative
+    • Projection de revente dans le temps (timeline)
+    • Scénarios (optimiste, central, pessimiste)
+
+Barre de KPI en direct (au-dessus du formulaire) :
+    • Rendement brut, Cash-flow net/mois, DSCR — mis à jour à chaque frappe
+
+Mode guidé / mode complet :
+    • Mode guidé : wizard étape par étape avec barre de progression
+    • Mode complet : accès direct à tous les champs
+
+Mode deux écrans :
+    • Panneau analyse ouvert dans une seconde fenêtre popup (?panel=analysis)
+    • Synchronisation d'état entre fenêtres via BroadcastChannel (fallback localStorage)
+
+Profil du foyer :
+    • Revenus nets, nombre d'adultes, nombre d'enfants
+    • Utilisé pour le calcul du TMI et du taux d'effort
+    • Crédits hors immobilier (auto, conso, personnel…) : saisie détaillée
+      par crédit (libellé, mensualité, date de fin, capital restant dû optionnel)
+      — inclus dans le taux d'endettement total (HCSF et différentielle)
+      et déduits de la capacité d'emprunt restante
+
+Export PDF :
+    • Génère un rapport de décision complet (pdf.js) en HTML standalone imprimable
+
+
+── MODULE PORTEFEUILLE (onglet "Portefeuille") ──────────────────────────────
+
+    • Sauvegarde de plusieurs dossiers (études)
+    • Comparateur multi-actifs
+    • Vue consolidée du portefeuille (flux, KPIs agrégés)
+    • Métriques par actif : score, CF, rendement, DSCR
+
+
+── MODULE SCANNER (onglet "Scanner") ────────────────────────────────────────
+
+    • Scraper multi-sites immobiliers (Centre-Val de Loire)
+      Sites supportés : Leboncoin (actif) — autres en cours
+    • Déclenchement via "Lancer le scan" (POST /api/scan)
+      Option "scan complet" : efface la base avant de relancer (POST /api/scan/full)
+    • Saisie ville + code postal avant le scan
+    • Progression en temps réel : barre + logs (polling /api/status toutes les 2 s)
+    • Résultats dans une table triable/filtrable
+    • Pipeline backend (Python) :
+        – Scraping → Déduplication (URL + empreinte cross-sites) → Enrichissement IA
+          (Anthropic batch : nb pièces, travaux, DPE, résumé) → Calculs financiers
+          → Stockage SQLite (biens.db : tables biens, annonces, historique_prix)
+    • Serveur Flask local (server.py) : API /api/scan, /api/status, /api/results
+
+
+============================================================
+2. DIRECTION ARTISTIQUE — CHARTE GRAPHIQUE
+============================================================
+
+Concept visuel — trois piliers :
+  • Expertise  : rigueur des données et des calculs
+  • Prestige   : aspect patrimonial et immobilier
+  • Technologie: interface moderne, fluide, réactive
+
+──────────────────────────────────────────────────────────
+TYPOGRAPHIE
+──────────────────────────────────────────────────────────
+
+  Affichage / titres  : Cormorant Garamond (display, statutaire)
+  Corps de texte      : Manrope (Regular, lisibilité écran)
+  Chiffres & données  : IBM Plex Mono (outil de précision, data)
+
+  Note : la charte source mentionne Montserrat + Inter + JetBrains Mono ;
+  l'implémentation courante utilise Cormorant Garamond + Manrope + IBM Plex Mono.
+
+──────────────────────────────────────────────────────────
+COULEURS — MODE CLAIR (institutionnel & pur)
+──────────────────────────────────────────────────────────
+
+  Fond principal      : #F8F9FA  (gris perle très clair)
+  Fond de carte       : #FFFFFF  (blanc pur)
+  Texte principal     : #1A2B3C  (bleu nuit profond)
+  Texte secondaire    : #6C757D  (gris sourd)
+  Bordures            : #E9ECEF
+  Accent / action     : #C5A059  (or sablé)
+  Succès (rendement+) : #2D6A4F  (vert émeraude)
+  Alerte (risque)     : #E63946  (corail)
+
+──────────────────────────────────────────────────────────
+COULEURS — MODE SOMBRE (technique & premium)
+──────────────────────────────────────────────────────────
+
+  Fond principal      : #0B0E14  (noir bleuté profond)
+  Fond de carte       : #161B22  (gris anthracite)
+  Texte principal     : #F0F6FC  (blanc cassé)
+  Texte secondaire    : #8B949E  (gris acier)
+  Bordures            : #30363D
+  Accent / action     : #D4AF37  (or éclatant)
+  Succès (rendement+) : #40916C  (vert menthe)
+  Alerte (risque)     : #FF4D4D  (rouge vif)
+
+Basculement thème via : data-theme="light|dark" sur <html>
+
+──────────────────────────────────────────────────────────
+TONS SÉMANTIQUES (décision)
+──────────────────────────────────────────────────────────
+
+  excellent  →  classe CSS --excellent
+  positive   →  classe CSS --positive
+  neutral    →  classe CSS --neutral
+  watch      →  classe CSS --watch
+  negative   →  classe CSS --negative
+
+──────────────────────────────────────────────────────────
+EFFETS & OMBRES
+──────────────────────────────────────────────────────────
+
+  Mode clair : box-shadow 0 4px 20px rgba(0,0,0,0.05)  |  bordure 1px solid #E9ECEF
+  Mode sombre: box-shadow 0 4px 20px rgba(0,0,0,0.4)   |  bordure 1px solid #30363D
+  Arrondis   : 8px (composants) · 12px (cartes)
+
+──────────────────────────────────────────────────────────
+ÉLÉMENTS D'INTERFACE
+──────────────────────────────────────────────────────────
+
+  Boutons primaires   : fond couleur accent, texte blanc/noir selon contraste
+  Boutons secondaires : fond transparent, bordure couleur accent
+  Hover               : opacité –10 % ou légère élévation (shadow)
+  Graphiques          : dégradés de l'accent vers le transparent
+  Icônes              : style "Line/Light", épaisseur de trait constante 1.5 px
+
+──────────────────────────────────────────────────────────
+RÈGLES D'ESPACEMENT & HIÉRARCHIE
+──────────────────────────────────────────────────────────
+
+  Grille d'espacement : multiples de 4 px (8 · 16 · 24 · 32 px)
+  Données numériques  : police Mono + gras pour rendement brut/net
+  Accessibilité       : contraste WCAG vérifié pour le texte secondaire
+
+
+============================================================
+3. STACK TECHNIQUE
+============================================================
+
+  Frontend  : HTML5 + CSS3 (design system complet) + JavaScript vanilla (ES modules)
+  Backend   : Python / Flask (serveur local)
+  Desktop   : PyWebView (fenêtre native) + system tray
+  Packaging : PyInstaller → dist/Spark/Spark.exe
+  Base de données : SQLite (scraper/biens.db)
+  IA        : API Anthropic (batch enrichment des annonces)
+  Cartographie : Leaflet.js (vendor local)
+
+
+============================================================
+FIN DU RÉSUMÉ
+============================================================
