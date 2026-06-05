@@ -3223,12 +3223,28 @@ function buildPortfolioDebtRatios(debtRatios) {
             </div>
         `;
     }
+    const breakdownHtml = debtRatios.autresMensualites > 0 ? `
+        <div class="analysis-list-compact" style="margin-bottom:1rem">
+            <div class="status-item">
+                <span class="status-label">Mensualités immo</span>
+                <strong>${formatPlainCurrency(debtRatios.mensualitesImmo)}/mois</strong>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Crédits hors immo</span>
+                <strong>${formatPlainCurrency(debtRatios.autresMensualites)}/mois</strong>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Total mensualités</span>
+                <strong>${formatPlainCurrency(debtRatios.mensualitesTotales)}/mois</strong>
+            </div>
+        </div>` : '';
     nodes.portfolioDebtRatios.innerHTML = `
         <div class="debt-ratios-shell">
+            ${breakdownHtml}
             ${gauge(debtRatios.hcsf.ratio, debtRatios.hcsf.seuil, debtRatios.hcsf.tone,
-                'Mensualités / (Revenus nets + 70 % loyers bruts)', 'Méthode HCSF 2021')}
+                'Mensualités totales / (Revenus nets + 70 % loyers bruts)', 'Méthode HCSF 2021')}
             ${gauge(debtRatios.differentielle.ratio, debtRatios.differentielle.seuil, debtRatios.differentielle.tone,
-                'Effort net immo / Revenus nets', 'Méthode différentielle')}
+                'Effort net total / Revenus nets', 'Méthode différentielle')}
         </div>
     `;
 }
@@ -3444,44 +3460,82 @@ async function buildPortfolioMap(portfolioItems) {
     }
 }
 
-function buildPortfolioCredits(portfolioItems) {
+function buildPortfolioCredits(portfolioItems, autresCredits) {
     if (!nodes.portfolioCredits) return;
     const itemsWithCredit = portfolioItems.filter(item => item.creditSchedule || item.model.mensualiteTotale > 0);
-    if (!itemsWithCredit.length) {
-        nodes.portfolioCredits.innerHTML = '<p class="collection-empty">Aucun bien détenu avec un crédit configuré.</p>';
+    const credits = autresCredits || [];
+
+    if (!itemsWithCredit.length && !credits.length) {
+        nodes.portfolioCredits.innerHTML = '<p class="collection-empty">Aucun crédit configuré.</p>';
         return;
     }
-    nodes.portfolioCredits.innerHTML = `
+
+    let immoHtml = '';
+    if (itemsWithCredit.length) {
+        immoHtml = `
+        <h5 class="analysis-subsection-title">Crédits immobiliers</h5>
         <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Bien</th>
-                    <th>Mensualité</th>
-                    <th>Capital restant dû</th>
-                    <th>Date de fin</th>
-                    <th>Source</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Bien</th><th>Mensualité</th><th>Capital restant dû</th><th>Date de fin</th><th>Source</th></tr></thead>
             <tbody>
                 ${itemsWithCredit.map(item => {
                     const cs = item.creditSchedule;
                     const mensualite = cs ? cs.mensualite : (item.model.mensualiteTotale || 0);
-                    const capitalRestant = cs ? capitalRestantDu(cs.mensualite, cs.dateFin) : null;
+                    const cap = cs ? capitalRestantDu(cs.mensualite, cs.dateFin) : null;
                     const dateFin = cs?.dateFin ? cs.dateFin.replace('-', '/') : '--';
                     const source = cs ? 'Échéancier réel' : 'Simulé';
                     return `
                         <tr>
                             <td><strong>${escapeHtml(item.name)}</strong><div class="table-subline">${escapeHtml(item.city)}</div></td>
                             <td><strong>${formatPlainCurrency(mensualite)}</strong></td>
-                            <td>${capitalRestant != null ? `<strong>${formatPlainCurrency(capitalRestant)}</strong>` : '--'}</td>
+                            <td>${cap != null ? `<strong>${formatPlainCurrency(cap)}</strong>` : '--'}</td>
                             <td>${escapeHtml(dateFin)}</td>
                             <td><span class="status-pill status-pill--${cs ? 'positive' : 'neutral'}">${escapeHtml(source)}</span></td>
                         </tr>
                     `;
                 }).join('')}
             </tbody>
-        </table>
-    `;
+        </table>`;
+    }
+
+    const totalMensualiteHI = credits.reduce((s, c) => s + (c.mensualite || 0), 0);
+    const totalCrdHI = credits.some(c => c.capitalRestantDu != null)
+        ? credits.reduce((s, c) => s + (c.capitalRestantDu || 0), 0)
+        : null;
+
+    const horsImmoHtml = `
+        <h5 class="analysis-subsection-title" style="margin-top:1.5rem">Crédits hors immobilier</h5>
+        ${credits.length ? `
+        <table class="analysis-table">
+            <thead><tr><th>Libellé</th><th>Mensualité</th><th>Capital restant dû</th><th>Date de fin</th><th></th></tr></thead>
+            <tbody>
+                ${credits.map(c => {
+                    const dateFin = c.dateFin ? c.dateFin.replace('-', '/') : '--';
+                    return `
+                        <tr>
+                            <td><strong>${escapeHtml(c.libelle)}</strong></td>
+                            <td><strong>${formatPlainCurrency(c.mensualite)}</strong></td>
+                            <td>${c.capitalRestantDu != null ? `<strong>${formatPlainCurrency(c.capitalRestantDu)}</strong>` : '--'}</td>
+                            <td>${escapeHtml(dateFin)}</td>
+                            <td style="white-space:nowrap">
+                                <button class="btn-icon" data-action="edit-autre-credit" data-credit-id="${escapeHtml(c.id)}" title="Modifier">✎</button>
+                                <button class="btn-icon btn-icon--danger" data-action="delete-autre-credit" data-credit-id="${escapeHtml(c.id)}" title="Supprimer">✕</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+                <tr class="analysis-table__total">
+                    <td><strong>Total</strong></td>
+                    <td><strong>${formatPlainCurrency(totalMensualiteHI)}</strong></td>
+                    <td>${totalCrdHI != null ? `<strong>${formatPlainCurrency(totalCrdHI)}</strong>` : '--'}</td>
+                    <td colspan="2"></td>
+                </tr>
+            </tbody>
+        </table>` : '<p class="collection-empty">Aucun crédit hors immobilier.</p>'}
+        <div style="margin-top:0.75rem">
+            <button class="btn-secondary" data-action="add-autre-credit">+ Ajouter un crédit</button>
+        </div>`;
+
+    nodes.portfolioCredits.innerHTML = immoHtml + horsImmoHtml;
 }
 
 function buildPortfolioTimeline(portfolioItems) {
@@ -3722,7 +3776,7 @@ function renderCollections() {
     buildPortfolioObjectif(collectionsView.objectif);
     buildPortfolioProjection(collectionsView.projection);
     buildPortfolioRepartition(collectionsView.portfolioItems);
-    buildPortfolioCredits(collectionsView.portfolioItems);
+    buildPortfolioCredits(collectionsView.portfolioItems, state.profileData.autresCredits);
     buildPortfolioTimeline(collectionsView.portfolioItems);
 }
 
