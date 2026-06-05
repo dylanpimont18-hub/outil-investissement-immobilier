@@ -8021,7 +8021,7 @@ body.scanner-filters-open {
 .asset-identity-bar {
     background: var(--accent-gold-dim);
     border: 1px solid var(--accent-gold-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     padding: 12px 14px;
     margin-bottom: 12px;
 }
@@ -8063,7 +8063,7 @@ body.scanner-filters-open {
 /* ─── Carte Leaflet portefeuille ─────────────────────────── */
 .portfolio-map-canvas {
     height: 280px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     overflow: hidden;
     margin-bottom: 16px;
     border: 1px solid var(--border);
