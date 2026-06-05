@@ -1298,5 +1298,48 @@
             </div>
         </div>
     </aside>
+    <!-- Drawer crédits hors immobilier -->
+    <div id="autre-credit-drawer-overlay" class="drawer-overlay" style="display:none" aria-hidden="true"></div>
+    <aside id="autre-credit-drawer" class="drawer" style="display:none" role="dialog" aria-modal="true" aria-labelledby="autre-credit-drawer-title">
+        <div class="drawer-inner">
+            <div class="drawer-head">
+                <h3 id="autre-credit-drawer-title" class="drawer-title">Crédit hors immobilier</h3>
+                <button type="button" id="autre-credit-drawer-close" class="drawer-close" aria-label="Fermer">✕</button>
+            </div>
+            <div class="drawer-body">
+                <form id="autre-credit-drawer-form" class="credit-drawer-form" novalidate>
+                    <input type="hidden" id="autre-credit-drawer-id">
+                    <div class="form-field">
+                        <label class="form-label" for="autre-credit-libelle">Libellé</label>
+                        <input type="text" id="autre-credit-libelle" class="variables-input" maxlength="60" placeholder="ex : Crédit auto" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="autre-credit-mensualite">Mensualité totale assurance incluse (€/mois)</label>
+                        <input type="number" id="autre-credit-mensualite" class="variables-input" min="0" step="10" placeholder="0" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="autre-credit-mensualite-ha">Mensualité hors assurance (€/mois) <span class="form-label-optional">(optionnel)</span></label>
+                        <input type="number" id="autre-credit-mensualite-ha" class="variables-input" min="0" step="10" placeholder="0">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="autre-credit-date-debut">Date de début <span class="form-label-optional">(optionnel)</span></label>
+                        <input type="month" id="autre-credit-date-debut" class="variables-input">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="autre-credit-date-fin">Date de fin <span class="form-label-optional">(optionnel)</span></label>
+                        <input type="month" id="autre-credit-date-fin" class="variables-input">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="autre-credit-crd">Capital restant dû (€) <span class="form-label-optional">(optionnel)</span></label>
+                        <input type="number" id="autre-credit-crd" class="variables-input" min="0" step="100" placeholder="0">
+                    </div>
+                    <div class="drawer-actions">
+                        <button type="button" id="autre-credit-drawer-cancel" class="btn-secondary">Annuler</button>
+                        <button type="submit" id="autre-credit-drawer-save" class="btn-primary">Enregistrer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </aside>
 </body>
 </html>
