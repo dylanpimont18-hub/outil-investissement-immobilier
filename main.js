@@ -1627,6 +1627,7 @@ function openAutreCreditDrawer(creditId) {
     const credit = creditId
         ? (state.profileData.autresCredits || []).find(c => c.id === creditId)
         : null;
+    if (!nodes.autreCreditDrawer || !nodes.autreCreditDrawerOverlay) return;
     nodes.autreCreditDrawerId.value = creditId || '';
     nodes.autreCreditLibelle.value = credit?.libelle || '';
     nodes.autreCreditMensualite.value = credit?.mensualite != null ? String(credit.mensualite) : '';
