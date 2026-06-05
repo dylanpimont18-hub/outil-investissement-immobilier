@@ -1623,6 +1623,96 @@ function closeCreditDrawer() {
     }, 220);
 }
 
+function openAutreCreditDrawer(creditId) {
+    const credit = creditId
+        ? (state.profileData.autresCredits || []).find(c => c.id === creditId)
+        : null;
+    nodes.autreCreditDrawerId.value = creditId || '';
+    nodes.autreCreditLibelle.value = credit?.libelle || '';
+    nodes.autreCreditMensualite.value = credit?.mensualite != null ? String(credit.mensualite) : '';
+    nodes.autreCreditMensualiteHa.value = credit?.mensualiteHorsAssurance != null ? String(credit.mensualiteHorsAssurance) : '';
+    nodes.autreCreditDateDebut.value = credit?.dateDebut || '';
+    nodes.autreCreditDateFin.value = credit?.dateFin || '';
+    nodes.autreCreditCrd.value = credit?.capitalRestantDu != null ? String(credit.capitalRestantDu) : '';
+    nodes.autreCreditDrawerOverlay.style.display = 'block';
+    nodes.autreCreditDrawer.style.display = 'block';
+    nodes.autreCreditDrawerOverlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
+    void nodes.autreCreditDrawer.offsetWidth;
+    nodes.autreCreditDrawerOverlay.classList.add('is-open');
+    nodes.autreCreditDrawer.classList.add('is-open');
+    nodes.autreCreditDrawerOverlay.onclick = closeAutreCreditDrawer;
+    window.requestAnimationFrame(() => nodes.autreCreditLibelle?.focus());
+}
+
+function closeAutreCreditDrawer() {
+    nodes.autreCreditDrawerOverlay?.classList.remove('is-open');
+    nodes.autreCreditDrawer?.classList.remove('is-open');
+    nodes.autreCreditDrawerOverlay?.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('drawer-open');
+    setTimeout(() => {
+        if (nodes.autreCreditDrawerOverlay) nodes.autreCreditDrawerOverlay.style.display = 'none';
+        if (nodes.autreCreditDrawer) nodes.autreCreditDrawer.style.display = 'none';
+    }, 220);
+}
+
+function handleAutreCreditDrawerSave(event) {
+    event.preventDefault();
+    const creditId = nodes.autreCreditDrawerId.value;
+    const libelle = nodes.autreCreditLibelle.value.trim();
+    if (!libelle) { nodes.autreCreditLibelle.focus(); return; }
+    const mensualite = Math.max(0, Number(nodes.autreCreditMensualite.value) || 0);
+    if (!mensualite) { nodes.autreCreditMensualite.focus(); return; }
+    const haRaw = nodes.autreCreditMensualiteHa.value;
+    const mensualiteHorsAssurance = haRaw !== '' ? Math.max(0, Number(haRaw) || 0) : null;
+    const dateDebut = nodes.autreCreditDateDebut.value || null;
+    const dateFin = nodes.autreCreditDateFin.value || null;
+    const crdRaw = nodes.autreCreditCrd.value;
+    const capitalRestantDu = crdRaw !== '' ? Math.max(0, Number(crdRaw) || 0) : null;
+
+    const entry = {
+        id: creditId || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        libelle,
+        mensualite,
+        mensualiteHorsAssurance,
+        dateDebut,
+        dateFin,
+        capitalRestantDu
+    };
+    const credits = [...(state.profileData.autresCredits || [])];
+    const idx = credits.findIndex(c => c.id === entry.id);
+    if (idx >= 0) credits.splice(idx, 1, entry);
+    else credits.push(entry);
+
+    state.profileData = { ...state.profileData, autresCredits: credits };
+    saveProfileData();
+    closeAutreCreditDrawer();
+    emitStateUpdate();
+    render({ syncVariables: false, syncProfile: false });
+    showToast('Crédit enregistré.');
+}
+
+function handleDeleteAutreCredit(creditId) {
+    state.profileData = {
+        ...state.profileData,
+        autresCredits: (state.profileData.autresCredits || []).filter(c => c.id !== creditId)
+    };
+    saveProfileData();
+    emitStateUpdate();
+    render({ syncVariables: false, syncProfile: false });
+    showToast('Crédit supprimé.');
+}
+
+function handlePortfolioCreditsAction(event) {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const action = button.dataset.action;
+    const creditId = button.dataset.creditId;
+    if (action === 'add-autre-credit') { openAutreCreditDrawer(null); return; }
+    if (action === 'edit-autre-credit' && creditId) { openAutreCreditDrawer(creditId); return; }
+    if (action === 'delete-autre-credit' && creditId) { handleDeleteAutreCredit(creditId); return; }
+}
+
 function handleCreditDrawerSave(event) {
     event.preventDefault();
     const assetId = nodes.creditDrawerAssetId.value;
@@ -4044,6 +4134,10 @@ function bindEvents() {
     document.getElementById('credit-drawer-close')?.addEventListener('click', closeCreditDrawer);
     document.getElementById('credit-drawer-cancel')?.addEventListener('click', closeCreditDrawer);
     document.getElementById('credit-drawer-form')?.addEventListener('submit', handleCreditDrawerSave);
+    document.getElementById('autre-credit-drawer-close')?.addEventListener('click', closeAutreCreditDrawer);
+    document.getElementById('autre-credit-drawer-cancel')?.addEventListener('click', closeAutreCreditDrawer);
+    document.getElementById('autre-credit-drawer-form')?.addEventListener('submit', handleAutreCreditDrawerSave);
+    if (nodes.portfolioCredits) nodes.portfolioCredits.addEventListener('click', handlePortfolioCreditsAction);
 
     if (nodes.modeToggle && !IS_ANALYSIS_WINDOW) {
         nodes.modeToggle.addEventListener('click', e => {
