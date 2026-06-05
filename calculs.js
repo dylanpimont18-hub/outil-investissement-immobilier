@@ -690,7 +690,34 @@ function buildScenarioModel(inputs, adults, children, thresholds) {
 }
 
 function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checklist, thresholds, confidenceModel, scenarioModel) {
-    const currentPrice = Math.max(0, Number(inputs['prix']) || 0);
+    const prixBrut = Math.max(0, Number(inputs['prix']) || 0);
+    const loyerSaisi = Math.max(0, Number(inputs['loyer']) || 0);
+    if (prixBrut === 0 || loyerSaisi === 0) {
+        return {
+            label: 'Saisie en cours',
+            tone: 'neutral',
+            score: null,
+            summary: 'Renseignez le prix et le loyer cible pour obtenir une évaluation complète.',
+            action: 'Compléter les données essentielles du dossier.',
+            priceBand: '—',
+            currentPrice: prixBrut,
+            maxOfferPrice: 0,
+            solidOfferPrice: 0,
+            negotiationToTenable: 0,
+            negotiationToSolid: 0,
+            economicLabel: '—',
+            economicTone: 'neutral',
+            checklistLabel: '—',
+            checklistTone: 'neutral',
+            confidenceLabel: '—',
+            confidenceTone: 'neutral',
+            stressLabel: '—',
+            stressTone: 'neutral',
+            blockers: [],
+            strengths: []
+        };
+    }
+    const currentPrice = prixBrut;
     const currentRegime = regimeComparison.find(item => item.isCurrent) || regimeComparison[0];
     const bestRegime = regimeComparison[0] || currentRegime;
     const regimeGap = Math.max(0, (bestRegime?.cfNetNet || 0) - (currentRegime?.cfNetNet || 0));
@@ -1234,7 +1261,7 @@ function buildPortfolioPriorities(portfolioItems) {
                 id: item.id,
                 name: item.name,
                 tone: item.metrics.cfNetNet < 0 ? 'negative' : (item.metrics.dscr < 1 ? 'watch' : 'positive'),
-                decisionLabel: item.analysisModel.decision.label,
+                decisionLabel: item.analysisModel.decision?.label || '—',
                 cfNetNet: item.metrics.cfNetNet,
                 dscr: item.metrics.dscr,
                 leverLabel: topLever?.label || 'Aucun levier prioritaire',
@@ -1246,13 +1273,13 @@ function buildPortfolioPriorities(portfolioItems) {
         .slice(0, 5);
 }
 
-export function capitalRestantDu(mensualite, dateFinStr) {
+export function capitalRestantDu(mensualite, dateFinStr, refDate = null) {
     if (!dateFinStr) return null;
     const parts = dateFinStr.split('-').map(Number);
     const finYear = parts[0];
     const finMonth = parts[1];
     if (!finYear || !finMonth) return null;
-    const now = new Date();
+    const now = refDate || new Date();
     const monthsRemaining = Math.max(0,
         (finYear - now.getFullYear()) * 12 + (finMonth - 1 - now.getMonth())
     );
@@ -1313,18 +1340,52 @@ function computePortfolioFiscal(portfolioItems, tmi) {
     return { totalImpots, tmi, regimes };
 }
 
+function amortizationFactor(tauxAnnuel, dureeAns) {
+    const r = (tauxAnnuel / 100) / 12;
+    const n = dureeAns * 12;
+    if (r <= 0) return n;
+    return (1 - Math.pow(1 + r, -n)) / r;
+}
+
 function computeProjectionPatrimoniale(portfolioItems, revaloAnnuelle) {
     const r = Math.max(0, (revaloAnnuelle || 2)) / 100;
     const currentValue = portfolioItems.reduce((sum, item) => {
         const prix = Math.max(0, (item.variablesData?.['prix'] || 0) - (item.variablesData?.['nego'] || 0));
         return sum + prix;
     }, 0);
+
+    const currentYear = new Date().getFullYear();
+    const seriesGross = [];
+    const seriesNet = [];
+
+    for (let t = 0; t <= 15; t++) {
+        let grossTotal = 0;
+        let crdTotal = 0;
+
+        portfolioItems.forEach(item => {
+            const prix = Math.max(0, (item.variablesData?.['prix'] || 0) - (item.variablesData?.['nego'] || 0));
+            grossTotal += prix * Math.pow(1 + r, t);
+
+            const cs = item.creditSchedule;
+            if (cs && cs.mensualite && cs.dateFin) {
+                const refDate = new Date(currentYear + t, 0, 1);
+                const crd = capitalRestantDu(cs.mensualite, cs.dateFin, refDate);
+                crdTotal += crd || 0;
+            }
+        });
+
+        seriesGross.push(Math.round(grossTotal));
+        seriesNet.push(Math.round(grossTotal - crdTotal));
+    }
+
     return {
         currentValue,
         at5: Math.round(currentValue * Math.pow(1 + r, 5)),
         at10: Math.round(currentValue * Math.pow(1 + r, 10)),
         at15: Math.round(currentValue * Math.pow(1 + r, 15)),
-        revaloAnnuelle: revaloAnnuelle || 2
+        revaloAnnuelle: revaloAnnuelle || 2,
+        seriesGross,
+        seriesNet
     };
 }
 
@@ -1436,9 +1497,9 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
     const comparisonItems = assetViews
         .filter(item => item.inComparison)
         .sort((left, right) => {
-            if (right.analysisModel.decision.rank !== left.analysisModel.decision.rank) {
-                return right.analysisModel.decision.rank - left.analysisModel.decision.rank;
-            }
+            const rRank = right.analysisModel.decision?.rank ?? 0;
+            const lRank = left.analysisModel.decision?.rank ?? 0;
+            if (rRank !== lRank) return rRank - lRank;
             return right.metrics.cfNetNet - left.metrics.cfNetNet;
         });
 
@@ -1459,10 +1520,31 @@ export function computePortfolioViewModel(assetRecords = [], householdProfile = 
         return sum + m;
     }, 0);
 
+    // Portfolio-level decision: aggregate health assessment
+    const totalValue = dashboard.totalValue || 1;
+    const portfolioRentaNetNet = portfolioItems.length > 0
+        ? portfolioItems.reduce((s, item) => s + item.metrics.rentaNetNet * (item.metrics.coutTotal || 0), 0) / totalValue
+        : 0;
+    const decision = getDecisionToneFromThresholds({
+        cfNetNet: dashboard.totalCashflow,
+        dscr: dashboard.dscr,
+        rentaNetNet: portfolioRentaNetNet
+    });
+
+    // Remaining acquisition capacity (35% debt ratio rule, amortization factor from reference loan params)
+    const maxMonthlyDebt = income > 0 ? (income / 12) * 0.35 : 0;
+    const remainingMonthlyCapacity = Math.max(0, maxMonthlyDebt - dashboard.totalDebtMonthly);
+    const refTaux = referenceInputs['taux'] || 3.5;
+    const refDuree = referenceInputs['duree'] || 20;
+    const factor = amortizationFactor(refTaux, refDuree);
+    const capacity = { acquisitionBudget: Math.round(remainingMonthlyCapacity * factor) };
+
     return {
         comparisonItems,
         portfolioItems,
         dashboard,
+        decision,
+        capacity,
         priorities,
         fiscal: computePortfolioFiscal(portfolioItems, tmi),
         debtRatios: computeDebtRatios(mensualitesTotales, dashboard.totalRentMonthly, income),
