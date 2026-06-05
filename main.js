@@ -2569,7 +2569,7 @@ function closeProfileModal() {
 function applyProfilePreset(profileKey) {
     state.profilePreset = profileKey;
     localStorage.setItem(STORAGE_KEYS.profilePreset, state.profilePreset);
-    state.profileData = createProfileData(profileKey);
+    state.profileData = { ...createProfileData(profileKey), autresCredits: state.profileData.autresCredits };
     saveProfileData();
     emitStateUpdate();
     render({ syncProfile: false, syncVariables: false });

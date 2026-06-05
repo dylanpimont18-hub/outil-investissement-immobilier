@@ -2778,6 +2778,11 @@ html[data-theme='light'] select {
     border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
+.analysis-table__total td {
+    border-top: 1px solid var(--border);
+    background: var(--surface-strong);
+}
+
 .analysis-table tbody tr:hover td {
     background: color-mix(in srgb, var(--surface-strong) 80%, var(--primary-soft) 20%);
 }
@@ -7837,6 +7842,28 @@ body.scanner-filters-open {
 }
 .btn-secondary:hover { background: var(--surface-hover); }
 .asset-card__action--has-credit { color: var(--accent); }
+
+/* ─── Boutons icône inline (édition / suppression) ─────────────────── */
+.btn-icon {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted, #8b949e);
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0.2rem 0.4rem;
+    transition: background 0.15s, color 0.15s;
+}
+.btn-icon:hover {
+    background: var(--surface-strong);
+    color: var(--text);
+}
+.btn-icon--danger:hover {
+    background: var(--negative-muted);
+    border-color: var(--negative);
+    color: var(--negative);
+}
 
 /* ─── Shells génériques ─────────────────────────────── */
 .fiscal-shell, .objectif-shell, .projection-shell, .debt-ratios-shell {
