@@ -21,7 +21,6 @@
                     <img src="Logo_site.png" alt="Logo" width="24" height="24">
                 </figure>
                 <div class="topbar-brand-copy">
-                    <span class="topbar-kicker">Analyse immobilière</span>
                     <span class="topbar-name">Spark Investissement</span>
                 </div>
             </div>
@@ -35,13 +34,6 @@
                     <button type="button" id="theme-toggle" class="topbar-btn topbar-btn--icon" aria-label="Basculer thème"></button>
                     <button type="button" id="screen-toggle" class="topbar-btn topbar-btn--minor" aria-label="Mode 2 écrans"></button>
                 </div>
-                <div class="topbar-actions__mode">
-                    <button type="button" id="guided-toggle" class="topbar-btn topbar-btn--guided" aria-label="Mode assistant" aria-pressed="false">Assistant</button>
-                    <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
-                        <button type="button" class="mode-toggle__btn" id="mode-btn-guided" data-mode="guided" aria-pressed="false">Guidé</button>
-                        <button type="button" class="mode-toggle__btn" id="mode-btn-full" data-mode="full" aria-pressed="true">Complet</button>
-                    </div>
-                </div>
                 <button type="button" id="profile-trigger" class="topbar-profile" aria-label="Profil du foyer">
                     <span id="topbar-profile-label" class="topbar-profile__title">Profil du foyer</span>
                     <span id="topbar-profile-meta" class="topbar-profile__meta">Configuration requise pour les calculs</span>
@@ -50,12 +42,47 @@
         </header>
 
         <main class="workspace">
-            <nav class="workspace-tabs" aria-label="Navigation">
-                <button class="workspace-tab is-active" data-target="workspace-panel">Saisie &amp; Analyse</button>
-                <button class="workspace-tab" data-target="collection-panel">Portefeuille</button>
-                <button class="workspace-tab" data-target="feasibility-panel">Faisabilité</button>
-                <button class="workspace-tab" data-target="scanner-panel">Scanner</button>
-            </nav>
+            <aside class="app-sidebar">
+                <nav class="sidebar-nav" aria-label="Navigation">
+                    <button class="workspace-tab is-active" data-target="workspace-panel">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><polyline points="1,10 4,5 7,8 10,3 13,6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Analyse</span>
+                    </button>
+                    <button class="workspace-tab" data-target="collection-panel">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+                        <span>Portefeuille</span>
+                    </button>
+                    <button class="workspace-tab" data-target="feasibility-panel">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="3" y1="4" x2="11" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/><line x1="3" y1="10" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
+                        <span>Faisabilité</span>
+                    </button>
+                    <button class="workspace-tab" data-target="scanner-panel">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        <span>Scanner</span>
+                    </button>
+                </nav>
+                <div class="sidebar-mode">
+                    <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
+                        <button type="button" class="mode-toggle__btn" id="mode-btn-guided" data-mode="guided" aria-pressed="false">Guidé</button>
+                        <button type="button" class="mode-toggle__btn" id="mode-btn-full" data-mode="full" aria-pressed="true">Complet</button>
+                    </div>
+                </div>
+                <div class="sidebar-save">
+                    <div id="asset-status-bar" class="asset-status-bar asset-status-bar--new" aria-live="polite">
+                        <div class="asset-status-bar__left">
+                            <span class="asset-status-bar__dot asset-status-bar__dot--new">○</span>
+                            <span class="asset-status-bar__text">Nouvelle étude · pas encore enregistrée</span>
+                        </div>
+                        <div class="asset-status-bar__badges"></div>
+                    </div>
+                    <button type="button" id="save-portfolio" class="toolbar-button sidebar-save__primary">Ajouter au portefeuille</button>
+                    <button type="button" id="save-comparison" class="toolbar-button sidebar-save__secondary">Enregistrer au comparateur</button>
+                    <div class="sidebar-save__divider"></div>
+                    <button type="button" id="new-asset" class="toolbar-button sidebar-save__tertiary">+ Nouvelle étude</button>
+                    <button type="button" id="export-decision-pdf" class="toolbar-button sidebar-save__util">Exporter PDF</button>
+                </div>
+            </aside>
+            <div class="app-main">
             <section class="workspace-panel" aria-label="Espace de travail">
                 <div class="panel-head">
                     <h2 id="workspace-title"></h2>
@@ -64,12 +91,9 @@
                 <section id="workspace-hero" class="workspace-hero" aria-label="Synthèse du dossier"></section>
                 <div id="workspace-board" class="workspace-board" data-layout="2">
                     <section id="variables-panel" class="variables-panel" aria-label="Variables modifiables">
-                        <div class="panel-head panel-head--stacked">
-                            <div>
-                                <p id="variables-kicker" class="brand-kicker"></p>
-                                <h3>Paramètres du dossier</h3>
-                                <p id="variables-subtitle" class="panel-note"></p>
-                            </div>
+                        <div class="panel-head panel-head--stacked panel-head--compact">
+                            <p id="variables-kicker" class="brand-kicker"></p>
+                            <p id="variables-subtitle" class="panel-note"></p>
                         </div>
 
                         <div id="variables-context" class="context-strip"></div>
@@ -104,6 +128,39 @@
 
                         <form id="variables-form" class="variables-form">
 
+                            <!-- BANDE IDENTITÉ — toujours visible -->
+                            <div class="asset-identity-bar">
+                                <div class="asset-identity-grid">
+                                    <label class="asset-identity-field asset-identity-field--name" for="nom-bien">
+                                        <span class="asset-identity-label">Nom du bien <span class="field-required" aria-hidden="true">*</span></span>
+                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off" placeholder="ex. T3 centre Tours" required>
+                                    </label>
+                                    <label class="asset-identity-field" for="type-bien">
+                                        <span class="asset-identity-label">Type de bien</span>
+                                        <select id="type-bien" name="type-bien" class="variables-input">
+                                            <option value="appartement">Appartement</option>
+                                            <option value="maison">Maison</option>
+                                            <option value="immeuble">Immeuble de rapport</option>
+                                        </select>
+                                    </label>
+                                    <label class="asset-identity-field" for="statut-bien">
+                                        <span class="asset-identity-label">Statut</span>
+                                        <select id="statut-bien" name="statut-bien" class="variables-input">
+                                            <option value="candidate">À étudier</option>
+                                            <option value="owned">Déjà au portefeuille</option>
+                                        </select>
+                                    </label>
+                                    <label class="asset-identity-field asset-identity-field--address" for="adresse">
+                                        <span class="asset-identity-label">Adresse <span class="asset-identity-hint">(optionnel — utilisée pour la carte)</span></span>
+                                        <input id="adresse" name="adresse" type="text" class="variables-input" maxlength="120" autocomplete="off" placeholder="ex. 12 rue du Commerce">
+                                    </label>
+                                    <label class="asset-identity-field" for="ville">
+                                        <span class="asset-identity-label">Ville</span>
+                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off" placeholder="ex. Tours">
+                                    </label>
+                                </div>
+                            </div>
+
                             <!-- ZONE ESSENTIEL (open) -->
                             <div class="form-zone" data-zone="essentiel" data-open="true">
                                 <div class="form-zone__head" role="button" tabindex="0" aria-expanded="true">
@@ -123,7 +180,7 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field" for="prix">
-                                        <span class="status-label">Prix affiché <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Prix affiché par le vendeur, avant négociation. Point de départ du calcul du prix d'offre plafond.">?</button></span>
+                                        <span class="status-label">Prix affiché</span>
                                         <input id="prix" name="prix" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="nego">
@@ -131,7 +188,7 @@
                                         <input id="nego" name="nego" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="loyer">
-                                        <span class="status-label">Loyer cible mensuel <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Loyer mensuel hors charges prévu. Base de calcul du rendement brut et du cash-flow.">?</button></span>
+                                        <span class="status-label">Loyer cible mensuel</span>
                                         <input id="loyer" name="loyer" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="notaire">
@@ -139,15 +196,15 @@
                                         <input id="notaire" name="notaire" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="travaux">
-                                        <span class="status-label">Budget travaux <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Budget travaux estimé, intégré au coût total d'acquisition et amortissable selon le régime fiscal.">?</button></span>
+                                        <span class="status-label">Budget travaux</span>
                                         <input id="travaux" name="travaux" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="meubles">
-                                        <span class="status-label">Budget mobilier <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Coût du mobilier pour une location meublée. Amortissable en LMNP et SCI IS.">?</button></span>
+                                        <span class="status-label">Budget mobilier</span>
                                         <input id="meubles" name="meubles" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="agence">
-                                        <span class="status-label">Frais d'agence <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Honoraires d'agence immobilière à la charge de l'acquéreur. Intégrés au coût total.">?</button></span>
+                                        <span class="status-label">Frais d'agence</span>
                                         <input id="agence" name="agence" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                 </div>
@@ -165,25 +222,25 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field" for="apport">
-                                        <span class="status-label">Apport <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Apport personnel en €. Réduit le capital emprunté et améliore le cash-flow.">?</button></span>
+                                        <span class="status-label">Apport</span>
                                         <input id="apport" name="apport" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="taux-input">
-                                        <span class="status-label">Taux % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'intérêt annuel du crédit immobilier, hors assurance. Comparer les offres bancaires.">?</button></span>
+                                        <span class="status-label">Taux %</span>
                                         <input id="taux-input" name="taux-input" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
                                         <input type="range" id="taux-slider" class="variables-slider" min="0.5" max="7" step="0.1" value="3.5" aria-hidden="true" tabindex="-1">
                                     </label>
                                     <label class="variables-field" for="duree">
-                                        <span class="status-label">Durée (ans) <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Durée du prêt en années. Plus longue = mensualité plus faible mais coût total plus élevé.">?</button></span>
+                                        <span class="status-label">Durée (ans)</span>
                                         <input id="duree" name="duree" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
                                         <input type="range" id="duree-slider" class="variables-slider" min="5" max="30" step="1" value="20" aria-hidden="true" tabindex="-1">
                                     </label>
                                     <label class="variables-field" for="assurance">
-                                        <span class="status-label">Assurance % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taux d'assurance emprunteur annuel (ADI), en % du capital emprunté. Environ 0,20–0,40 %.">?</button></span>
+                                        <span class="status-label">Assurance %</span>
                                         <input id="assurance" name="assurance" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="frais-bancaires">
-                                        <span class="status-label">Frais bancaires <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Frais de dossier bancaire et garantie (hypothèque ou caution). Généralement 1 000–2 000 €.">?</button></span>
+                                        <span class="status-label">Frais bancaires</span>
                                         <input id="frais-bancaires" name="frais-bancaires" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
                                     </label>
                                 </div>
@@ -237,19 +294,19 @@
                                         <input id="vacance" name="vacance" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
                                     </label>
                                     <label class="variables-field" for="copro">
-                                        <span class="status-label">Charges de copro / mois <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Charges de copropriété mensuelles non récupérables sur le locataire, en €.">?</button></span>
+                                        <span class="status-label">Charges de copro / mois</span>
                                         <input id="copro" name="copro" type="number" class="variables-input" min="0" step="10" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="fonciere">
-                                        <span class="status-label">Taxe foncière / an <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Taxe foncière annuelle estimée. Vérifier l'avis le plus récent ou demander au vendeur.">?</button></span>
+                                        <span class="status-label">Taxe foncière / an</span>
                                         <input id="fonciere" name="fonciere" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="pno">
-                                        <span class="status-label">Assurance PNO / an <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Prime d'assurance propriétaire non occupant (PNO) annuelle. Obligatoire en copropriété.">?</button></span>
+                                        <span class="status-label">Assurance PNO / an</span>
                                         <input id="pno" name="pno" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="gestion">
-                                        <span class="status-label">Gestion % <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Honoraires de gestion locative, en % des loyers perçus. 0 si gestion en direct.">?</button></span>
+                                        <span class="status-label">Gestion %</span>
                                         <input id="gestion" name="gestion" type="number" class="variables-input" min="0" step="0.1" inputmode="decimal">
                                     </label>
                                 </div>
@@ -427,65 +484,16 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid">
                                     <label class="variables-field variables-field--wide" for="decision-thesis">
-                                        <span class="status-label">Hypothèse d'analyse <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Résumez l'hypothèse principale retenue pour ce dossier. Requis pour enregistrer le dossier (20 caractères min).">?</button></span>
-                                        <span id="decision-thesis-help" class="field-assist">Champ requis pour enregistrer le dossier. Résumez l'hypothèse d'analyse en 20 caractères minimum.</span>
-                                        <textarea id="decision-thesis" name="decision-thesis" class="variables-input variables-textarea" rows="4" aria-required="true" aria-describedby="decision-thesis-help decision-thesis-error"></textarea>
+                                        <span class="status-label">Hypothèse d'analyse</span>
+                                        <span id="decision-thesis-help" class="field-assist">Optionnel. Résumez l'hypothèse d'analyse pour ce dossier.</span>
+                                        <textarea id="decision-thesis" name="decision-thesis" class="variables-input variables-textarea" rows="4" aria-describedby="decision-thesis-help decision-thesis-error"></textarea>
                                         <span id="decision-thesis-error" class="field-error" aria-live="polite" hidden></span>
                                     </label>
                                     <label class="variables-field variables-field--wide" for="decision-next-step">
-                                        <span class="status-label">Action suivante <span class="field-required" aria-hidden="true">*</span> <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Indiquez l'action suivante à mener sur ce dossier (visite, devis, offre, demande de pièces). Requis pour enregistrer (10 caractères min).">?</button></span>
-                                        <span id="decision-next-step-help" class="field-assist">Champ requis pour enregistrer le dossier. Indiquez l'action suivante en 10 caractères minimum.</span>
-                                        <textarea id="decision-next-step" name="decision-next-step" class="variables-input variables-textarea" rows="3" aria-required="true" aria-describedby="decision-next-step-help decision-next-step-error"></textarea>
+                                        <span class="status-label">Action suivante</span>
+                                        <span id="decision-next-step-help" class="field-assist">Optionnel. Indiquez l'action suivante sur ce dossier.</span>
+                                        <textarea id="decision-next-step" name="decision-next-step" class="variables-input variables-textarea" rows="3" aria-describedby="decision-next-step-help decision-next-step-error"></textarea>
                                         <span id="decision-next-step-error" class="field-error" aria-live="polite" hidden></span>
-                                    </label>
-                                </div>
-                            </fieldset>
-                                </div>
-                            </div>
-
-                                </div>
-                            </div>
-
-                            <!-- ZONE OPTIONNEL (closed) -->
-                            <div class="form-zone" data-zone="optionnel" data-open="false">
-                                <div class="form-zone__head" role="button" tabindex="0" aria-expanded="false">
-                                    <span class="form-zone__badge form-zone__badge--avance">OPTIONNEL</span>
-                                    <span class="form-zone__name">Identité du dossier</span>
-                                    <span class="form-zone__chevron">▶</span>
-                                </div>
-                                <div class="form-zone__body" hidden>
-
-                            <div class="accord-section" data-priority="optionnel" data-open="false">
-                                <button type="button" class="accord-head" aria-expanded="false">
-                                    <span class="accord-title">Identité du dossier</span>
-                                    <span class="accord-badge">Optionnel</span>
-                                    <svg class="accord-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                </button>
-                                <div class="accord-body">
-                                <fieldset class="variables-group">
-                                <div class="variables-grid">
-                                    <label class="variables-field" for="nom-bien">
-                                        <span class="status-label">Nom du bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Nom libre pour identifier ce dossier dans votre comparateur et vos exports PDF.">?</button></span>
-                                        <input id="nom-bien" name="nom-bien" type="text" class="variables-input" maxlength="60" autocomplete="off" placeholder="ex. T3 centre Tours">
-                                    </label>
-                                    <label class="variables-field" for="ville">
-                                        <span class="status-label">Ville <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Ville où se situe le bien. Utilisée pour contextualiser l'analyse et le rapport.">?</button></span>
-                                        <input id="ville" name="ville" type="text" class="variables-input" maxlength="60" autocomplete="off" placeholder="ex. Tours">
-                                    </label>
-                                    <label class="variables-field" for="type-bien">
-                                        <span class="status-label">Type de bien <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Type du bien. Influence les valeurs par défaut des seuils de décision et des charges.">?</button></span>
-                                        <select id="type-bien" name="type-bien" class="variables-input">
-                                            <option value="appartement">Appartement</option>
-                                            <option value="maison">Maison</option>
-                                            <option value="immeuble">Immeuble de rapport</option>
-                                        </select>
-                                    </label>
-                                    <label class="variables-field" for="statut-bien">
-                                        <span class="status-label">Statut <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Candidat = bien en cours d'étude. Acquis = bien déjà dans votre patrimoine.">?</button></span>
-                                        <select id="statut-bien" name="statut-bien" class="variables-input">
-                                            <option value="candidate">À étudier</option>
-                                            <option value="owned">Déjà au portefeuille</option>
-                                        </select>
                                     </label>
                                 </div>
                             </fieldset>
@@ -497,28 +505,12 @@
 
                         </form>
 
-                        <div class="asset-actions">
-                            <button type="button" id="new-asset" class="toolbar-button">Nouvelle étude</button>
-                            <button type="button" id="save-comparison" class="toolbar-button">Enregistrer au comparateur</button>
-                            <button type="button" id="save-portfolio" class="toolbar-button">Basculer au portefeuille</button>
-                        <div id="asset-status-bar" class="asset-status-bar asset-status-bar--new" aria-live="polite">
-                            <div class="asset-status-bar__left">
-                                <span class="asset-status-bar__dot asset-status-bar__dot--new">○</span>
-                                <span class="asset-status-bar__text">Nouvelle étude · pas encore enregistrée</span>
-                            </div>
-                            <div class="asset-status-bar__badges"></div>
-                        </div>
-                            <button type="button" id="export-decision-pdf" class="toolbar-button">Exporter la note PDF</button>
-                        </div>
                     </section>
 
                     <section id="analysis-panel" class="analysis-panel" aria-label="Analyse évolutive">
-                        <div class="panel-head panel-head--stacked">
-                            <div>
-                                <p id="analysis-kicker" class="brand-kicker"></p>
-                                <h3>Synthèse analytique</h3>
-                                <p id="analysis-subtitle" class="panel-note"></p>
-                            </div>
+                        <div class="panel-head panel-head--stacked panel-head--compact">
+                            <p id="analysis-kicker" class="brand-kicker"></p>
+                            <p id="analysis-subtitle" class="panel-note"></p>
                         </div>
 
                         <div id="analysis-sticky-summary" class="analysis-sticky-summary" aria-label="Synthèse instantanée"></div>
@@ -634,6 +626,7 @@
                 </div>
 
                 <div id="portfolio-kpi-banner"></div>
+                <div id="portfolio-simulator"></div>
                 <section id="portfolio-hero" class="workspace-hero" aria-label="Synthèse portefeuille"></section>
 
                 <div id="portfolio-summary" class="analysis-grid"></div>
@@ -705,7 +698,6 @@
                     <div class="feasibility-target-card">
                         <label class="feasibility-label" for="feasibility-target-cf">
                             Objectif de cash-flow net-net
-                            <button class="field-hint" type="button" tabindex="-1" data-tip="Le montant net que vous voulez garder chaque mois après crédit, charges et impôts.">?</button>
                         </label>
                         <div class="feasibility-input-row">
                             <input type="number" id="feasibility-target-cf" class="variables-input" value="100" step="10" min="-500" max="2000">
@@ -1106,6 +1098,7 @@
                                 <button id="scanner-empty-focus-target" type="button" class="scanner-btn scanner-btn--primary">Préparer un scan</button>
               </div>
             </section>
+            </div>
         </main>
 
         <div id="profile-modal" class="modal" aria-hidden="true">
@@ -1172,7 +1165,6 @@
                     <div class="form-field">
                         <label class="form-label" for="profile-objectif-cf">
                             Objectif CF mensuel net-net
-                            <button class="field-hint" type="button" tabindex="-1" data-tip="Le cash-flow net-net mensuel cible pour l ensemble du portefeuille.">?</button>
                         </label>
                         <div class="feasibility-input-row">
                             <input type="number" id="profile-objectif-cf" class="variables-input" min="0" max="50000" step="100" placeholder="1000">
@@ -1182,7 +1174,6 @@
                     <div class="form-field">
                         <label class="form-label" for="profile-revalo-annuelle">
                             Revalorisation annuelle estimée
-                            <button class="field-hint" type="button" tabindex="-1" data-tip="Taux de revalorisation annuelle du prix des biens pour la projection patrimoniale.">?</button>
                         </label>
                         <div class="feasibility-input-row">
                             <input type="number" id="profile-revalo-annuelle" class="variables-input" min="0" max="20" step="0.5" placeholder="2">
