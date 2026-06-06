@@ -1041,10 +1041,6 @@ html[data-theme='light'] .topbar {
     text-align: left;
 }
 
-/* ── Workspace tabs ── */
-/* .workspace-tabs supprimé — navigation migrée dans .app-sidebar */
-.workspace-tabs { display: none; }
-
 /* Styles de base pour .workspace-tab (repris par .sidebar-nav .workspace-tab) */
 .workspace-tab {
     font-family: var(--font-body);
