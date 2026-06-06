@@ -3254,12 +3254,13 @@ html[data-theme='light'] select {
 /* ── Barre KPIs collante (formulaire) ── */
 .form-kpi-bar {
     position: sticky;
-    top: 0;
+    top: 0;   /* colle au sommet de la zone de défilement du variables-panel */
     z-index: 10;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
     padding: 10px 16px;
     margin-bottom: 8px;
 }
