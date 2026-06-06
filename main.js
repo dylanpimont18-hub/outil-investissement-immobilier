@@ -278,8 +278,7 @@ const nodes = {
     decisionThesisError: document.getElementById('decision-thesis-error'),
     decisionNextStepError: document.getElementById('decision-next-step-error'),
     newAsset: document.getElementById('new-asset'),
-    saveComparison: document.getElementById('save-comparison'),
-    savePortfolio: document.getElementById('save-portfolio'),
+    saveAsset: document.getElementById('save-asset'),
     exportDecisionPdf: document.getElementById('export-decision-pdf'),
     analysisKicker: document.getElementById('analysis-kicker'),
     analysisSubtitle: document.getElementById('analysis-subtitle'),
@@ -2277,7 +2276,7 @@ function createOrUpdateCurrentAsset(flags) {
     }
 
     // Flash de confirmation sur le bouton cliqué
-    const flashBtn = flags.inComparison ? nodes.saveComparison : nodes.savePortfolio;
+    const flashBtn = nodes.saveAsset;
     if (flashBtn) {
         const originalText = flashBtn.textContent;
         flashBtn.classList.add('is-saved-flash');
@@ -2436,10 +2435,10 @@ function syncVariablesForm() {
 function syncAssetActionLabels() {
     const isSaved = Boolean(state.activeAssetId && state.assetRecords.some(asset => asset.id === state.activeAssetId));
     nodes.newAsset.disabled = !isSaved;
-    nodes.saveComparison.textContent = isSaved ? 'Mettre a jour le comparateur' : 'Enregistrer dans le comparateur';
-    nodes.savePortfolio.textContent = isSaved
-        ? (state.variablesData['statut-bien'] === 'owned' ? 'Mettre a jour le bien detenu' : 'Mettre a jour le portefeuille')
-        : (state.variablesData['statut-bien'] === 'owned' ? 'Ajouter comme bien detenu' : 'Ajouter au portefeuille');
+    const statut = state.variablesData['statut-bien'];
+    nodes.saveAsset.textContent = isSaved
+        ? (statut === 'owned' ? 'Mettre à jour le bien' : 'Mettre à jour')
+        : (statut === 'owned' ? 'Ajouter au portefeuille' : 'Enregistrer');
 
     // Barre de statut
     if (nodes.assetStatusBar) {
@@ -4181,8 +4180,10 @@ function bindEvents() {
         syncDecisionJournalValidity();
     });
     nodes.newAsset.addEventListener('click', detachCurrentAsset);
-    nodes.saveComparison.addEventListener('click', () => createOrUpdateCurrentAsset({ inComparison: true }));
-    nodes.savePortfolio.addEventListener('click', () => createOrUpdateCurrentAsset({ inPortfolio: true }));
+    nodes.saveAsset.addEventListener('click', () => {
+        const statut = state.variablesData['statut-bien'];
+        createOrUpdateCurrentAsset(statut === 'owned' ? { inPortfolio: true } : { inComparison: true });
+    });
     nodes.exportDecisionPdf.addEventListener('click', handleDecisionSummaryExport);
     if (nodes.portfolioAssetGridOwned) nodes.portfolioAssetGridOwned.addEventListener('click', handlePortfolioCardAction);
     if (nodes.portfolioAssetGridPipeline) nodes.portfolioAssetGridPipeline.addEventListener('click', handlePortfolioCardAction);
