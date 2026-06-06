@@ -507,6 +507,13 @@
                     </section>
 
                     <section id="analysis-panel" class="analysis-panel" aria-label="Analyse évolutive">
+                        <nav class="analysis-toc" aria-label="Navigation sections">
+                            <a href="#analysis-anchor-verdict"    class="analysis-toc__link">① Verdict</a>
+                            <a href="#analysis-anchor-economie"   class="analysis-toc__link">② Économie</a>
+                            <a href="#analysis-anchor-robustesse" class="analysis-toc__link">③ Robustesse</a>
+                            <a href="#analysis-anchor-scenarios"  class="analysis-toc__link">④ Scénarios</a>
+                            <a href="#analysis-anchor-action"     class="analysis-toc__link">⑤ Action</a>
+                        </nav>
                         <div class="panel-head panel-head--stacked panel-head--compact">
                             <p id="analysis-kicker" class="brand-kicker"></p>
                             <p id="analysis-subtitle" class="panel-note"></p>
@@ -515,11 +522,11 @@
                         <div id="analysis-sticky-summary" class="analysis-sticky-summary" aria-label="Synthèse instantanée"></div>
 
                         <section class="analysis-buybox analysis-block">
-                            <div class="analysis-section-badge">① VERDICT</div>
+                            <div id="analysis-anchor-verdict" class="analysis-section-badge">① VERDICT</div>
                             <div id="analysis-acquisition-decision"></div>
                         </section>
 
-                        <div class="analysis-section-badge">② ÉCONOMIE DU DEAL</div>
+                        <div id="analysis-anchor-economie" class="analysis-section-badge">② ÉCONOMIE DU DEAL</div>
                         <div id="analysis-cf-waterfall" class="cf-waterfall"></div>
 
                         <div id="analysis-metrics" class="analysis-grid"></div>
@@ -541,7 +548,7 @@
                             </section>
                         </div>
 
-                        <div class="analysis-section-badge">③ ROBUSTESSE</div>
+                        <div id="analysis-anchor-robustesse" class="analysis-section-badge">③ ROBUSTESSE</div>
                         <div class="analysis-columns--2up">
                             <section class="analysis-block">
                                 <h4>Solidité des hypothèses</h4>
@@ -559,7 +566,7 @@
                             <div id="analysis-details"></div>
                         </section>
 
-                        <div class="analysis-section-badge">④ SCÉNARIOS &amp; PROJECTIONS</div>
+                        <div id="analysis-anchor-scenarios" class="analysis-section-badge">④ SCÉNARIOS &amp; PROJECTIONS</div>
                         <div class="analysis-columns--2up">
                             <section class="analysis-block">
                                 <h4>Scénarios de stress</h4>
@@ -599,7 +606,7 @@
                             <div id="analysis-regime-table"></div>
                         </section>
 
-                        <div class="analysis-section-badge">⑤ PLAN D'ACTION</div>
+                        <div id="analysis-anchor-action" class="analysis-section-badge">⑤ PLAN D'ACTION</div>
                         <div class="analysis-columns--2up">
                             <section class="analysis-block">
                                 <h4>Journal de décision</h4>
