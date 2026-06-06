@@ -2501,6 +2501,21 @@ function detachCurrentAsset() {
     saveVariablesData();
     saveActiveAssetId();
     render({ syncVariables: true, syncProfile: false });
+    openEssentielAccordions();
+}
+
+function openEssentielAccordions() {
+    const essentielZone = document.querySelector('.form-zone[data-zone="essentiel"]');
+    if (essentielZone) {
+        essentielZone.dataset.open = 'true';
+        essentielZone.querySelectorAll('.accord-section').forEach(section => {
+            section.dataset.open = 'true';
+            const btn = section.querySelector('.accord-head');
+            const body = section.querySelector('.accord-body');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+            if (body) body.hidden = false;
+        });
+    }
 }
 
 function setProfileConfigured() {
