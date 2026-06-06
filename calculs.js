@@ -1037,12 +1037,17 @@ function buildTenYearProjection(model, inputs, tmi) {
     };
 }
 
+const _matrixCache = { key: null, data: null };
+
 function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, thresholds) {
+    const cacheKey = `${prixNet}|${loyer}|${adults}|${children}|${inputs['revenus']}|${inputs['taux']}|${inputs['duree']}|${inputs['regime']}|${inputs['nego']}|${inputs['apport']}|${inputs['taxe-fonciere']}|${inputs['charges-copro']}|${inputs['assurance-pno']}|${inputs['vacance']}|${inputs['frais-bancaires']}|${thresholds.minCf}|${thresholds.minDscr}`;
+    if (_matrixCache.key === cacheKey) return _matrixCache.data;
+
     const priceOffsets = [-10000, -5000, 0, 5000, 10000];
     const rentOffsets = [-100, -50, 0, 50, 100];
     const tmi = calculateTMI(inputs.revenus || 0, { adults, children });
 
-    return {
+    const result = {
         columnRents: rentOffsets.map(delta => ({
             delta,
             value: Math.max(0, loyer + delta),
@@ -1078,6 +1083,10 @@ function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, threshol
             };
         })
     };
+
+    _matrixCache.key = cacheKey;
+    _matrixCache.data = result;
+    return result;
 }
 
 export function computeAnalysisViewModel(projectData) {
