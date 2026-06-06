@@ -8,6 +8,16 @@ import sys
 import threading
 import time
 
+# ── Instance unique (Windows) ─────────────────────────────────────────────────
+# Si l'app tourne déjà (icône dans la barre système), on quitte immédiatement
+# pour éviter l'accumulation d'icônes fantômes.
+import ctypes
+_MUTEX_NAME = "Global\\SparkInvestissement_SingleInstance"
+_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+    ctypes.windll.kernel32.CloseHandle(_mutex)
+    sys.exit(0)
+
 # ── Répertoire de base ────────────────────────────────────────────────────────
 # sys.executable quand frozen = le .exe ; __file__ en développement
 if getattr(sys, 'frozen', False):
@@ -57,8 +67,8 @@ def _load_icon():
     path = os.path.join(BASE_DIR, 'Logo_site.png')
     if os.path.exists(path):
         return Image.open(path).convert('RGBA').resize((64, 64), Image.LANCZOS)
-    # icône de secours : carré doré
-    return Image.new('RGBA', (64, 64), (197, 160, 89, 255))
+    # icône de secours : carré indigo
+    return Image.new('RGBA', (64, 64), (99, 102, 241, 255))
 
 def _tray_open(icon, item):
     if _win[0]:
@@ -92,11 +102,11 @@ window = webview.create_window(
 _win[0] = window
 
 def _on_closing():
-    """Fermeture → réduire dans la barre système au lieu de quitter."""
-    window.hide()
-    return False
+    """Fermeture de la fenêtre → quitter proprement."""
+    tray.stop()
+    os._exit(0)
 
 window.events.closing += _on_closing
 
-webview.start()
+webview.start(private_mode=False)
 tray.stop()
