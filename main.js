@@ -1588,6 +1588,29 @@ function closeAssetDetailDrawer() {
     }, 220);
 }
 
+function _openDrawer(overlay, drawer, onClose, focusTarget) {
+    overlay.style.display = 'block';
+    drawer.style.display = 'block';
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
+    void drawer.offsetWidth;
+    overlay.classList.add('is-open');
+    drawer.classList.add('is-open');
+    overlay.onclick = onClose;
+    if (focusTarget) window.requestAnimationFrame(() => focusTarget?.focus());
+}
+
+function _closeDrawer(overlay, drawer) {
+    overlay?.classList.remove('is-open');
+    drawer?.classList.remove('is-open');
+    overlay?.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('drawer-open');
+    setTimeout(() => {
+        if (overlay) overlay.style.display = 'none';
+        if (drawer) drawer.style.display = 'none';
+    }, 220);
+}
+
 function openCreditDrawer(assetId) {
     const asset = getAssetRecordById(assetId);
     if (!asset || !nodes.creditDrawer) return;
@@ -1599,27 +1622,11 @@ function openCreditDrawer(assetId) {
     nodes.creditDateFin.value = cs?.dateFin || '';
     nodes.creditMensualite.value = cs?.mensualite != null ? String(cs.mensualite) : '';
     nodes.creditDateRevente.value = asset.dateRevente || '';
-
-    nodes.creditDrawerOverlay.style.display = 'block';
-    nodes.creditDrawer.style.display = 'block';
-    nodes.creditDrawerOverlay.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('drawer-open');
-    void nodes.creditDrawer.offsetWidth;
-    nodes.creditDrawerOverlay.classList.add('is-open');
-    nodes.creditDrawer.classList.add('is-open');
-    nodes.creditDrawerOverlay.onclick = closeCreditDrawer;
-    window.requestAnimationFrame(() => nodes.creditDateDebut?.focus());
+    _openDrawer(nodes.creditDrawerOverlay, nodes.creditDrawer, closeCreditDrawer, nodes.creditDateDebut);
 }
 
 function closeCreditDrawer() {
-    nodes.creditDrawerOverlay?.classList.remove('is-open');
-    nodes.creditDrawer?.classList.remove('is-open');
-    nodes.creditDrawerOverlay?.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('drawer-open');
-    setTimeout(() => {
-        if (nodes.creditDrawerOverlay) nodes.creditDrawerOverlay.style.display = 'none';
-        if (nodes.creditDrawer) nodes.creditDrawer.style.display = 'none';
-    }, 220);
+    _closeDrawer(nodes.creditDrawerOverlay, nodes.creditDrawer);
 }
 
 function openAutreCreditDrawer(creditId) {
@@ -1634,26 +1641,11 @@ function openAutreCreditDrawer(creditId) {
     nodes.autreCreditDateDebut.value = credit?.dateDebut || '';
     nodes.autreCreditDateFin.value = credit?.dateFin || '';
     nodes.autreCreditCrd.value = credit?.capitalRestantDu != null ? String(credit.capitalRestantDu) : '';
-    nodes.autreCreditDrawerOverlay.style.display = 'block';
-    nodes.autreCreditDrawer.style.display = 'block';
-    nodes.autreCreditDrawerOverlay.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('drawer-open');
-    void nodes.autreCreditDrawer.offsetWidth;
-    nodes.autreCreditDrawerOverlay.classList.add('is-open');
-    nodes.autreCreditDrawer.classList.add('is-open');
-    nodes.autreCreditDrawerOverlay.onclick = closeAutreCreditDrawer;
-    window.requestAnimationFrame(() => nodes.autreCreditLibelle?.focus());
+    _openDrawer(nodes.autreCreditDrawerOverlay, nodes.autreCreditDrawer, closeAutreCreditDrawer, nodes.autreCreditLibelle);
 }
 
 function closeAutreCreditDrawer() {
-    nodes.autreCreditDrawerOverlay?.classList.remove('is-open');
-    nodes.autreCreditDrawer?.classList.remove('is-open');
-    nodes.autreCreditDrawerOverlay?.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('drawer-open');
-    setTimeout(() => {
-        if (nodes.autreCreditDrawerOverlay) nodes.autreCreditDrawerOverlay.style.display = 'none';
-        if (nodes.autreCreditDrawer) nodes.autreCreditDrawer.style.display = 'none';
-    }, 220);
+    _closeDrawer(nodes.autreCreditDrawerOverlay, nodes.autreCreditDrawer);
 }
 
 function handleAutreCreditDrawerSave(event) {
