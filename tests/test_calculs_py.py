@@ -79,7 +79,6 @@ class TestSciIsAmortissement(unittest.TestCase):
         cf_with_08 = C._cf_sci_is(loyer, mensualite, 0, 0, 0, prix, 3.0, 0.30, 240)
         # Manual check: if 0.80 is used, amort_an = 3200
         # Compute expected CF manually with 0.80
-        import math
         taux_m = 3.0 / 100 / 12
         n = 240
         credit = prix * taux_m / (1 - (1 + taux_m) ** -n)
