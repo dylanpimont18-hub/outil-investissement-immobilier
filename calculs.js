@@ -29,26 +29,36 @@ export function calculateTMI(revenus, foyer = 0) {
     return 45;
 }
 
-function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationAnnuelles, inputs, tmi, interestYear, insuranceYear, year = 1) {
+function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationAnnuelles, inputs, tmi, interestYear, insuranceYear, year = 1, carryForwardDeficit = 0) {
     const tauxGlobalImpot = (tmi / 100) + CSG_CRDS_RATE;
     const oneOffCharges = year === 1 ? (inputs['travaux'] || 0) + (inputs['frais-bancaires'] || 0) : 0;
 
     if (inputs['regime'] === 'micro-foncier') {
-        return (loyersEncaisses * 0.7) * tauxGlobalImpot;
+        return { tax: (loyersEncaisses * 0.7) * tauxGlobalImpot, newCarryForward: 0 };
     }
 
     if (inputs['regime'] === 'reel') {
         const chargesAnnuelles = chargesExploitationAnnuelles + insuranceYear + oneOffCharges;
         const revenusNets = loyersEncaisses - chargesAnnuelles - interestYear;
+
         if (revenusNets > 0) {
-            return revenusNets * tauxGlobalImpot;
+            // Consommer d'abord le carry-forward disponible avant d'imposer
+            const absorbed = Math.min(carryForwardDeficit, revenusNets);
+            const assiette = revenusNets - absorbed;
+            const remainingCarry = carryForwardDeficit - absorbed;
+            return { tax: assiette * tauxGlobalImpot, newCarryForward: remainingCarry };
         }
 
         const soldeHorsInterets = loyersEncaisses - chargesAnnuelles;
         if (soldeHorsInterets < 0) {
-            return -(Math.min(10700, Math.abs(soldeHorsInterets)) * (tmi / 100));
+            const deductibleNow = Math.min(10700, Math.abs(soldeHorsInterets));
+            const addedCarry = Math.max(0, Math.abs(soldeHorsInterets) - 10700);
+            return {
+                tax: -(deductibleNow * (tmi / 100)),
+                newCarryForward: carryForwardDeficit + addedCarry
+            };
         }
-        return 0;
+        return { tax: 0, newCarryForward: carryForwardDeficit };
     }
 
     if (inputs['regime'] === 'sci-is') {
@@ -56,11 +66,11 @@ function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationA
         const chargesDeductibles = chargesExploitationAnnuelles + insuranceYear + interestYear + oneOffCharges;
         const benefice = loyersEncaisses - chargesDeductibles - amortissement;
         if (benefice > 0) {
-            return Math.min(benefice, 42500) * 0.15 + Math.max(0, benefice - 42500) * 0.25;
+            return { tax: Math.min(benefice, 42500) * 0.15 + Math.max(0, benefice - 42500) * 0.25, newCarryForward: 0 };
         }
     }
 
-    return 0;
+    return { tax: 0, newCarryForward: 0 };
 }
 
 function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
@@ -93,7 +103,7 @@ function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
         }
     }
 
-    const impotsAnnee = computeAnnualTaxEstimate(
+    const taxResult = computeAnnualTaxEstimate(
         prixNet,
         loyersEncaisses,
         chargesExploitationAnnuelles,
@@ -103,6 +113,7 @@ function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
         coutAssuranceMensuel * 12,
         1
     );
+    const impotsAnnee = taxResult.tax;
 
     const cfNet = (loyersEncaisses / 12) - mensualiteTotale - (chargesExploitationAnnuelles / 12);
     const cfNetNet = cfNet - (impotsAnnee / 12);
@@ -1023,7 +1034,7 @@ function buildTenYearProjection(model, inputs, tmi) {
             remainingCapital = Math.max(0, remainingCapital - principalMonth);
         }
 
-        const taxesYear = computeAnnualTaxEstimate(
+        const taxResult = computeAnnualTaxEstimate(
             model.prixNet,
             model.loyersEncaisses,
             model.chargesExploitationAnnuelles,
@@ -1033,7 +1044,7 @@ function buildTenYearProjection(model, inputs, tmi) {
             insuranceYear,
             year
         );
-        const annualCashflow = model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxesYear;
+        const annualCashflow = model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxResult.tax;
 
         cumulativeCashflow += annualCashflow;
         cumulativePrincipal += principalYear;
@@ -1126,6 +1137,7 @@ function buildLoanCashflowTable(model, inputs, tmi) {
     const totalMonths = model.montantFinance > 0 ? duree * 12 : 0;
     let remainingCapital = model.montantFinance;
     const rows = [];
+    let carryForwardDeficit = 0;
 
     for (let year = 1; year <= duree; year++) {
         let interestYear = 0;
@@ -1146,7 +1158,7 @@ function buildLoanCashflowTable(model, inputs, tmi) {
             remainingCapital = Math.max(0, remainingCapital - principalMonth);
         }
 
-        const taxesYear = computeAnnualTaxEstimate(
+        const taxResult = computeAnnualTaxEstimate(
             model.prixNet,
             model.loyersEncaisses,
             model.chargesExploitationAnnuelles,
@@ -1154,13 +1166,16 @@ function buildLoanCashflowTable(model, inputs, tmi) {
             tmi,
             interestYear,
             insuranceYear,
-            year
+            year,
+            carryForwardDeficit
         );
+        const taxesYear = taxResult.tax;
+        carryForwardDeficit = taxResult.newCarryForward;
 
         const cfAvantImpot = (model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear) / 12;
         const cfApresImpot = cfAvantImpot - (taxesYear / 12);
 
-        rows.push({ year, cfAvantImpot, cfApresImpot });
+        rows.push({ year, cfAvantImpot, cfApresImpot, deficitReporte: Math.round(carryForwardDeficit) });
     }
 
     return rows;

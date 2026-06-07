@@ -1322,6 +1322,7 @@ function buildCashflowTable(rows) {
         nodes.analysisCashflowTable.innerHTML = '';
         return;
     }
+    const hasDeficit = rows.some(r => (r.deficitReporte || 0) > 0);
     nodes.analysisCashflowTable.innerHTML = `
         <div class="analysis-cashflow-scroll">
             <table class="analysis-table analysis-table--cashflow">
@@ -1331,6 +1332,7 @@ function buildCashflowTable(rows) {
                         <th>CF avant impôt</th>
                         <th>CF après impôt</th>
                         <th>Écart fiscal</th>
+                        ${hasDeficit ? '<th>Déficit reporté</th>' : ''}
                     </tr>
                 </thead>
                 <tbody>
@@ -1344,6 +1346,7 @@ function buildCashflowTable(rows) {
                                 <td><strong class="${avantClass}">${formatSignedCurrency(row.cfAvantImpot)}</strong></td>
                                 <td><strong class="${apresClass}">${formatSignedCurrency(row.cfApresImpot)}</strong></td>
                                 <td class="value-neutral">${formatCurrency(ecart)}</td>
+                                ${hasDeficit ? `<td class="value-neutral">${row.deficitReporte > 0 ? formatCurrency(row.deficitReporte) : '—'}</td>` : ''}
                             </tr>
                         `;
                     }).join('')}
