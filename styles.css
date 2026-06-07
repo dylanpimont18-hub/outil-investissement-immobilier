@@ -8370,8 +8370,8 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     bottom: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: var(--color-surface-strong, #1e1e2e);
-    color: var(--color-text-primary, #f0eff4);
+    background: var(--surface-strong, #272428);
+    color: var(--text, #E8E4DF);
     font-size: 11px;
     line-height: 1.45;
     padding: 6px 10px;
@@ -8387,5 +8387,36 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 }
 [data-tooltip]:hover::after,
 [data-tooltip]:focus-within::after {
+    opacity: 1;
+}
+/* Variante : tooltip vers le bas (pour éléments en sticky bar en haut de viewport) */
+[data-tooltip-below] {
+    position: relative;
+    cursor: help;
+}
+[data-tooltip-below]::after {
+    content: attr(data-tooltip-below);
+    position: absolute;
+    top: calc(100% + 6px);
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-strong, #272428);
+    color: var(--text, #E8E4DF);
+    font-size: 11px;
+    line-height: 1.45;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: normal;
+    max-width: 260px;
+    text-align: left;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 200;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+[data-tooltip-below]:hover::after,
+[data-tooltip-below]:focus-within::after {
     opacity: 1;
 }
