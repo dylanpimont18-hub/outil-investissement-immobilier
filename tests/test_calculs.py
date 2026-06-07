@@ -5,15 +5,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scraper"))
 
 from calculs import (
-    _mensualite, _interets_annee1,
+    _mensualite_credit, _interets_annee1,
     _cf_micro_foncier, _cf_reel_foncier, _cf_sci_is,
 )
 
 
 def test_mensualite_basique():
-    # 100 000 € sur 20 ans à 3.35% + 0.30% assurance
-    m = _mensualite(100_000, 3.35, 0.30, 240)
-    assert 560 < m < 600  # ~578 €/mois
+    # 100 000 € sur 20 ans à 3.35% — crédit seul + assurance séparée
+    credit = _mensualite_credit(100_000, 3.35, 240)
+    assurance = 100_000 * 0.30 / 100 / 12
+    m = credit + assurance
+    assert 560 < m < 600  # ~579 €/mois
 
 
 def test_interets_annee1():

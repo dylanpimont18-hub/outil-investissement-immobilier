@@ -9,10 +9,11 @@ from config import (
 )
 
 
-def _mensualite(capital, taux_annuel_pct, assurance_annuel_pct, duree_mois):
-    taux = (taux_annuel_pct + assurance_annuel_pct) / 100 / 12
+def _mensualite_credit(capital, taux_annuel_pct, duree_mois):
+    """Mensualité crédit seul, sans assurance (aligné sur calculs.js)."""
+    taux = taux_annuel_pct / 100 / 12
     if taux == 0:
-        return capital / duree_mois
+        return capital / duree_mois if duree_mois > 0 else 0.0
     return capital * taux / (1 - (1 + taux) ** (-duree_mois))
 
 
@@ -37,19 +38,60 @@ def _loyer_fallback(surface, type_bien) -> float:
     return min(surface * loyer_m2, loyer_max)
 
 
-def get_loyer_marche(ville, type_bien, surface, conn):
-    """Retourne (loyer_median, nb_annonces) depuis loyers_marche, ou None."""
+def get_loyer_marche(ville, type_bien, surface, conn, code_postal=None, nb_pieces=None):
+    """Retourne (loyer_median, nb_annonces) depuis loyers_marche, ou None.
+
+    Priorité de recherche :
+      1. ville + nb_pieces + tranche surface  (match le plus précis)
+      2. code_postal + nb_pieces + tranche surface
+      3. ville + tranche surface (toutes pièces)
+      4. code_postal + tranche surface (fallback le plus large)
+    """
     if not conn:
         return None
     try:
-        row = conn.execute("""
-            SELECT loyer_median, nb_annonces FROM loyers_marche
-            WHERE ville = ? AND type_bien = ?
-              AND surface_min <= ? AND surface_max > ?
-            ORDER BY nb_annonces DESC
-            LIMIT 1
-        """, (ville, type_bien, float(surface), float(surface))).fetchone()
-        return (float(row["loyer_median"]), int(row["nb_annonces"])) if row else None
+        surf = float(surface)
+
+        def _query_rows(where_clause, params):
+            return conn.execute(
+                f"SELECT loyer_median, nb_annonces FROM loyers_marche "
+                f"WHERE {where_clause} AND surface_min <= ? AND surface_max > ?",
+                (*params, surf, surf)
+            ).fetchall()
+
+        def _aggregate(rows):
+            if not rows:
+                return None
+            total_n = sum(r["nb_annonces"] for r in rows)
+            median_w = sum(r["loyer_median"] * r["nb_annonces"] for r in rows) / total_n
+            return (round(median_w, 0), total_n)
+
+        # 1. Exact ville + nb_pieces
+        if nb_pieces is not None:
+            rows = _query_rows("ville=? AND type_bien=? AND nb_pieces=?",
+                               (ville, type_bien, nb_pieces))
+            if rows:
+                return _aggregate(rows)
+
+        # 2. CP + nb_pieces
+        if code_postal and nb_pieces is not None:
+            rows = _query_rows("code_postal=? AND type_bien=? AND nb_pieces=?",
+                               (code_postal, type_bien, nb_pieces))
+            if rows:
+                return _aggregate(rows)
+
+        # 3. Exact ville, toutes pièces
+        rows = _query_rows("ville=? AND type_bien=?", (ville, type_bien))
+        if rows:
+            return _aggregate(rows)
+
+        # 4. CP fallback, toutes pièces
+        if code_postal:
+            rows = _query_rows("code_postal=? AND type_bien=?", (code_postal, type_bien))
+            if rows:
+                return _aggregate(rows)
+
+        return None
     except Exception:
         return None
 
@@ -78,7 +120,7 @@ def _cf_sci_is(loyer, mensualite, charges_copro, taxe_fonciere, vacance,
                prix, taux_credit, assurance, duree_mois) -> float:
     interets_annuels   = _interets_annee1(prix, taux_credit, duree_mois)
     assurance_annuelle = prix * assurance / 100
-    amortissement_an   = prix * 0.85 / 30  # 85 % amortissable, 30 ans
+    amortissement_an   = prix * 0.80 / 30  # 80 % amortissable, 30 ans (aligné sur calculs.js)
     loyer_encaisse_an  = (loyer - vacance) * 12
     deductible         = (interets_annuels + assurance_annuelle + amortissement_an +
                           charges_copro * 12 + taxe_fonciere * 12)
@@ -127,7 +169,9 @@ def enrichir(annonce: dict, conn=None) -> dict:
     annonce["calculable"] = True
 
     # Priorité loyer : annonce > marché > taux fixe
-    loyer_marche = get_loyer_marche(ville, type_bien, surface, conn) if conn else None
+    code_postal  = annonce.get("code_postal")
+    nb_pieces    = annonce.get("nb_pieces")
+    loyer_marche = get_loyer_marche(ville, type_bien, surface, conn, code_postal, nb_pieces) if conn else None
     if annonce.get("loyer_actuel") and annonce.get("deja_loue"):
         loyer = float(annonce["loyer_actuel"])
         annonce["loyer_source"]     = "annonce"
@@ -155,7 +199,9 @@ def enrichir(annonce: dict, conn=None) -> dict:
         taxe_fonciere = loyer * TAXE_FONCIERE_RATIO
 
     vacance    = loyer * VACANCE_RATIO
-    mensualite = _mensualite(prix, TAUX_CREDIT, ASSURANCE, DUREE_MOIS)
+    mensualite_credit   = _mensualite_credit(prix, TAUX_CREDIT, DUREE_MOIS)
+    assurance_mensuelle = prix * ASSURANCE / 100 / 12
+    mensualite          = mensualite_credit + assurance_mensuelle
 
     cf_net      = loyer - mensualite - charges_copro - taxe_fonciere - vacance
     renta_brute = (loyer * 12) / prix * 100
