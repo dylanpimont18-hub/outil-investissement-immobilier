@@ -257,6 +257,8 @@ let profileModalReturnFocusTarget = null;
 let assetDetailReturnFocusTarget = null;
 
 const nodes = {
+    btnViewQuick: document.getElementById('btn-view-quick'),
+    btnViewFull: document.getElementById('btn-view-full'),
     themeToggle: document.getElementById('theme-toggle'),
     screenToggle: document.getElementById('screen-toggle'),
     profileTrigger: document.getElementById('profile-trigger'),
@@ -4299,6 +4301,31 @@ function handlePortfolioCardAction(event) {
     }
 }
 
+// ── Toggle Vue rapide / Vue complète ──────────────────────────────────────
+const ANALYSIS_VIEW_KEY = 'investissementWebAnalysisView';
+
+function _applyAnalysisView(view) {
+    if (!nodes.analysisPanel) return;
+    nodes.analysisPanel.dataset.analysisView = view;
+    if (nodes.btnViewQuick) {
+        nodes.btnViewQuick.classList.toggle('view-toggle-btn--active', view === 'quick');
+        nodes.btnViewQuick.setAttribute('aria-pressed', String(view === 'quick'));
+    }
+    if (nodes.btnViewFull) {
+        nodes.btnViewFull.classList.toggle('view-toggle-btn--active', view === 'full');
+        nodes.btnViewFull.setAttribute('aria-pressed', String(view === 'full'));
+    }
+    try { localStorage.setItem(ANALYSIS_VIEW_KEY, view); } catch {}
+}
+
+function _initAnalysisViewToggle() {
+    let saved = 'quick';
+    try { saved = localStorage.getItem(ANALYSIS_VIEW_KEY) || 'quick'; } catch {}
+    _applyAnalysisView(saved === 'full' ? 'full' : 'quick');
+    nodes.btnViewQuick?.addEventListener('click', () => _applyAnalysisView('quick'));
+    nodes.btnViewFull?.addEventListener('click', () => _applyAnalysisView('full'));
+}
+
 function initWorkspaceTabs() {
     const tabs = document.querySelectorAll('.workspace-tab');
     const workspacePanel = document.querySelector('.workspace-panel');
@@ -4494,6 +4521,7 @@ try {
 }
 applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
+_initAnalysisViewToggle();
 initScanner({ saveCurrentStudy });
 if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
     setTimeout(() => openProfileModal(), 400);

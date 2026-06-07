@@ -8420,3 +8420,37 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 [data-tooltip-below]:focus-within::after {
     opacity: 1;
 }
+
+/* ── Toggle Vue rapide / Vue complète ─────────────────────────────────────── */
+.analysis-view-toggle {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface-medium, var(--surface, #f1f5f9));
+    border-radius: 8px;
+    margin: 8px 0 16px;
+}
+.view-toggle-btn {
+    flex: 1;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-muted, var(--muted, #64748b));
+    transition: background 0.15s, color 0.15s;
+}
+.view-toggle-btn--active {
+    background: var(--surface-strong, #e2e8f0);
+    color: var(--text, #0f172a);
+    font-weight: 500;
+}
+
+/* Sections masquées en Vue rapide */
+#analysis-panel[data-analysis-view="quick"] .analysis-forward,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--sensitivity,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--cashflow {
+    display: none;
+}

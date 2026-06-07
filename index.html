@@ -514,6 +514,10 @@
                             <a href="#analysis-anchor-scenarios"  class="analysis-toc__link">④ Scénarios</a>
                             <a href="#analysis-anchor-action"     class="analysis-toc__link">⑤ Action</a>
                         </nav>
+                        <div class="analysis-view-toggle" id="analysis-view-toggle-bar">
+                            <button id="btn-view-quick" class="view-toggle-btn view-toggle-btn--active" type="button" aria-pressed="true">Vue rapide</button>
+                            <button id="btn-view-full" class="view-toggle-btn" type="button" aria-pressed="false">Vue complète</button>
+                        </div>
                         <div class="panel-head panel-head--stacked panel-head--compact">
                             <p id="analysis-kicker" class="brand-kicker"></p>
                             <p id="analysis-subtitle" class="panel-note"></p>
@@ -569,7 +573,7 @@
                                 <div id="analysis-scenarios"></div>
                             </section>
 
-                            <section class="analysis-block">
+                            <section class="analysis-block analysis-section--sensitivity">
                                 <h4>Comparatif des leviers</h4>
                                 <div id="analysis-sensitivity-table"></div>
                             </section>
@@ -602,7 +606,7 @@
                             <div id="analysis-regime-table"></div>
                         </section>
 
-                        <section class="analysis-block analysis-block--wide">
+                        <section class="analysis-block analysis-block--wide analysis-section--cashflow">
                             <div class="analysis-block-head">
                                 <div>
                                     <h4>Cash-flow annuel sur la durée du prêt</h4>
