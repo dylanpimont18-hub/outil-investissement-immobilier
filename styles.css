@@ -8426,7 +8426,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     display: flex;
     gap: 4px;
     padding: 4px;
-    background: var(--surface-medium, var(--surface, #f1f5f9));
+    background: var(--surface, #f1f5f9);
     border-radius: 8px;
     margin: 8px 0 16px;
 }
@@ -8439,7 +8439,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     font-family: inherit;
     cursor: pointer;
     background: transparent;
-    color: var(--text-muted, var(--muted, #64748b));
+    color: var(--muted, #64748b);
     transition: background 0.15s, color 0.15s;
 }
 .view-toggle-btn--active {
