@@ -862,7 +862,6 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     score += Math.round((confidenceModel.score - 60) * 0.2);
     if (scenarioModel.worstCase.tone === 'positive' || scenarioModel.worstCase.tone === 'excellent') score += 6;
     if (scenarioModel.worstCase.tone === 'negative') score -= 10;
-    if (rentGapExceeded) score -= 12;
     if (effortExceeded) score -= 10;
     score = Math.max(0, Math.min(100, Math.round(score)));
 
