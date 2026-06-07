@@ -142,9 +142,7 @@ export function computeProjectMetrics(projectData) {
     const prixNet = (inputs['prix'] || 0) - (inputs['nego'] || 0);
     const loyer = inputs['loyer'] || 0;
     const model = buildFinancialModel(prixNet, loyer, inputs, tmi);
-    const { coutTotal, loyersAnnuelsTheoriques, loyersEncaisses, chargesExploitationAnnuelles, mensualiteTotale, interetsAnnee1, impotsAnnee } = model;
-
-    const cfNetNet = computeCF(prixNet, loyer, inputs, tmi);
+    const { coutTotal, loyersAnnuelsTheoriques, loyersEncaisses, chargesExploitationAnnuelles, mensualiteTotale, interetsAnnee1, impotsAnnee, cfNet, cfNetNet } = model;
     const rentaBrute = coutTotal > 0 ? (loyersAnnuelsTheoriques / coutTotal) * 100 : 0;
     const rentaNette = coutTotal > 0 ? ((loyersEncaisses - chargesExploitationAnnuelles) / coutTotal) * 100 : 0;
     const rentaNetNet = coutTotal > 0 ? ((loyersEncaisses - chargesExploitationAnnuelles - impotsAnnee) / coutTotal) * 100 : 0;
@@ -166,7 +164,7 @@ export function computeProjectMetrics(projectData) {
     let scoreLabel;
     if (pts >= 5) scoreLabel = 'Élevé'; else if (pts >= 3) scoreLabel = 'Intermédiaire'; else if (pts >= 1) scoreLabel = 'Limite'; else scoreLabel = 'Critique';
 
-    return { prixNet, coutTotal, loyer, rentaBrute, rentaNette, rentaNetNet, cfNetNet, coc, grm, dscr, bestRegime, scoreLabel };
+    return { prixNet, coutTotal, loyer, rentaBrute, rentaNette, rentaNetNet, cfNet, cfNetNet, coc, grm, dscr, bestRegime, scoreLabel };
 }
 
 function getDecisionToneFromThresholds(metrics) {
@@ -726,6 +724,19 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     const economicSignal = getEconomicAcquisitionSignal(metrics, currentPrice, maxOfferPrice, solidOfferPrice, thresholds);
     const negotiationToTenable = economicSignal.negotiationToTenable;
     const negotiationToSolid = economicSignal.negotiationToSolid;
+
+    // --- Seuils loyer/effort (P2) ---
+    const targetRent = Math.max(0, Number(inputs['loyer']) || 0);
+    const marketRent = Math.max(0, Number(inputs['loyer-marche']) || targetRent || 0);
+    const rentGapRatio = marketRent > 0 ? (targetRent - marketRent) / marketRent : 0;
+
+    const prixNetForEffort = Math.max(0, (Number(inputs['prix']) || 0) - (Number(inputs['nego']) || 0));
+    const effortModel = buildFinancialModel(prixNetForEffort, targetRent, inputs, tmi);
+    const monthlyIncome = (Number(inputs.revenus) || 0) / 12;
+    const effortRatio = monthlyIncome > 0 ? (effortModel.mensualiteTotale / monthlyIncome) * 100 : 0;
+    const effortExceeded = monthlyIncome > 0 && effortRatio > thresholds.maxEffortRatio;
+    const rentGapExceeded = marketRent > 0 && rentGapRatio > thresholds.maxRentGapRatio;
+
     const strengths = [];
     const blockers = [];
 
@@ -784,6 +795,25 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
         });
     }
 
+    if (rentGapExceeded) {
+        blockers.push({
+            label: 'Loyer cible au-dessus du marché',
+            detail: `Le loyer visé dépasse le marché de ${Math.round(rentGapRatio * 100)} % (seuil ${Math.round(thresholds.maxRentGapRatio * 100)} %).`
+        });
+    } else if (marketRent > 0 && rentGapRatio <= 0) {
+        strengths.push({
+            label: 'Loyer cible compatible avec le marché',
+            detail: `Loyer visé aligné ou en dessous du marché estimé (${Math.round(marketRent)} €).`
+        });
+    }
+
+    if (effortExceeded) {
+        blockers.push({
+            label: 'Effort d\'emprunt élevé',
+            detail: `L'effort crédit représente ${Math.round(effortRatio)} % des revenus (seuil ${Math.round(thresholds.maxEffortRatio)} %).`
+        });
+    }
+
     if (confidenceModel.score >= 80) {
         strengths.push({
             label: 'Hypothèses crédibles',
@@ -832,6 +862,8 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     score += Math.round((confidenceModel.score - 60) * 0.2);
     if (scenarioModel.worstCase.tone === 'positive' || scenarioModel.worstCase.tone === 'excellent') score += 6;
     if (scenarioModel.worstCase.tone === 'negative') score -= 10;
+    if (rentGapExceeded) score -= 12;
+    if (effortExceeded) score -= 10;
     score = Math.max(0, Math.min(100, Math.round(score)));
 
     let label = economicSignal.label;
@@ -1089,6 +1121,52 @@ function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, threshol
     return result;
 }
 
+function buildLoanCashflowTable(model, inputs, tmi) {
+    const duree = Math.max(1, Math.round(inputs['duree'] || 0));
+    const tauxMensuel = (inputs['taux-input'] / 100) / 12;
+    const totalMonths = model.montantFinance > 0 ? duree * 12 : 0;
+    let remainingCapital = model.montantFinance;
+    const rows = [];
+
+    for (let year = 1; year <= duree; year++) {
+        let interestYear = 0;
+        let insuranceYear = 0;
+        let debtServiceYear = 0;
+
+        for (let month = 0; month < 12; month++) {
+            const monthIndex = ((year - 1) * 12) + month;
+            if (monthIndex >= totalMonths || remainingCapital <= 0) break;
+
+            const interestMonth = tauxMensuel > 0 ? remainingCapital * tauxMensuel : 0;
+            let principalMonth = tauxMensuel > 0 ? (model.mensualiteCredit - interestMonth) : model.mensualiteCredit;
+            principalMonth = Math.max(0, Math.min(remainingCapital, principalMonth));
+
+            interestYear += interestMonth;
+            insuranceYear += model.coutAssuranceMensuel;
+            debtServiceYear += model.mensualiteCredit + model.coutAssuranceMensuel;
+            remainingCapital = Math.max(0, remainingCapital - principalMonth);
+        }
+
+        const taxesYear = computeAnnualTaxEstimate(
+            model.prixNet,
+            model.loyersEncaisses,
+            model.chargesExploitationAnnuelles,
+            inputs,
+            tmi,
+            interestYear,
+            insuranceYear,
+            year
+        );
+
+        const cfAvantImpot = (model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear) / 12;
+        const cfApresImpot = cfAvantImpot - (taxesYear / 12);
+
+        rows.push({ year, cfAvantImpot, cfApresImpot });
+    }
+
+    return rows;
+}
+
 export function computeAnalysisViewModel(projectData) {
     const inputs = projectData;
     const adults = inputs.adults || 2;
@@ -1170,6 +1248,7 @@ export function computeAnalysisViewModel(projectData) {
         sensitivity,
         projection: buildTenYearProjection(model, inputs, tmi),
         priceRentMatrix: buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, decisionThresholds),
+        cashflowTable: buildLoanCashflowTable(model, inputs, tmi),
         annual: {
             loyersEncaisses: model.loyersEncaisses,
             charges: model.chargesExploitationAnnuelles,
