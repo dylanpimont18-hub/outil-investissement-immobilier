@@ -54,7 +54,7 @@ function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationA
             const deductibleNow = Math.min(10700, Math.abs(soldeHorsInterets));
             const addedCarry = Math.max(0, Math.abs(soldeHorsInterets) - 10700);
             return {
-                tax: -(deductibleNow * (tmi / 100)),
+                tax: -(deductibleNow * (tmi / 100)), // imputation sur l'IR uniquement (art. 156 CGI), pas sur les PS
                 newCarryForward: carryForwardDeficit + addedCarry
             };
         }
@@ -1043,6 +1043,7 @@ function buildTenYearProjection(model, inputs, tmi) {
             interestYear,
             insuranceYear,
             year
+            // carryForwardDeficit non passé : projection indicative, déficit non reporté entre années
         );
         const annualCashflow = model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxResult.tax;
 
