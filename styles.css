@@ -1970,6 +1970,9 @@ select {
 }
 html[data-theme='light'] select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%230F172A' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 8px;
 }
 
 /* ── Status items (accueil) ── */
@@ -2817,6 +2820,22 @@ html[data-theme='light'] select {
 
 .analysis-table--collection {
     min-width: 720px;
+}
+
+.analysis-cashflow-scroll {
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.analysis-table--cashflow {
+    width: 100%;
+}
+
+.analysis-table--cashflow thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
 }
 
 .table-row-active { border-left: 2px solid var(--primary); }
@@ -8330,4 +8349,12 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     width: 100%;
     height: auto;
     display: block;
+}
+
+.value-neutral {
+    color: var(--color-text-secondary);
+}
+
+.decision-head--spaced {
+    margin-top: 12px;
 }

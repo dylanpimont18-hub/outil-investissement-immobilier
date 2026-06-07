@@ -284,7 +284,6 @@ const nodes = {
     analysisSubtitle: document.getElementById('analysis-subtitle'),
     analysisStickySummary: document.getElementById('analysis-sticky-summary'),
     analysisAcquisitionDecision: document.getElementById('analysis-acquisition-decision'),
-    analysisChecklist: document.getElementById('analysis-checklist'),
     analysisConfidence: document.getElementById('analysis-confidence'),
     analysisScenarios: document.getElementById('analysis-scenarios'),
     analysisJournal: document.getElementById('analysis-journal'),
@@ -3005,33 +3004,6 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
     `;
 }
 
-function buildAnalysisChecklist(analysisModel) {
-    const { acquisitionChecklist } = analysisModel;
-
-    nodes.analysisChecklist.innerHTML = `
-        <div class="checklist-shell">
-            <div class="decision-head">
-                <span class="status-label">Vérifications terrain</span>
-                <strong class="status-pill status-pill--${acquisitionChecklist.readinessTone}">${acquisitionChecklist.readinessLabel}</strong>
-            </div>
-            <p class="decision-hint">${acquisitionChecklist.summary}</p>
-            <div class="checklist-list">
-                ${acquisitionChecklist.items.map(item => {
-                    const tone = getChecklistTone(item.status);
-                    return `
-                        <article class="checklist-item checklist-item--${tone}">
-                            <div class="lever-head">
-                                <strong>${item.label}</strong>
-                                <span class="status-pill status-pill--${tone}">${getChecklistLabel(item.status)}</span>
-                            </div>
-                            <p>${item.detail}</p>
-                        </article>
-                    `;
-                }).join('')}
-            </div>
-        </div>
-    `;
-}
 
 function buildAnalysisConfidence(analysisModel) {
     const { confidenceModel, acquisitionChecklist } = analysisModel;
@@ -3077,7 +3049,7 @@ function buildAnalysisConfidence(analysisModel) {
                 if (!alerts.length) return '';
                 return `
                     <div class="confidence-checklist-alerts">
-                        <div class="decision-head" style="margin-top:12px">
+                        <div class="decision-head decision-head--spaced">
                             <span class="status-label">Points de vérification terrain</span>
                             <strong class="status-pill status-pill--${acquisitionChecklist.readinessTone}">${escapeHtml(acquisitionChecklist.readinessLabel)}</strong>
                         </div>
