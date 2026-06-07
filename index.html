@@ -108,7 +108,7 @@
     </div>
     <div class="form-kpi-bar__item">
         <span class="form-kpi-bar__value" id="fkpi-dscr">—</span>
-        <span class="form-kpi-bar__label">DSCR</span>
+        <span class="form-kpi-bar__label" data-tooltip="DSCR (Debt Service Coverage Ratio) : ratio loyers encaissés / mensualité totale. 1,0 = autofinancement exact. En dessous de 1,0, le bien ne couvre pas sa dette.">DSCR</span>
     </div>
 </div>
 
@@ -301,7 +301,7 @@
                                         <input id="fonciere" name="fonciere" type="number" class="variables-input" min="0" step="100" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="pno">
-                                        <span class="status-label">Assurance PNO / an</span>
+                                        <span class="status-label" data-tooltip="PNO : Propriétaire Non Occupant. Assurance couvrant les risques locatifs quand vous n'habitez pas le bien (dégâts des eaux, responsabilité civile, incendie).">Assurance PNO / an</span>
                                         <input id="pno" name="pno" type="number" class="variables-input" min="0" step="50" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="gestion">
@@ -323,12 +323,12 @@
                                 <fieldset class="variables-group">
                                 <div class="variables-grid variables-grid--single">
                                     <label class="variables-field" for="regime">
-                                        <span class="status-label">Régime <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Régime fiscal de la location : Micro-foncier (abattement 30 %), Réel (déduction charges réelles), SCI IS (imposition société).">?</button>
+                                        <span class="status-label" data-tooltip="Régime fiscal : détermine comment les revenus fonciers sont imposés. Micro-foncier = abattement 30 %, Foncier réel = déduction des charges réelles, SCI-IS = imposition société avec amortissement.">Régime <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Régime fiscal de la location : Micro-foncier (abattement 30 %), Réel (déduction charges réelles), SCI IS (imposition société).">?</button>
                                             <button type="button" class="field-regime-info" id="btn-regime-modal" title="Détails des régimes fiscaux">ⓘ</button></span>
                                         <select id="regime" name="regime" class="variables-input">
                                             <option value="micro-foncier">Micro-foncier</option>
                                             <option value="reel">Foncier réel</option>
-                                            <option value="sci-is">SCI à l'IS</option>
+                                            <option value="sci-is" title="SCI à l'IS : Société Civile Immobilière soumise à l'Impôt sur les Sociétés. Amortissement du bien comptabilisé, IS à 15 % jusqu'à 42 500 €, puis 25 %. Dividendes soumis aux prélèvements sociaux à la sortie.">SCI à l'IS</option>
                                         </select>
                                     </label>
                                 </div>
@@ -1137,7 +1137,7 @@
                             <strong id="profile-parts"></strong>
                         </div>
                         <div class="status-item">
-                            <span class="status-label">TMI estimée</span>
+                            <span class="status-label" data-tooltip="TMI : Taux Marginal d'Imposition. Dernière tranche du barème progressif de l'IR (0, 11, 30, 41 ou 45 %). Calculé selon les revenus du foyer et le nombre de parts fiscales.">TMI estimée</span>
                             <strong id="profile-tmi"></strong>
                         </div>
                         <div class="status-item">
