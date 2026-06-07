@@ -295,6 +295,7 @@ const nodes = {
     analysisPriceRentMatrix: document.getElementById('analysis-price-rent-matrix'),
     analysisRegimeTable: document.getElementById('analysis-regime-table'),
     analysisSensitivityTable: document.getElementById('analysis-sensitivity-table'),
+    analysisCashflowTable: document.getElementById('analysis-cashflow-table'),
     analysisSummary: document.getElementById('analysis-summary'),
     analysisActionPlan: document.getElementById('analysis-action-plan'),
     analysisDetails: document.getElementById('analysis-details'),
@@ -1313,6 +1314,43 @@ function buildRegimeTable(regimeComparison) {
                 }).join('')}
             </tbody>
         </table>
+    `;
+}
+
+function buildCashflowTable(rows) {
+    if (!nodes.analysisCashflowTable) return;
+    if (!rows || rows.length === 0) {
+        nodes.analysisCashflowTable.innerHTML = '';
+        return;
+    }
+    nodes.analysisCashflowTable.innerHTML = `
+        <div class="analysis-cashflow-scroll">
+            <table class="analysis-table analysis-table--cashflow">
+                <thead>
+                    <tr>
+                        <th>Année</th>
+                        <th>CF avant impôt</th>
+                        <th>CF après impôt</th>
+                        <th>Écart fiscal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map(row => {
+                        const avantClass = row.cfAvantImpot >= 0 ? 'value-positive' : 'value-negative';
+                        const apresClass = row.cfApresImpot >= 0 ? 'value-positive' : 'value-negative';
+                        const ecart = row.cfAvantImpot - row.cfApresImpot;
+                        return `
+                            <tr>
+                                <td>Année ${row.year}</td>
+                                <td><strong class="${avantClass}">${formatSignedCurrency(row.cfAvantImpot)}</strong></td>
+                                <td><strong class="${apresClass}">${formatSignedCurrency(row.cfApresImpot)}</strong></td>
+                                <td class="value-neutral">${formatCurrency(ecart)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
     `;
 }
 
@@ -2763,6 +2801,13 @@ function buildAnalysisMetrics(analysisModel) {
             barPct: Math.min(100, Math.max(0, (metrics.cfNetNet + 200) / 400 * 100))
         },
         {
+            label: 'CF avant impôt',
+            value: formatSignedCurrency(metrics.cfNet),
+            rawValue: metrics.cfNet,
+            cssClass: getMetricClass(metrics.cfNet),
+            barPct: Math.min(100, Math.max(0, (metrics.cfNet + 200) / 400 * 100))
+        },
+        {
             label: 'Rentabilité brute',
             value: `${(metrics.rentaBrute ?? 0).toFixed(2).replace('.', ',')} %`,
             rawValue: metrics.rentaBrute ?? 0,
@@ -2989,7 +3034,7 @@ function buildAnalysisChecklist(analysisModel) {
 }
 
 function buildAnalysisConfidence(analysisModel) {
-    const { confidenceModel } = analysisModel;
+    const { confidenceModel, acquisitionChecklist } = analysisModel;
 
     nodes.analysisConfidence.innerHTML = `
         <div class="confidence-shell">
@@ -3027,6 +3072,27 @@ function buildAnalysisConfidence(analysisModel) {
                     </li>
                 `).join('')}
             </ul>
+            ${(() => {
+                const alerts = acquisitionChecklist.items.filter(i => i.status !== 'ready');
+                if (!alerts.length) return '';
+                return `
+                    <div class="confidence-checklist-alerts">
+                        <div class="decision-head" style="margin-top:12px">
+                            <span class="status-label">Points de vérification terrain</span>
+                            <strong class="status-pill status-pill--${acquisitionChecklist.readinessTone}">${escapeHtml(acquisitionChecklist.readinessLabel)}</strong>
+                        </div>
+                        <ul class="decision-checkpoints">
+                            ${alerts.map(item => {
+                                const tone = item.status === 'block' ? 'negative' : 'watch';
+                                return `<li>
+                                    <div><span>${escapeHtml(item.label)}</span><small>${escapeHtml(item.detail)}</small></div>
+                                    <strong class="status-pill status-pill--${tone}">${item.status === 'block' ? 'Bloquant' : 'Vigilance'}</strong>
+                                </li>`;
+                            }).join('')}
+                        </ul>
+                    </div>
+                `;
+            })()}
         </div>
     `;
 }
@@ -3852,8 +3918,8 @@ function renderWorkspaceContent() {
     buildAnalysisVisuals(analysisModel);
     buildRegimeTable(analysisModel.regimeComparison);
     buildSensitivityTable(analysisModel.sensitivity);
+    buildCashflowTable(analysisModel.cashflowTable);
     buildAnalysisSummary(analysisModel, tmi, parts, composition);
-    buildAnalysisChecklist(analysisModel);
     buildActionPlan(analysisModel.actionLevers);
     buildAnalysisDetails(analysisModel, composition);
     renderCollections();
