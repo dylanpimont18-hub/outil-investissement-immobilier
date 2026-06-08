@@ -3978,6 +3978,156 @@ function buildPortfolioSimulator(collectionsView) {
     renderSimulatorContent();
 }
 
+function initPortfolioAiDiagnostic() {
+    if (!nodes.portfolioAiTrigger) return;
+
+    function refreshLastDiagnosticLabel() {
+        if (!nodes.portfolioAiLastDate) return;
+        const meta = loadAssetMeta();
+        const lastDiag = Object.values(meta)
+            .map(m => m.lastDiagnostic)
+            .filter(Boolean)
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+            .shift();
+        if (lastDiag?.date) {
+            const d = new Date(lastDiag.date);
+            nodes.portfolioAiLastDate.textContent = `Dernier : ${d.toLocaleDateString('fr-FR')}`;
+            nodes.portfolioAiLastDate.hidden = false;
+        } else {
+            nodes.portfolioAiLastDate.hidden = true;
+        }
+    }
+
+    refreshLastDiagnosticLabel();
+
+    nodes.portfolioAiTrigger.addEventListener('click', async () => {
+        if (nodes.portfolioAiTrigger.disabled) return;
+
+        const collectionsView = computePortfolioViewModel(
+            state.assetRecords,
+            state.profileData,
+            state.activeAssetId,
+            state.variablesData
+        );
+        const { portfolioItems, dashboard, capacity } = collectionsView;
+
+        if (!portfolioItems.length) {
+            showToast('Aucun bien détenu à analyser.', 'info');
+            return;
+        }
+
+        const assetMetaAll = loadAssetMeta();
+        const currentYear = new Date().getFullYear();
+
+        const payloadBiens = portfolioItems.map(item => {
+            const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
+            const anneeAchat = item.variablesData?.['annee-achat'];
+            const entry = {
+                nom: item.name,
+                ville: item.city,
+                statut: 'owned',
+                regime: item.variablesData?.['regime'] || '',
+                prix: item.variablesData?.['prix'] || 0,
+                loyer: item.variablesData?.['loyer'] || 0,
+                charges_mensuelles: (item.model.chargesExploitationAnnuelles || 0) / 12,
+                cf_net_net: item.metrics.cfNetNet || 0,
+                dscr: item.metrics.dscr || 0,
+                rendement_brut: item.metrics.rentaBrute || 0,
+                travaux: meta.travaux,
+                ...(meta.notes.length ? { notes: meta.notes.map(n => n.text) } : {})
+            };
+            if (anneeAchat) {
+                entry.duree_detention_mois = (currentYear - anneeAchat) * 12;
+                entry.interets_annuels = Math.round(item.model.interetsAnnee1 || 0);
+            }
+            return entry;
+        });
+
+        const tmi = calculateTMI(
+            state.profileData.income || 0,
+            { adults: state.profileData.adults || 2, children: state.profileData.children || 0 }
+        );
+
+        const payload = {
+            profile: {
+                income: state.profileData.income || 0,
+                tmi,
+                adults: state.profileData.adults || 2,
+                children: state.profileData.children || 0
+            },
+            biens: payloadBiens,
+            dashboard: {
+                total_cf: dashboard.totalCashflow || 0,
+                taux_endettement: (state.profileData.income || 0) > 0
+                    ? ((dashboard.totalDebtMonthly || 0) / ((state.profileData.income || 1) / 12)) * 100
+                    : 0,
+                capacite_emprunt: capacity?.acquisitionBudget || 0,
+                dscr_moyen: dashboard.dscr || 0
+            }
+        };
+
+        nodes.portfolioAiTrigger.disabled = true;
+        nodes.portfolioAiTrigger.textContent = '✦ Analyse en cours…';
+        if (nodes.portfolioAiDrawerContent) {
+            nodes.portfolioAiDrawerContent.innerHTML = '<div class="ai-drawer-loading">Analyse en cours…</div>';
+        }
+
+        try {
+            const resp = await fetch('/api/portfolio-diagnostic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+
+            if (!resp.ok || data.error) {
+                throw new Error(data.error || 'Erreur serveur');
+            }
+
+            const recs = data.recommendations || [];
+            const now = new Date().toISOString();
+
+            const metaAll = loadAssetMeta();
+            metaAll['__portfolio__'] = { lastDiagnostic: { date: now, recommendations: recs } };
+            saveAssetMeta(metaAll);
+
+            if (nodes.portfolioAiDrawerContent) {
+                nodes.portfolioAiDrawerContent.innerHTML = `
+                    <div class="ai-drawer-date">Analyse du ${new Date(now).toLocaleDateString('fr-FR')} à ${new Date(now).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
+                    ${recs.map((r, i) => `
+                        <div class="ai-rec">
+                            <div class="ai-rec__num">${i + 1}</div>
+                            <div class="ai-rec__body">
+                                <div class="ai-rec__title">${escapeHtml(r.title || '')}</div>
+                                <p class="ai-rec__text">${escapeHtml(r.explanation || '')}</p>
+                                ${r.action ? `<div class="ai-rec__action">→ ${escapeHtml(r.action)}</div>` : ''}
+                            </div>
+                        </div>`).join('')}`;
+            }
+
+            if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.hidden = false;
+            if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.hidden = false;
+            refreshLastDiagnosticLabel();
+
+        } catch (err) {
+            showToast(`Diagnostic non généré : ${err.message}`, 'error', 6000);
+        } finally {
+            nodes.portfolioAiTrigger.disabled = false;
+            nodes.portfolioAiTrigger.textContent = '✦ Diagnostic IA';
+        }
+    });
+
+    document.getElementById('portfolio-ai-drawer-close')?.addEventListener('click', () => {
+        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.hidden = true;
+        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.hidden = true;
+    });
+
+    nodes.portfolioAiOverlay?.addEventListener('click', () => {
+        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.hidden = true;
+        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.hidden = true;
+    });
+}
+
 function renderCollections() {
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
@@ -4001,6 +4151,9 @@ function renderCollections() {
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);
+    if (nodes.portfolioAiTrigger) {
+        nodes.portfolioAiTrigger.disabled = collectionsView.portfolioItems.length === 0;
+    }
 }
 
 function renderWorkspaceContent() {
@@ -4696,6 +4849,7 @@ applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 _initAnalysisViewToggle();
 initScanner({ saveCurrentStudy });
+initPortfolioAiDiagnostic();
 if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
     setTimeout(() => openProfileModal(), 400);
 }

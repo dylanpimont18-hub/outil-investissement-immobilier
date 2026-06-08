@@ -8835,3 +8835,86 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .pipeline-score--neutral { background: var(--surface-mid); color: var(--text-secondary); }
 .pipeline-score--watch { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
 .pipeline-score--negative { background: color-mix(in srgb, #F85149 15%, transparent); color: #F85149; }
+
+/* Zone 5 : Diagnostic IA — overlay + drawer */
+.portfolio-ai-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 200;
+}
+
+.portfolio-ai-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(480px, 100vw);
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border-subtle);
+    z-index: 201;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.portfolio-ai-drawer__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.portfolio-ai-drawer__title { font-weight: 700; font-size: 1rem; }
+
+.portfolio-ai-drawer__close {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+}
+
+.portfolio-ai-drawer__close:hover { color: var(--text-primary); }
+
+.portfolio-ai-drawer__content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.ai-drawer-loading { color: var(--text-secondary); font-size: 0.9rem; font-style: italic; }
+
+.ai-drawer-date {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 8px;
+}
+
+.ai-rec { display: flex; gap: 16px; align-items: flex-start; }
+
+.ai-rec__num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ai-rec__body { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+
+.ai-rec__title { font-weight: 700; font-size: 0.92rem; color: var(--text-primary); line-height: 1.3; }
+
+.ai-rec__text { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.55; margin: 0; }
+
+.ai-rec__action { font-size: 0.82rem; color: var(--accent); font-weight: 600; }
