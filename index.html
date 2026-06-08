@@ -639,37 +639,67 @@
             </section>
 
             <section id="collection-panel" class="workspace-panel" aria-label="Pilotage multi-biens">
-                <div class="panel-head panel-head--stacked">
-                    <div>
-                        <p class="brand-kicker">Multi-biens</p>
-                        <h2>Comparer les dossiers et piloter le portefeuille</h2>
-                        <p class="panel-note">Enregistrez les opportunités, ajoutez les biens déjà détenus et rechargez n importe quelle étude dans le simulateur.</p>
-                    </div>
-                </div>
 
-                <div id="portfolio-kpi-banner"></div>
-                <div id="portfolio-simulator"></div>
-                <section id="portfolio-hero" class="workspace-hero" aria-label="Synthèse portefeuille"></section>
+    <!-- Zone 1 : Tableau de bord global -->
+    <div class="panel-head panel-head--stacked">
+        <div>
+            <p class="brand-kicker">Multi-biens</p>
+            <h2>Piloter le portefeuille</h2>
+            <p class="panel-note">Suivez vos biens, recevez des conseils fiscaux et actionnables, et analysez votre cash-flow global.</p>
+        </div>
+        <div class="portfolio-ai-trigger-row">
+            <button id="portfolio-ai-trigger" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>
+                ✦ Diagnostic IA
+            </button>
+            <span id="portfolio-ai-last-date" class="portfolio-ai-last-date" hidden></span>
+        </div>
+    </div>
 
-                <div id="portfolio-summary" class="analysis-grid"></div>
+    <div class="portfolio-zone portfolio-zone--dashboard">
+        <div id="portfolio-kpi-banner"></div>
+        <div class="portfolio-dashboard-visuals">
+            <div id="portfolio-donut-consolidated-wrap" class="portfolio-donut-wrap" hidden>
+                <h4 class="portfolio-donut-title">Répartition cash-flow globale</h4>
+                <canvas id="portfolio-donut-consolidated" width="200" height="200"></canvas>
+            </div>
+            <div id="portfolio-alerts" class="portfolio-alerts"></div>
+        </div>
+    </div>
 
-                <div id="portfolio-asset-grid-owned" class="portfolio-asset-section"></div>
-                <div id="portfolio-asset-grid-pipeline" class="portfolio-asset-section"></div>
+    <!-- Zone 2 : Conseils intelligents -->
+    <div id="portfolio-advice" class="portfolio-zone portfolio-zone--advice" hidden>
+        <h3 class="portfolio-zone-title">Ce que tu devrais regarder</h3>
+        <div id="portfolio-advice-cards" class="portfolio-advice-cards"></div>
+    </div>
 
+    <!-- Zone 3 : Fiches de biens détenus -->
+    <div id="portfolio-owned-zone" class="portfolio-zone portfolio-zone--owned" hidden>
+        <h3 class="portfolio-zone-title">Biens détenus</h3>
+        <div id="portfolio-fiches" class="portfolio-fiches-grid"></div>
+    </div>
 
-                <div class="analysis-tables">
-                    <section class="analysis-block">
-                        <h4>Crédits en cours</h4>
-                        <div id="portfolio-credits"></div>
-                    </section>
-                </div>
+    <!-- Zone 4 : Pipeline -->
+    <div id="portfolio-pipeline-zone" class="portfolio-zone portfolio-zone--pipeline" hidden>
+        <h3 class="portfolio-zone-title">Biens à l'étude</h3>
+        <div id="portfolio-asset-grid-pipeline" class="portfolio-asset-section"></div>
+    </div>
 
-                <div class="analysis-tables">
-                    <section class="analysis-block">
-                        <h4>Chronologie des biens</h4>
-                        <div id="portfolio-timeline"></div>
-                    </section>
-                </div>
+    <!-- Zone 5 : Diagnostic IA drawer -->
+    <div id="portfolio-ai-drawer" class="portfolio-ai-drawer" hidden aria-modal="true" role="dialog" aria-label="Diagnostic IA">
+        <div class="portfolio-ai-drawer__header">
+            <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
+            <button id="portfolio-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer">✕</button>
+        </div>
+        <div id="portfolio-ai-drawer-content" class="portfolio-ai-drawer__content"></div>
+    </div>
+    <div id="portfolio-ai-overlay" class="portfolio-ai-overlay" hidden></div>
+
+    <!-- Conservés pour compatibilité -->
+    <div id="portfolio-simulator"></div>
+    <div id="portfolio-hero" class="workspace-hero" aria-label="Synthèse portefeuille" hidden></div>
+    <div id="portfolio-summary" class="analysis-grid" hidden></div>
+    <div id="portfolio-asset-grid-owned" hidden></div>
+
             </section>
 
             <section id="feasibility-panel" class="workspace-panel" style="display:none" aria-label="Faisabilité">
