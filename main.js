@@ -2564,7 +2564,7 @@ function buildPortfolioPipelineZone(collectionsView) {
             </thead>
             <tbody>
                 ${items.map(item => {
-                    const prixNet = (item.variablesData['prix'] || 0) - (item.variablesData['nego'] || 0);
+                    const prixNet = (item.variablesData?.['prix'] || 0) - (item.variablesData?.['nego'] || 0);
                     const cf = item.metrics.cfNetNet || 0;
                     const cfTone = cf > 0 ? 'text--positive' : cf < 0 ? 'text--negative' : '';
                     const dscrTone = (item.metrics.dscr || 0) >= 1.1 ? 'text--positive' : (item.metrics.dscr || 0) >= 1 ? 'text--watch' : 'text--negative';
