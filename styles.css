@@ -8756,3 +8756,34 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .travaux-form__montant { width: 110px; }
 .travaux-form__tag   { flex: 1; min-width: 140px; }
 .travaux-form__error { font-size: 0.78rem; color: #F85149; }
+
+/* Section Notes */
+.notes-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.notes-empty { font-size: 0.82rem; color: var(--text-tertiary); font-style: italic; margin: 0; }
+
+.notes-entry {
+    background: var(--surface-mid);
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.notes-text {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.notes-date {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.notes-add { display: flex; flex-direction: column; gap: 8px; }
+.notes-textarea { resize: vertical; min-height: 64px; }
+.notes-submit { align-self: flex-end; }

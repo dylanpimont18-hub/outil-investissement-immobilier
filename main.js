@@ -2396,10 +2396,11 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
         });
     });
 
-    // Remplir les sections Travaux
+    // Remplir les sections Travaux et Notes
     portfolioItems.forEach(item => {
         const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
         buildFicheTravaux(item.id, meta);
+        buildFicheNotes(item.id, meta);
     });
 }
 
@@ -2497,6 +2498,39 @@ function buildFicheTravaux(assetId, meta) {
                 if (sec) sec.hidden = false;
             }, 0);
         });
+    });
+}
+
+function buildFicheNotes(assetId, meta) {
+    const container = document.getElementById(`notes-${assetId}`);
+    if (!container) return;
+
+    const notes = [...(meta.notes || [])].reverse();
+
+    container.innerHTML = `
+        <div class="notes-list">
+            ${notes.length ? notes.map(n => `
+                <div class="notes-entry" data-note-id="${escapeHtml(n.id)}">
+                    <p class="notes-text">${escapeHtml(n.text)}</p>
+                    <span class="notes-date">${new Date(n.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>`).join('') : '<p class="notes-empty">Aucune note.</p>'}
+        </div>
+        <div class="notes-add">
+            <textarea class="variables-input notes-textarea" placeholder="Ajouter une note…" rows="3" data-asset-id="${escapeHtml(assetId)}"></textarea>
+            <button class="btn btn--primary btn--sm notes-submit" data-asset-id="${escapeHtml(assetId)}">Enregistrer</button>
+        </div>`;
+
+    container.querySelector('.notes-submit').addEventListener('click', () => {
+        const textarea = container.querySelector('.notes-textarea');
+        const text = textarea.value.trim();
+        if (!text) return;
+        addNote(assetId, text);
+        textarea.value = '';
+        render();
+        setTimeout(() => {
+            const sec = document.getElementById(`notes-${assetId}`);
+            if (sec) sec.hidden = false;
+        }, 0);
     });
 }
 
