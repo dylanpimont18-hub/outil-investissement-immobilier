@@ -44,6 +44,56 @@ const STORAGE_KEYS = {
     sparkMode: 'investissementWebSparkMode'
 };
 
+const ASSET_META_KEY = 'investissementWebAssetMeta';
+
+function loadAssetMeta() {
+    try { return JSON.parse(localStorage.getItem(ASSET_META_KEY)) || {}; }
+    catch { return {}; }
+}
+
+function saveAssetMeta(meta) {
+    localStorage.setItem(ASSET_META_KEY, JSON.stringify(meta));
+}
+
+function getAssetMeta(assetId) {
+    const all = loadAssetMeta();
+    return all[assetId] || { travaux: [], notes: [], lastDiagnostic: null };
+}
+
+function setAssetMeta(assetId, patch) {
+    const all = loadAssetMeta();
+    all[assetId] = { ...getAssetMeta(assetId), ...patch };
+    saveAssetMeta(all);
+}
+
+function addTravail(assetId, travail) {
+    const meta = getAssetMeta(assetId);
+    const entry = {
+        id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: travail.date || '',
+        description: travail.description || '',
+        montant: Math.max(0, Number(travail.montant) || 0),
+        tag: ['deductible', 'non-deductible', 'a-classifier'].includes(travail.tag) ? travail.tag : 'a-classifier'
+    };
+    setAssetMeta(assetId, { travaux: [...meta.travaux, entry] });
+}
+
+function deleteTravail(assetId, travailId) {
+    const meta = getAssetMeta(assetId);
+    setAssetMeta(assetId, { travaux: meta.travaux.filter(t => t.id !== travailId) });
+}
+
+function addNote(assetId, text) {
+    if (!text.trim()) return;
+    const meta = getAssetMeta(assetId);
+    const entry = {
+        id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        createdAt: new Date().toISOString(),
+        text: text.trim()
+    };
+    setAssetMeta(assetId, { notes: [...meta.notes, entry] });
+}
+
 const PROFILE_OPTIONS = [
     {
         key: 'solo',
@@ -109,7 +159,8 @@ const VARIABLE_DEFAULTS = {
     'blocage-passoire': 'yes',
     regime: 'reel',
     'decision-thesis': '',
-    'decision-next-step': ''
+    'decision-next-step': '',
+    'annee-achat': null
 };
 
 const VARIABLE_KEYS = Object.keys(VARIABLE_DEFAULTS);
@@ -680,7 +731,10 @@ function sanitizeVariablesData(rawVariables) {
         'blocage-passoire': PASSOIRE_POLICY_VALUES.has(rawVariables['blocage-passoire']) ? rawVariables['blocage-passoire'] : 'yes',
         regime: REGIME_VALUES.has(rawVariables.regime) ? rawVariables.regime : 'reel',
         'decision-thesis': String(rawVariables['decision-thesis'] || '').trim(),
-        'decision-next-step': String(rawVariables['decision-next-step'] || '').trim()
+        'decision-next-step': String(rawVariables['decision-next-step'] || '').trim(),
+        'annee-achat': rawVariables['annee-achat']
+            ? Math.max(1900, Math.min(new Date().getFullYear(), Math.round(Number(rawVariables['annee-achat']))))
+            : null
     };
 }
 

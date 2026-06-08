@@ -149,6 +149,12 @@
                                             <option value="owned">Déjà au portefeuille</option>
                                         </select>
                                     </label>
+                                    <label class="asset-identity-field" for="annee-achat">
+                                        <span class="asset-identity-label">Année d'achat</span>
+                                        <input id="annee-achat" name="annee-achat" type="number" class="variables-input"
+                                            placeholder="ex : 2022" min="1900" max="2099" step="1">
+                                        <span class="field-assist">Optionnel. Permet les conseils temporels (intérêts restants, durée de détention).</span>
+                                    </label>
                                     <label class="asset-identity-field asset-identity-field--address" for="adresse">
                                         <span class="asset-identity-label">Adresse <span class="asset-identity-hint">(optionnel — utilisée pour la carte)</span></span>
                                         <input id="adresse" name="adresse" type="text" class="variables-input" maxlength="120" autocomplete="off" placeholder="ex. 12 rue du Commerce">
