@@ -4105,8 +4105,8 @@ function initPortfolioAiDiagnostic() {
                         </div>`).join('')}`;
             }
 
-            if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.hidden = false;
-            if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.hidden = false;
+            if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.classList.add('is-open');
+            if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.classList.add('is-open');
             refreshLastDiagnosticLabel();
 
         } catch (err) {
@@ -4118,13 +4118,13 @@ function initPortfolioAiDiagnostic() {
     });
 
     document.getElementById('portfolio-ai-drawer-close')?.addEventListener('click', () => {
-        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.hidden = true;
-        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.hidden = true;
+        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.classList.remove('is-open');
+        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.classList.remove('is-open');
     });
 
     nodes.portfolioAiOverlay?.addEventListener('click', () => {
-        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.hidden = true;
-        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.hidden = true;
+        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.classList.remove('is-open');
+        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.classList.remove('is-open');
     });
 }
 

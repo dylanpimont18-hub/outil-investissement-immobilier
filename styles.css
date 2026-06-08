@@ -8842,6 +8842,14 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
     z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.portfolio-ai-overlay.is-open {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .portfolio-ai-drawer {
@@ -8856,6 +8864,14 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    pointer-events: none;
+}
+
+.portfolio-ai-drawer.is-open {
+    transform: translateX(0);
+    pointer-events: auto;
 }
 
 .portfolio-ai-drawer__header {
