@@ -8717,3 +8717,42 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .text--positive { color: #3FB950; }
 .text--negative { color: #F85149; }
 .text--watch    { color: #ff9500; }
+
+/* Section Travaux */
+.travaux-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.travaux-empty { font-size: 0.82rem; color: var(--text-tertiary); font-style: italic; margin: 0; }
+
+.travaux-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    flex-wrap: wrap;
+}
+.travaux-date { color: var(--text-secondary); flex-shrink: 0; font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; }
+.travaux-desc { flex: 1; min-width: 80px; color: var(--text-primary); }
+.travaux-montant { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.travaux-delete { color: var(--text-tertiary); padding: 0 4px; font-size: 0.75rem; line-height: 1; }
+.travaux-delete:hover { color: #F85149; }
+
+.tag { font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
+.tag--green  { background: color-mix(in srgb, #3FB950 15%, transparent); color: #3FB950; }
+.tag--orange { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+.tag--grey   { background: var(--surface-mid); color: var(--text-tertiary); }
+
+.travaux-totals {
+    display: flex;
+    gap: 16px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.travaux-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.travaux-form__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.travaux-form__date  { width: 140px; }
+.travaux-form__desc  { flex: 1; min-width: 140px; }
+.travaux-form__montant { width: 110px; }
+.travaux-form__tag   { flex: 1; min-width: 140px; }
+.travaux-form__error { font-size: 0.78rem; color: #F85149; }

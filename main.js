@@ -2395,6 +2395,109 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
             document.querySelector('[data-target="workspace-panel"]')?.click();
         });
     });
+
+    // Remplir les sections Travaux
+    portfolioItems.forEach(item => {
+        const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
+        buildFicheTravaux(item.id, meta);
+    });
+}
+
+function buildFicheTravaux(assetId, meta) {
+    const container = document.getElementById(`travaux-${assetId}`);
+    if (!container) return;
+
+    const currentYear = new Date().getFullYear();
+    const travaux = meta.travaux || [];
+    const totalDeductible = travaux
+        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
+        .reduce((s, t) => s + t.montant, 0);
+    const totalNonDed = travaux
+        .filter(t => t.tag === 'non-deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
+        .reduce((s, t) => s + t.montant, 0);
+
+    const TAG_LABELS = {
+        'deductible': 'Déductible réel',
+        'non-deductible': 'Non déductible',
+        'a-classifier': 'À classifier'
+    };
+    const TAG_CSS = {
+        'deductible': 'tag--green',
+        'non-deductible': 'tag--grey',
+        'a-classifier': 'tag--orange'
+    };
+
+    const sorted = [...travaux].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    container.innerHTML = `
+        <div class="travaux-list">
+            ${sorted.length ? sorted.map(t => `
+                <div class="travaux-row" data-travail-id="${escapeHtml(t.id)}">
+                    <span class="travaux-date">${escapeHtml(t.date || '—')}</span>
+                    <span class="travaux-desc">${escapeHtml(t.description || '—')}</span>
+                    <span class="travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
+                    <span class="travaux-tag tag ${escapeHtml(TAG_CSS[t.tag] || 'tag--grey')}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
+                    <button class="travaux-delete btn btn--icon" data-delete-travail="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer ce travail">✕</button>
+                </div>`).join('') : '<p class="travaux-empty">Aucun travail enregistré.</p>'}
+        </div>
+
+        ${travaux.length ? `
+        <div class="travaux-totals">
+            <span>Déductible ${currentYear} : <strong>${Math.round(totalDeductible).toLocaleString('fr-FR')} €</strong></span>
+            <span>Non déductible : <strong>${Math.round(totalNonDed).toLocaleString('fr-FR')} €</strong></span>
+        </div>` : ''}
+
+        <form class="travaux-form" data-asset-id="${escapeHtml(assetId)}" novalidate>
+            <div class="travaux-form__row">
+                <input type="date" name="date" class="variables-input travaux-form__date" required>
+                <input type="text" name="description" class="variables-input travaux-form__desc" placeholder="Description (ex : chaudière)" required>
+            </div>
+            <div class="travaux-form__row">
+                <input type="number" name="montant" class="variables-input travaux-form__montant" placeholder="Montant (€)" min="0" required>
+                <select name="tag" class="variables-input travaux-form__tag">
+                    <option value="a-classifier">À classifier</option>
+                    <option value="deductible">Déductible réel</option>
+                    <option value="non-deductible">Non déductible</option>
+                </select>
+                <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
+            </div>
+            <span class="travaux-form__error" hidden></span>
+        </form>`;
+
+    container.querySelector('.travaux-form').addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const date = fd.get('date');
+        const description = fd.get('description')?.trim();
+        const montant = Number(fd.get('montant'));
+        const tag = fd.get('tag');
+        const errEl = container.querySelector('.travaux-form__error');
+
+        if (!date || !description || !(montant > 0)) {
+            errEl.textContent = 'Date, description et montant sont obligatoires.';
+            errEl.hidden = false;
+            return;
+        }
+        errEl.hidden = true;
+        addTravail(assetId, { date, description, montant, tag });
+        e.target.reset();
+        render();
+        setTimeout(() => {
+            const sec = document.getElementById(`travaux-${assetId}`);
+            if (sec) sec.hidden = false;
+        }, 0);
+    });
+
+    container.querySelectorAll('[data-delete-travail]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            deleteTravail(assetId, btn.dataset.deleteTravail);
+            render();
+            setTimeout(() => {
+                const sec = document.getElementById(`travaux-${assetId}`);
+                if (sec) sec.hidden = false;
+            }, 0);
+        });
+    });
 }
 
 function buildPortfolioAssetCard(item, isPipeline) {
