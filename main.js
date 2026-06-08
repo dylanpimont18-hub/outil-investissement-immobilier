@@ -2050,6 +2050,16 @@ function computePortfolioAdvice(portfolioItems, profileData, capacity, assetMeta
         });
     }
 
+    if (tauxEndettement > 35) {
+        advice.push({
+            id: 'debt-over-limit',
+            severity: 'red',
+            title: 'Taux d\'endettement dépassé',
+            text: `Votre taux d'endettement est à ${tauxEndettement.toFixed(1).replace('.', ',')} % — au-dessus du plafond bancaire de 35 %. Une nouvelle acquisition sera très difficile à financer sans apport significatif ou remboursement partiel.`,
+            action: null, actionLabel: null, assetId: null
+        });
+    }
+
     if (tauxEndettement <= 25 && (capacity.acquisitionBudget || 0) > 50000) {
         advice.push({
             id: 'debt-capacity-available',
@@ -2086,7 +2096,11 @@ function computePortfolioAdvice(portfolioItems, profileData, capacity, assetMeta
 
     // Concentration géographique
     if (portfolioItems.length >= 2) {
-        const villes = new Set(portfolioItems.map(i => (i.city || '').toLowerCase().trim()));
+        const villes = new Set(
+            portfolioItems
+                .map(i => (i.city || '').toLowerCase().trim())
+                .filter(c => c && c !== 'ville non renseignée')
+        );
         if (villes.size === 1) {
             advice.push({
                 id: 'risk-concentration',
