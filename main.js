@@ -393,7 +393,6 @@ const nodes = {
     profileChildren: document.getElementById('profile-children'),
     profileObjectifCF: document.getElementById('profile-objectif-cf'),
     profileRevaloAnnuelle: document.getElementById('profile-revalo-annuelle'),
-    portfolioCredits: document.getElementById('portfolio-credits'),
     autreCreditDrawerOverlay: document.getElementById('autre-credit-drawer-overlay'),
     autreCreditDrawer: document.getElementById('autre-credit-drawer'),
     autreCreditDrawerId: document.getElementById('autre-credit-drawer-id'),
@@ -403,7 +402,6 @@ const nodes = {
     autreCreditDateDebut: document.getElementById('autre-credit-date-debut'),
     autreCreditDateFin: document.getElementById('autre-credit-date-fin'),
     autreCreditCrd: document.getElementById('autre-credit-crd'),
-    portfolioTimeline: document.getElementById('portfolio-timeline'),
     profileParts: document.getElementById('profile-parts'),
     profileTmi: document.getElementById('profile-tmi'),
     profileComposition: document.getElementById('profile-composition'),
@@ -1797,15 +1795,6 @@ function handleDeleteAutreCredit(creditId) {
     showToast('Crédit supprimé.');
 }
 
-function handlePortfolioCreditsAction(event) {
-    const button = event.target.closest('button[data-action]');
-    if (!button) return;
-    const action = button.dataset.action;
-    const creditId = button.dataset.creditId;
-    if (action === 'add-autre-credit') { openAutreCreditDrawer(null); return; }
-    if (action === 'edit-autre-credit' && creditId) { openAutreCreditDrawer(creditId); return; }
-    if (action === 'delete-autre-credit' && creditId) { handleDeleteAutreCredit(creditId); return; }
-}
 
 function handleCreditDrawerSave(event) {
     event.preventDefault();
@@ -3238,141 +3227,6 @@ function buildAnalysisVisuals(analysisModel) {
 }
 
 
-function buildPortfolioCredits(portfolioItems, autresCredits) {
-    if (!nodes.portfolioCredits) return;
-    const itemsWithCredit = portfolioItems.filter(item => item.creditSchedule || item.model.mensualiteTotale > 0);
-    const credits = autresCredits || [];
-
-    if (!itemsWithCredit.length && !credits.length) {
-        nodes.portfolioCredits.innerHTML = '<p class="collection-empty">Aucun crédit configuré.</p>';
-        return;
-    }
-
-    let immoHtml = '';
-    if (itemsWithCredit.length) {
-        immoHtml = `
-        <h5 class="analysis-subsection-title">Crédits immobiliers</h5>
-        <table class="analysis-table">
-            <thead><tr><th>Bien</th><th>Mensualité</th><th>Capital restant dû</th><th>Date de fin</th><th>Source</th></tr></thead>
-            <tbody>
-                ${itemsWithCredit.map(item => {
-                    const cs = item.creditSchedule;
-                    const mensualite = cs ? cs.mensualite : (item.model.mensualiteTotale || 0);
-                    const cap = cs ? capitalRestantDu(cs.mensualite, cs.dateFin) : null;
-                    const dateFin = cs?.dateFin ? cs.dateFin.replace('-', '/') : '--';
-                    const source = cs ? 'Échéancier réel' : 'Simulé';
-                    return `
-                        <tr>
-                            <td><strong>${escapeHtml(item.name)}</strong><div class="table-subline">${escapeHtml(item.city)}</div></td>
-                            <td><strong>${formatPlainCurrency(mensualite)}</strong></td>
-                            <td>${cap != null ? `<strong>${formatPlainCurrency(cap)}</strong>` : '--'}</td>
-                            <td>${escapeHtml(dateFin)}</td>
-                            <td><span class="status-pill status-pill--${cs ? 'positive' : 'neutral'}">${escapeHtml(source)}</span></td>
-                        </tr>
-                    `;
-                }).join('')}
-            </tbody>
-        </table>`;
-    }
-
-    const totalMensualiteHI = credits.reduce((s, c) => s + (c.mensualite || 0), 0);
-    const totalCrdHI = credits.some(c => c.capitalRestantDu != null)
-        ? credits.reduce((s, c) => s + (c.capitalRestantDu || 0), 0)
-        : null;
-
-    const horsImmoHtml = `
-        <h5 class="analysis-subsection-title" style="margin-top:1.5rem">Crédits hors immobilier</h5>
-        ${credits.length ? `
-        <table class="analysis-table">
-            <thead><tr><th>Libellé</th><th>Mensualité</th><th>Capital restant dû</th><th>Date de fin</th><th></th></tr></thead>
-            <tbody>
-                ${credits.map(c => {
-                    const dateFin = c.dateFin ? c.dateFin.replace('-', '/') : '--';
-                    return `
-                        <tr>
-                            <td><strong>${escapeHtml(c.libelle)}</strong></td>
-                            <td><strong>${formatPlainCurrency(c.mensualite)}</strong></td>
-                            <td>${c.capitalRestantDu != null ? `<strong>${formatPlainCurrency(c.capitalRestantDu)}</strong>` : '--'}</td>
-                            <td>${escapeHtml(dateFin)}</td>
-                            <td style="white-space:nowrap">
-                                <button class="btn-icon" data-action="edit-autre-credit" data-credit-id="${escapeHtml(c.id)}" title="Modifier">✎</button>
-                                <button class="btn-icon btn-icon--danger" data-action="delete-autre-credit" data-credit-id="${escapeHtml(c.id)}" title="Supprimer">✕</button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('')}
-                <tr class="analysis-table__total">
-                    <td><strong>Total</strong></td>
-                    <td><strong>${formatPlainCurrency(totalMensualiteHI)}</strong></td>
-                    <td>${totalCrdHI != null ? `<strong>${formatPlainCurrency(totalCrdHI)}</strong>` : '--'}</td>
-                    <td colspan="2"></td>
-                </tr>
-            </tbody>
-        </table>` : '<p class="collection-empty">Aucun crédit hors immobilier.</p>'}
-        <div style="margin-top:0.75rem">
-            <button class="btn-secondary" data-action="add-autre-credit">+ Ajouter un crédit</button>
-        </div>`;
-
-    nodes.portfolioCredits.innerHTML = immoHtml + horsImmoHtml;
-}
-
-function buildPortfolioTimeline(portfolioItems) {
-    if (!nodes.portfolioTimeline) return;
-    const itemsWithDates = portfolioItems.filter(item => item.creditSchedule?.dateDebut || item.creditSchedule?.dateFin);
-    if (!itemsWithDates.length) {
-        nodes.portfolioTimeline.innerHTML = '<p class="collection-empty">Configurez l\'échéancier crédit d\'au moins un bien pour afficher la chronologie.</p>';
-        return;
-    }
-
-    const now = new Date();
-    const parseYM = str => { if (!str) return null; const parts = str.split('-').map(Number); return new Date(parts[0], parts[1] - 1, 1); };
-
-    const allDates = itemsWithDates.flatMap(item => [
-        parseYM(item.creditSchedule?.dateDebut),
-        parseYM(item.creditSchedule?.dateFin),
-        parseYM(item.dateRevente)
-    ]).filter(Boolean);
-
-    const minDate = new Date(Math.min(...allDates.map(d => d.getTime()), now.getTime()));
-    const maxDate = new Date(Math.max(...allDates.map(d => d.getTime()), now.getTime()));
-    const totalMs = Math.max(1, maxDate - minDate);
-
-    function pct(date) { return ((date - minDate) / totalMs * 100).toFixed(2); }
-
-    const minYear = minDate.getFullYear();
-    const maxYear = maxDate.getFullYear();
-    const yearMarkers = [];
-    for (let y = minYear; y <= maxYear; y++) {
-        const d = new Date(y, 0, 1);
-        if (d >= minDate && d <= maxDate) yearMarkers.push({ year: y, pct: pct(d) });
-    }
-
-    nodes.portfolioTimeline.innerHTML = `
-        <div class="timeline-chart">
-            <div class="timeline-axis">
-                ${yearMarkers.map(m => `<span class="timeline-year" style="left:${m.pct}%">${m.year}</span>`).join('')}
-                <div class="timeline-now" style="left:${pct(now)}%" title="Aujourd'hui"></div>
-            </div>
-            ${itemsWithDates.map(item => {
-                const debut = parseYM(item.creditSchedule?.dateDebut);
-                const fin = parseYM(item.creditSchedule?.dateFin);
-                const revente = parseYM(item.dateRevente);
-                const left = debut ? parseFloat(pct(debut)) : 0;
-                const right = fin ? parseFloat(pct(fin)) : 100;
-                const width = Math.max(1, right - left);
-                return `
-                    <div class="timeline-row">
-                        <div class="timeline-row-label">${escapeHtml(item.name)}</div>
-                        <div class="timeline-row-track">
-                            <div class="timeline-bar" style="left:${left}%;width:${width}%" title="${escapeHtml(item.name)} · ${item.creditSchedule?.dateDebut || '?'} → ${item.creditSchedule?.dateFin || '?'}"></div>
-                            ${revente ? `<div class="timeline-marker-revente" style="left:${pct(revente)}%" title="Revente envisagée ${item.dateRevente}"></div>` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
 
 let _simulatedIds = new Set();
 
@@ -3548,8 +3402,6 @@ function renderCollections() {
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);
-    buildPortfolioCredits(collectionsView.portfolioItems, state.profileData.autresCredits);
-    buildPortfolioTimeline(collectionsView.portfolioItems);
 }
 
 function renderWorkspaceContent() {
@@ -3966,7 +3818,6 @@ function bindEvents() {
     document.getElementById('autre-credit-drawer-close')?.addEventListener('click', closeAutreCreditDrawer);
     document.getElementById('autre-credit-drawer-cancel')?.addEventListener('click', closeAutreCreditDrawer);
     document.getElementById('autre-credit-drawer-form')?.addEventListener('submit', handleAutreCreditDrawerSave);
-    if (nodes.portfolioCredits) nodes.portfolioCredits.addEventListener('click', handlePortfolioCreditsAction);
 
     if (nodes.modeToggle && !IS_ANALYSIS_WINDOW) {
         nodes.modeToggle.addEventListener('click', e => {
