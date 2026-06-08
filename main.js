@@ -1,6 +1,7 @@
 import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
 import { initScanner, onScannerTabActivated } from './scanner.js';
+import { renderDonutChart, destroyDonut } from './ui.js';
 
 const _counterState = new WeakMap();
 
@@ -2180,6 +2181,42 @@ function buildPortfolioKpiBanner(collectionsView) {
     `;
 }
 
+function buildPortfolioDashboardZone(collectionsView, advice) {
+    const { portfolioItems } = collectionsView;
+    if (!nodes.portfolioDonutConsolidatedWrap) return;
+
+    if (!portfolioItems.length) {
+        nodes.portfolioDonutConsolidatedWrap.hidden = true;
+        if (nodes.portfolioAlerts) nodes.portfolioAlerts.innerHTML = '';
+        return;
+    }
+
+    // Donut consolidé
+    const totalCredit  = portfolioItems.reduce((s, i) => s + (i.model.mensualiteTotale || 0), 0);
+    const totalCharges = portfolioItems.reduce((s, i) => s + (i.model.chargesExploitationAnnuelles || 0) / 12, 0);
+    const totalImpots  = portfolioItems.reduce((s, i) => s + (i.model.impotsAnnee || 0) / 12, 0);
+    const totalCf      = portfolioItems.reduce((s, i) => s + (i.metrics.cfNetNet || 0), 0);
+
+    nodes.portfolioDonutConsolidatedWrap.hidden = false;
+    renderDonutChart('portfolio-donut-consolidated', totalCredit, totalCharges, totalImpots, totalCf);
+
+    // Alertes actives (max 3, les plus sévères en premier, exclure 'info')
+    if (!nodes.portfolioAlerts) return;
+    const redFirst = [...advice].sort((a, b) => {
+        const rank = { red: 0, orange: 1, info: 2 };
+        return (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3);
+    });
+    const topAlerts = redFirst.filter(a => a.severity !== 'info').slice(0, 3);
+
+    nodes.portfolioAlerts.innerHTML = topAlerts.length
+        ? topAlerts.map(a => `
+            <div class="portfolio-alert portfolio-alert--${a.severity}" data-advice-id="${escapeHtml(a.id)}">
+                <span class="portfolio-alert__dot"></span>
+                <span class="portfolio-alert__text">${escapeHtml(a.title)}</span>
+            </div>`).join('')
+        : '';
+}
+
 function buildPortfolioAssetCard(item, isPipeline) {
     const cf = item.metrics.cfNetNet || 0;
     const tone = isPipeline
@@ -3577,6 +3614,13 @@ function renderCollections() {
     const collectionsView = buildCollectionsView();
     buildPortfolioSimulator(collectionsView);
     buildPortfolioKpiBanner(collectionsView);
+    const advice = computePortfolioAdvice(
+        collectionsView.portfolioItems,
+        state.profileData,
+        collectionsView.capacity,
+        loadAssetMeta()
+    );
+    buildPortfolioDashboardZone(collectionsView, advice);
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);

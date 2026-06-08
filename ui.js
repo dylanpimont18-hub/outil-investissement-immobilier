@@ -641,3 +641,56 @@ function haptic() { if (navigator.vibrate) navigator.vibrate(10); }
         btn.addEventListener('click', () => haptic(), { passive: true });
     });
 })();
+
+const _donutInstances = new Map();
+
+export function renderDonutChart(canvasId, credit, charges, impots, cf) {
+    const textColor = getThemeTextColor();
+    const cfDisplay = Math.max(0, cf);
+    const cfNeg = cf < 0 ? Math.abs(cf) : 0;
+    const data = [credit, charges, impots, cfDisplay, cfNeg];
+    const colors = ['#F85149', '#ff9500', '#af52de', '#3FB950', '#6e6e6e'];
+    const labels = ['Banque', 'Charges', 'Impôts', 'CF net-net', 'CF négatif'];
+
+    if (_donutInstances.has(canvasId)) {
+        const chart = _donutInstances.get(canvasId);
+        chart.data.datasets[0].data = data;
+        chart.options.plugins.legend.labels.color = textColor;
+        chart.update();
+        return;
+    }
+
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{ data, backgroundColor: colors, borderWidth: 0 }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right', labels: { color: textColor, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const v = ctx.raw;
+                            return v > 0 ? ` ${Math.round(v).toLocaleString('fr-FR')} €/mois` : null;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    _donutInstances.set(canvasId, chart);
+}
+
+export function destroyDonut(canvasId) {
+    if (_donutInstances.has(canvasId)) {
+        _donutInstances.get(canvasId).destroy();
+        _donutInstances.delete(canvasId);
+    }
+}

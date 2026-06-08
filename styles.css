@@ -8452,3 +8452,111 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 #analysis-panel[data-analysis-view="quick"] .analysis-section--cashflow {
     display: none;
 }
+
+/* === PORTEFEUILLE REFONTE === */
+
+/* Zones */
+.portfolio-zone { margin-bottom: 32px; }
+.portfolio-zone-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Donut consolidé */
+.portfolio-dashboard-visuals {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+.portfolio-donut-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.portfolio-donut-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.portfolio-donut-wrap canvas {
+    width: 220px !important;
+    height: 220px !important;
+}
+
+/* Alertes */
+.portfolio-alerts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-width: 220px;
+}
+
+.portfolio-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    font-size: 0.85rem;
+}
+
+.portfolio-alert:hover { opacity: 0.8; }
+
+.portfolio-alert--red {
+    background: color-mix(in srgb, #F85149 12%, transparent);
+    border: 1px solid color-mix(in srgb, #F85149 30%, transparent);
+}
+
+.portfolio-alert--orange {
+    background: color-mix(in srgb, #ff9500 12%, transparent);
+    border: 1px solid color-mix(in srgb, #ff9500 30%, transparent);
+}
+
+.portfolio-alert__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.portfolio-alert--red .portfolio-alert__dot    { background: #F85149; }
+.portfolio-alert--orange .portfolio-alert__dot { background: #ff9500; }
+
+/* Bouton Diagnostic IA */
+.portfolio-ai-trigger-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.portfolio-ai-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.portfolio-ai-trigger:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.portfolio-ai-last-date {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+}
