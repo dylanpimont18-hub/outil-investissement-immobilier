@@ -354,7 +354,6 @@ const nodes = {
     portfolioHero: document.getElementById('portfolio-hero'),
     portfolioSimulator: document.getElementById('portfolio-simulator'),
     portfolioSummary: document.getElementById('portfolio-summary'),
-    portfolioPriorities: document.getElementById('portfolio-priorities'),
     portfolioKpiBanner: document.getElementById('portfolio-kpi-banner'),
     portfolioAssetGridOwned: document.getElementById('portfolio-asset-grid-owned'),
     portfolioAssetGridPipeline: document.getElementById('portfolio-asset-grid-pipeline'),
@@ -382,11 +381,6 @@ const nodes = {
     profileChildren: document.getElementById('profile-children'),
     profileObjectifCF: document.getElementById('profile-objectif-cf'),
     profileRevaloAnnuelle: document.getElementById('profile-revalo-annuelle'),
-    portfolioFiscal: document.getElementById('portfolio-fiscal'),
-    portfolioDebtRatios: document.getElementById('portfolio-debt-ratios'),
-    portfolioObjectif: document.getElementById('portfolio-objectif'),
-    portfolioProjection: document.getElementById('portfolio-projection'),
-    portfolioRepartition: document.getElementById('portfolio-repartition'),
     portfolioCredits: document.getElementById('portfolio-credits'),
     autreCreditDrawerOverlay: document.getElementById('autre-credit-drawer-overlay'),
     autreCreditDrawer: document.getElementById('autre-credit-drawer'),
@@ -1943,39 +1937,6 @@ function buildPortfolioHero(collectionsView) {
 }
 
 
-function buildPortfolioPriorities(priorities) {
-    if (!priorities.length) {
-        nodes.portfolioPriorities.innerHTML = '<p class="collection-empty">Aucune priorité d\'action tant qu aucun bien n est suivi au portefeuille.</p>';
-        return;
-    }
-
-    nodes.portfolioPriorities.innerHTML = `
-        <table class="analysis-table">
-            <thead>
-                <tr>
-                    <th>Bien</th>
-                    <th>Décision</th>
-                    <th>CF / mois</th>
-                    <th>Levier prioritaire</th>
-                    <th>Impact</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${priorities.map(item => `
-                    <tr>
-                        <td><strong>${item.name}</strong></td>
-                        <td><span class="status-pill status-pill--${item.tone}">${item.decisionLabel}</span></td>
-                        <td><strong class="${item.cfNetNet >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.cfNetNet)}</strong></td>
-                        <td>${item.leverLabel}</td>
-                        <td><strong class="${item.leverDelta >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(item.leverDelta)}</strong></td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-}
-
-
 function buildPortfolioKpiBanner(collectionsView) {
     if (!nodes.portfolioKpiBanner) return;
 
@@ -3264,233 +3225,7 @@ function buildAnalysisVisuals(analysisModel) {
     nodes.analysisPriceRentMatrix.innerHTML = buildPriceRentMatrixMarkup(analysisModel.priceRentMatrix);
 }
 
-function buildPortfolioFiscal(fiscal) {
-    if (!nodes.portfolioFiscal) return;
-    if (!fiscal || Object.values(fiscal.regimes).every(r => r.count === 0)) {
-        nodes.portfolioFiscal.innerHTML = '<p class="collection-empty">Aucun bien détenu pour calculer la fiscalité consolidée.</p>';
-        return;
-    }
-    const regimesActifs = Object.entries(fiscal.regimes).filter(([, r]) => r.count > 0);
-    nodes.portfolioFiscal.innerHTML = `
-        <div class="fiscal-shell">
-            <div class="decision-head">
-                <span class="status-label">TMI du foyer</span>
-                <strong class="status-pill status-pill--neutral">${fiscal.tmi} %</strong>
-            </div>
-            <div class="timeline-summary">
-                <div class="timeline-pill">
-                    <span>Total impôts / an</span>
-                    <strong>${formatPlainCurrency(fiscal.totalImpots)}</strong>
-                </div>
-                <div class="timeline-pill">
-                    <span>Total impôts / mois</span>
-                    <strong>${formatPlainCurrency(fiscal.totalImpots / 12)}</strong>
-                </div>
-            </div>
-            <div class="fiscal-regimes">
-                ${regimesActifs.map(([, r]) => `
-                    <article class="scenario-card scenario-card--neutral">
-                        <div class="lever-head">
-                            <strong>${escapeHtml(r.label)}</strong>
-                            <span class="status-pill status-pill--neutral">${r.count} bien${r.count > 1 ? 's' : ''}</span>
-                        </div>
-                        <p>Loyers : ${formatPlainCurrency(r.loyersAnnuels)} / an · Impôts : ${formatPlainCurrency(r.impots)} / an</p>
-                    </article>
-                `).join('')}
-            </div>
-        </div>
-    `;
-}
-
-function buildPortfolioDebtRatios(debtRatios) {
-    if (!nodes.portfolioDebtRatios) return;
-    if (!debtRatios) {
-        nodes.portfolioDebtRatios.innerHTML = '<p class="collection-empty">Aucun bien détenu pour calculer le taux d\'endettement.</p>';
-        return;
-    }
-    function gauge(ratio, seuil, tone, label, method) {
-        const pct = Math.min(100, (ratio / seuil) * 100);
-        return `
-            <div class="debt-gauge">
-                <div class="debt-gauge-head">
-                    <span class="debt-gauge-method">${escapeHtml(method)}</span>
-                    <strong class="status-pill status-pill--${tone}">${ratio.toFixed(1).replace('.', ',')} %</strong>
-                </div>
-                <div class="debt-gauge-bar">
-                    <div class="debt-gauge-fill debt-gauge-fill--${tone}" style="width:${pct.toFixed(1)}%"></div>
-                </div>
-                <div class="debt-gauge-footer">
-                    <span>${escapeHtml(label)}</span>
-                    <span>Seuil : ${seuil} %</span>
-                </div>
-            </div>
-        `;
-    }
-    const breakdownHtml = debtRatios.autresMensualites > 0 ? `
-        <div class="analysis-list-compact" style="margin-bottom:1rem">
-            <div class="status-item">
-                <span class="status-label">Mensualités immo</span>
-                <strong>${formatPlainCurrency(debtRatios.mensualitesImmo)}/mois</strong>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Crédits hors immo</span>
-                <strong>${formatPlainCurrency(debtRatios.autresMensualites)}/mois</strong>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Total mensualités</span>
-                <strong>${formatPlainCurrency(debtRatios.mensualitesTotales)}/mois</strong>
-            </div>
-        </div>` : '';
-    nodes.portfolioDebtRatios.innerHTML = `
-        <div class="debt-ratios-shell">
-            ${breakdownHtml}
-            ${gauge(debtRatios.hcsf.ratio, debtRatios.hcsf.seuil, debtRatios.hcsf.tone,
-                'Mensualités totales / (Revenus nets + 70 % loyers bruts)', 'Méthode HCSF 2021')}
-            ${gauge(debtRatios.differentielle.ratio, debtRatios.differentielle.seuil, debtRatios.differentielle.tone,
-                'Effort net total / Revenus nets', 'Méthode différentielle')}
-        </div>
-    `;
-}
-
-function buildPortfolioObjectif(objectif) {
-    if (!nodes.portfolioObjectif) return;
-    const pctStr = objectif.pct.toFixed(0);
-    nodes.portfolioObjectif.innerHTML = `
-        <div class="objectif-shell">
-            <div class="decision-head">
-                <span class="status-label">Objectif mensuel</span>
-                <strong class="status-pill status-pill--${objectif.tone}">${formatSignedCurrency(objectif.target)}</strong>
-            </div>
-            <div class="objectif-progress">
-                <div class="objectif-bar">
-                    <div class="objectif-fill objectif-fill--${objectif.tone}" style="width:${pctStr}%"></div>
-                </div>
-                <div class="objectif-labels">
-                    <span class="objectif-current">${formatSignedCurrency(objectif.current)} actuellement</span>
-                    <span class="objectif-pct">${pctStr} %</span>
-                </div>
-            </div>
-            ${objectif.delta > 0 ? `
-                <p class="decision-hint">Écart : <strong>${formatSignedCurrency(objectif.delta)}</strong> / mois manquants${objectif.estimatedAssetsNeeded ? ` · ~${objectif.estimatedAssetsNeeded} bien${objectif.estimatedAssetsNeeded > 1 ? 's' : ''} supplémentaire${objectif.estimatedAssetsNeeded > 1 ? 's' : ''}` : ''}</p>
-            ` : `<p class="decision-hint">Objectif atteint.</p>`}
-        </div>
-    `;
-}
-
-function buildPortfolioProjection(projection) {
-    if (!nodes.portfolioProjection) return;
-    const seriesGross = projection.seriesGross;
-    const seriesNet = projection.seriesNet;
-    if (!seriesGross || !seriesGross.length) {
-        nodes.portfolioProjection.innerHTML = `
-            <div class="projection-shell">
-                <div class="decision-head">
-                    <span class="status-label">Revalorisation estimée</span>
-                    <strong class="status-pill status-pill--neutral">${projection.revaloAnnuelle} % / an</strong>
-                </div>
-                <p class="decision-hint">Valeur actuelle du parc : <strong>${formatPlainCurrency(projection.currentValue)}</strong></p>
-                <div class="timeline-summary">
-                    <div class="timeline-pill"><span>Dans 5 ans</span><strong>${formatPlainCurrency(projection.at5)}</strong></div>
-                    <div class="timeline-pill"><span>Dans 10 ans</span><strong>${formatPlainCurrency(projection.at10)}</strong></div>
-                    <div class="timeline-pill"><span>Dans 15 ans</span><strong>${formatPlainCurrency(projection.at15)}</strong></div>
-                </div>
-            </div>
-        `;
-        return;
-    }
-    const maxVal = Math.max(...seriesGross, ...seriesNet.map(v => Math.max(0, v)), 1);
-    const xScale = t => (t / 15) * 380 + 10;
-    const yScale = v => 110 - (Math.max(0, v) / maxVal) * 100;
-    const buildPath = series => series.map((v, t) => `${t === 0 ? 'M' : 'L'} ${xScale(t).toFixed(1)},${yScale(v).toFixed(1)}`).join(' ');
-    const grossPath = buildPath(seriesGross);
-    const netPath = buildPath(seriesNet);
-    const grossAreaPath = `${grossPath} L ${xScale(15).toFixed(1)},115 L ${xScale(0).toFixed(1)},115 Z`;
-    const netAreaPath = `${netPath} L ${xScale(15).toFixed(1)},115 L ${xScale(0).toFixed(1)},115 Z`;
-    const markerTs = [0, 5, 10, 15];
-    const markers = markerTs.map(t => `<circle cx="${xScale(t).toFixed(1)}" cy="${yScale(seriesGross[t]).toFixed(1)}" r="3" fill="#C5A059"/>`).join('');
-    nodes.portfolioProjection.innerHTML = `
-        <div class="projection-shell">
-            <div class="decision-head">
-                <span class="status-label">Revalorisation estimée</span>
-                <strong class="status-pill status-pill--neutral">${projection.revaloAnnuelle} % / an</strong>
-            </div>
-            <div class="projection-svg-shell">
-                <svg viewBox="0 0 400 128" preserveAspectRatio="none">
-                    <path d="${grossAreaPath}" fill="#C5A059" fill-opacity="0.1"/>
-                    <path d="${grossPath}" fill="none" stroke="#C5A059" stroke-width="2" stroke-dasharray="6 3"/>
-                    <path d="${netAreaPath}" fill="#4ade80" fill-opacity="0.15"/>
-                    <path d="${netPath}" fill="none" stroke="#4ade80" stroke-width="2"/>
-                    ${markers}
-                    <line x1="${xScale(0).toFixed(1)}" y1="10" x2="${xScale(0).toFixed(1)}" y2="115" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 2"/>
-                    <text x="${xScale(0).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">Auj.</text>
-                    <text x="${xScale(5).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">+5 ans</text>
-                    <text x="${xScale(10).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">+10 ans</text>
-                    <text x="${xScale(15).toFixed(1)}" y="120" font-size="8" fill="var(--muted)" text-anchor="middle">+15 ans</text>
-                </svg>
-            </div>
-            <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;color:var(--muted)">
-                <span><span style="display:inline-block;width:16px;border-top:2px dashed #C5A059;vertical-align:middle;margin-right:4px"></span>Valeur brute</span>
-                <span><span style="display:inline-block;width:16px;border-top:2px solid #4ade80;vertical-align:middle;margin-right:4px"></span>Valeur nette (−dette)</span>
-            </div>
-            <div class="timeline-summary">
-                <div class="timeline-pill"><span>Aujourd'hui</span><strong>${formatPlainCurrency(projection.currentValue)}</strong></div>
-                <div class="timeline-pill"><span>Dans 5 ans</span><strong>${formatPlainCurrency(projection.at5)}</strong></div>
-                <div class="timeline-pill"><span>Dans 10 ans</span><strong>${formatPlainCurrency(projection.at10)}</strong></div>
-                <div class="timeline-pill"><span>Dans 15 ans</span><strong>${formatPlainCurrency(projection.at15)}</strong></div>
-            </div>
-            ${seriesNet[15] > 0 ? `<p class="decision-hint">Equity dans 15 ans : <strong style="color:#4ade80">${formatPlainCurrency(seriesNet[15])}</strong></p>` : ''}
-        </div>
-    `;
-}
-
 let _portfolioMap = null;
-
-function buildPortfolioRepartition(portfolioItems) {
-    if (!nodes.portfolioRepartition) return;
-    if (!portfolioItems.length) {
-        nodes.portfolioRepartition.innerHTML = '<p class="collection-empty">Aucun bien détenu pour afficher la répartition.</p>';
-        return;
-    }
-    const hasAddresses = portfolioItems.some(item => String(item.variablesData?.adresse || '').trim());
-    const maxLoyer = Math.max(...portfolioItems.map(item => (item.model.loyersEncaisses || 0) / 12), 1);
-    nodes.portfolioRepartition.innerHTML = `
-        ${hasAddresses ? '<div id="portfolio-map-canvas" class="portfolio-map-canvas"></div>' : ''}
-        <div class="repartition-list">
-            ${portfolioItems.map(item => {
-                const loyer = (item.model.loyersEncaisses || 0) / 12;
-                const cf = item.metrics.cfNetNet || 0;
-                const loyerPct = Math.max(4, (loyer / maxLoyer) * 100);
-                const cfTone = cf >= 0 ? 'positive' : 'negative';
-                const cfPct = Math.max(4, (Math.abs(cf) / maxLoyer) * 100);
-                return `
-                    <div class="repartition-row">
-                        <div class="repartition-label">
-                            <strong>${escapeHtml(item.name)}</strong>
-                            <span class="repartition-city">${escapeHtml(item.city)}</span>
-                        </div>
-                        <div class="repartition-bars">
-                            <div class="repartition-bar-wrap" title="Loyer brut ${formatCurrency(loyer)}/mois">
-                                <div class="repartition-bar repartition-bar--loyer" style="width:${loyerPct.toFixed(1)}%"></div>
-                                <span class="repartition-val">${formatCurrency(loyer)}</span>
-                            </div>
-                            <div class="repartition-bar-wrap" title="CF net-net ${formatSignedCurrency(cf)}/mois">
-                                <div class="repartition-bar repartition-bar--cf repartition-bar--${cfTone}" style="width:${cfPct.toFixed(1)}%"></div>
-                                <span class="repartition-val ${cf >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(cf)}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-        <div class="repartition-legend">
-            <span class="repartition-legend-item repartition-legend-item--loyer">Loyer brut</span>
-            <span class="repartition-legend-item repartition-legend-item--cf">CF net-net</span>
-        </div>
-    `;
-    if (hasAddresses) {
-        buildPortfolioMap(portfolioItems);
-    }
-}
 
 async function buildPortfolioMap(portfolioItems) {
     const canvas = document.getElementById('portfolio-map-canvas');
@@ -3873,12 +3608,6 @@ function renderCollections() {
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);
-    buildPortfolioPriorities(collectionsView.priorities);
-    buildPortfolioFiscal(collectionsView.fiscal);
-    buildPortfolioDebtRatios(collectionsView.debtRatios);
-    buildPortfolioObjectif(collectionsView.objectif);
-    buildPortfolioProjection(collectionsView.projection);
-    buildPortfolioRepartition(collectionsView.portfolioItems);
     buildPortfolioCredits(collectionsView.portfolioItems, state.profileData.autresCredits);
     buildPortfolioTimeline(collectionsView.portfolioItems);
 }
