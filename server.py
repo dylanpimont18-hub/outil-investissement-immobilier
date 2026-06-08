@@ -577,6 +577,49 @@ def api_bien_historique():
         conn.close()
 
 
+@app.route('/api/portfolio-diagnostic', methods=['POST'])
+def api_portfolio_diagnostic():
+    try:
+        from scraper.config import ANTHROPIC_API_KEY
+    except (ImportError, AttributeError):
+        return jsonify({'error': 'Clé API non configurée dans config.py'}), 503
+
+    payload = request.get_json(silent=True)
+    if not payload:
+        return jsonify({'error': 'Payload JSON manquant'}), 400
+
+    prompt_user = (
+        "Voici les données du portefeuille immobilier de l'investisseur :\n\n"
+        + json.dumps(payload, ensure_ascii=False, indent=2)
+        + "\n\nProduis entre 3 et 5 recommandations priorisées, actionnables, en français naturel. "
+        "Chaque recommandation doit avoir : un titre court, une explication de 2 à 4 phrases qui justifie "
+        "le conseil avec des chiffres précis issus des données, et une action concrète à mener. "
+        "Priorise les sujets fiscaux, les risques de cash-flow, et les opportunités d'optimisation. "
+        "Réponds uniquement avec du JSON valide, sans texte avant ou après, au format : "
+        '{"recommendations": [{"title": "...", "explanation": "...", "action": "..."}]}'
+    )
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model='claude-sonnet-4-6',
+            max_tokens=1024,
+            system=(
+                "Tu es un conseiller en investissement immobilier locatif français expert en fiscalité foncière. "
+                "Tu réponds uniquement en JSON valide, sans markdown ni texte hors JSON."
+            ),
+            messages=[{'role': 'user', 'content': prompt_user}]
+        )
+        raw = message.content[0].text.strip()
+        result = json.loads(raw)
+        return jsonify(result)
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'Réponse IA non parsable : {str(e)}'}), 502
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+
 if __name__ == "__main__":
     print("Spark Investissement — http://localhost:8080")
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False, threaded=True)
