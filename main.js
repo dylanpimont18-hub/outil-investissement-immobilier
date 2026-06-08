@@ -2285,6 +2285,119 @@ function buildPortfolioAdviceZone(advice) {
     });
 }
 
+function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
+    if (!nodes.portfolioOwnedZone || !nodes.portfolioFiches) return;
+
+    const { portfolioItems } = collectionsView;
+
+    if (!portfolioItems.length) {
+        nodes.portfolioOwnedZone.hidden = true;
+        return;
+    }
+
+    nodes.portfolioOwnedZone.hidden = false;
+
+    // Déterminer le verdict de chaque fiche selon les conseils
+    function getVerdict(assetId) {
+        const related = advice.filter(a => a.assetId === assetId || a.assetId === null);
+        if (related.some(a => a.severity === 'red' && a.assetId === assetId)) return 'red';
+        if (related.some(a => a.severity === 'orange' && a.assetId === assetId)) return 'orange';
+        return 'green';
+    }
+
+    const VERDICT_LABELS = { green: 'RAS', orange: 'À surveiller', red: 'Action recommandée' };
+    const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Réel', 'sci-is': 'SCI-IS' };
+
+    nodes.portfolioFiches.innerHTML = portfolioItems.map(item => {
+        const verdict = getVerdict(item.id);
+        const regime = item.variablesData['regime'] || '';
+        const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
+        const travauxCount = meta.travaux.length;
+        const notesCount = meta.notes.length;
+        const hasUnclassified = meta.travaux.some(t => t.tag === 'a-classifier');
+
+        return `
+        <article class="portfolio-fiche" data-fiche-id="${escapeHtml(item.id)}">
+            <div class="portfolio-fiche__header">
+                <div class="portfolio-fiche__identity">
+                    <span class="portfolio-fiche__name">${escapeHtml(item.name)}</span>
+                    <span class="portfolio-fiche__meta">${escapeHtml(item.city)} · <span class="portfolio-fiche__regime">${escapeHtml(REGIME_LABELS_SHORT[regime] || regime)}</span></span>
+                </div>
+                <span class="portfolio-fiche__verdict portfolio-fiche__verdict--${verdict}">${escapeHtml(VERDICT_LABELS[verdict])}</span>
+            </div>
+
+            <div class="portfolio-fiche__body">
+                <div class="portfolio-fiche__donut-wrap">
+                    <canvas id="donut-${escapeHtml(item.id)}" width="160" height="160"></canvas>
+                </div>
+                <div class="portfolio-fiche__kpis">
+                    <div class="portfolio-fiche__kpi">
+                        <span class="portfolio-fiche__kpi-label">Rendement brut</span>
+                        <span class="portfolio-fiche__kpi-value">${(item.metrics.rentaBrute || 0).toFixed(1).replace('.', ',')} %</span>
+                    </div>
+                    <div class="portfolio-fiche__kpi">
+                        <span class="portfolio-fiche__kpi-label">CF net-net</span>
+                        <span class="portfolio-fiche__kpi-value ${(item.metrics.cfNetNet || 0) >= 0 ? 'text--positive' : 'text--negative'}">
+                            ${(item.metrics.cfNetNet || 0) >= 0 ? '+' : ''}${Math.round(item.metrics.cfNetNet || 0).toLocaleString('fr-FR')} €/mois
+                        </span>
+                    </div>
+                    <div class="portfolio-fiche__kpi">
+                        <span class="portfolio-fiche__kpi-label">DSCR</span>
+                        <span class="portfolio-fiche__kpi-value ${(item.metrics.dscr || 0) >= 1.1 ? 'text--positive' : (item.metrics.dscr || 0) >= 1 ? 'text--watch' : 'text--negative'}">
+                            ${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="portfolio-fiche__actions-row">
+                <button class="btn btn--ghost btn--sm" data-action="portfolio-load" data-asset-id="${escapeHtml(item.id)}">
+                    Charger dans le simulateur
+                </button>
+                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="travaux-${escapeHtml(item.id)}">
+                    Travaux${travauxCount > 0 ? ` (${travauxCount}${hasUnclassified ? ' ⚠' : ''})` : ''}
+                </button>
+                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="notes-${escapeHtml(item.id)}">
+                    Notes${notesCount > 0 ? ` (${notesCount})` : ''}
+                </button>
+            </div>
+
+            <div id="travaux-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--travaux" hidden>
+                <!-- Rempli par buildFicheTravaux (tâche 8) -->
+            </div>
+
+            <div id="notes-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--notes" hidden>
+                <!-- Rempli par buildFicheNotes (tâche 9) -->
+            </div>
+        </article>`;
+    }).join('');
+
+    // Rendre les donuts après injection dans le DOM
+    portfolioItems.forEach(item => {
+        const credit  = item.model.mensualiteTotale || 0;
+        const charges = (item.model.chargesExploitationAnnuelles || 0) / 12;
+        const impots  = (item.model.impotsAnnee || 0) / 12;
+        const cf      = item.metrics.cfNetNet || 0;
+        renderDonutChart(`donut-${item.id}`, credit, charges, impots, cf);
+    });
+
+    // Boutons toggle sections
+    nodes.portfolioFiches.querySelectorAll('.portfolio-fiche__toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.dataset.target);
+            if (target) target.hidden = !target.hidden;
+        });
+    });
+
+    // Boutons charger dans simulateur
+    nodes.portfolioFiches.querySelectorAll('[data-action="portfolio-load"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            loadAssetIntoWorkspace(btn.dataset.assetId);
+            document.querySelector('[data-target="workspace-panel"]')?.click();
+        });
+    });
+}
+
 function buildPortfolioAssetCard(item, isPipeline) {
     const cf = item.metrics.cfNetNet || 0;
     const tone = isPipeline
@@ -3690,6 +3803,7 @@ function renderCollections() {
     );
     buildPortfolioDashboardZone(collectionsView, advice);
     buildPortfolioAdviceZone(advice);
+    buildPortfolioFiches(collectionsView, advice, loadAssetMeta());
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);

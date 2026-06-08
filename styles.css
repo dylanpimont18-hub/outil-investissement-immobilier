@@ -8630,3 +8630,90 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     font-size: 0.75rem;
     color: var(--text-tertiary);
 }
+
+/* Zone 3 : Fiches de biens */
+.portfolio-fiches-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+}
+
+.portfolio-fiche {
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: var(--surface-low);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.portfolio-fiche__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.portfolio-fiche__identity { display: flex; flex-direction: column; gap: 4px; }
+.portfolio-fiche__name { font-weight: 700; font-size: 0.95rem; color: var(--text-primary); }
+.portfolio-fiche__meta { font-size: 0.78rem; color: var(--text-secondary); }
+.portfolio-fiche__regime {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    background: var(--surface-mid);
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.portfolio-fiche__verdict {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.portfolio-fiche__verdict--green  { background: color-mix(in srgb, #3FB950 15%, transparent); color: #3FB950; }
+.portfolio-fiche__verdict--orange { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+.portfolio-fiche__verdict--red    { background: color-mix(in srgb, #F85149 15%, transparent); color: #F85149; }
+
+.portfolio-fiche__body {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.portfolio-fiche__donut-wrap canvas {
+    width: 160px !important;
+    height: 160px !important;
+}
+
+.portfolio-fiche__kpis {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    justify-content: center;
+}
+
+.portfolio-fiche__kpi { display: flex; flex-direction: column; gap: 2px; }
+.portfolio-fiche__kpi-label { font-size: 0.72rem; color: var(--text-secondary); font-weight: 500; }
+.portfolio-fiche__kpi-value { font-family: 'IBM Plex Mono', monospace; font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+
+.portfolio-fiche__actions-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.portfolio-fiche__section {
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.text--positive { color: #3FB950; }
+.text--negative { color: #F85149; }
+.text--watch    { color: #ff9500; }
