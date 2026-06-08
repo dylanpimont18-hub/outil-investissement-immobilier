@@ -2663,7 +2663,6 @@ html[data-theme='light'] select {
 /* ── Tables analyse ── */
 #analysis-regime-table,
 #analysis-sensitivity-table,
-#portfolio-priorities,
 #acquisition-arbitrage,
 #comparison-table,
 #portfolio-table {
@@ -5694,7 +5693,6 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 
 #analysis-regime-table,
 #analysis-sensitivity-table,
-#portfolio-priorities,
 #acquisition-arbitrage,
 #comparison-table,
 #portfolio-table {
