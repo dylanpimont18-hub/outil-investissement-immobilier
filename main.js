@@ -1938,6 +1938,170 @@ function buildPortfolioHero(collectionsView) {
 }
 
 
+/**
+ * Évalue le portefeuille et retourne une liste de conseils actionnables.
+ * @returns {Array<{id:string, severity:'red'|'orange'|'info', title:string, text:string, action:string|null, actionLabel:string|null, assetId:string|null}>}
+ */
+function computePortfolioAdvice(portfolioItems, profileData, capacity, assetMetaAll) {
+    const advice = [];
+    const currentYear = new Date().getFullYear();
+    const income = profileData.income || 0;
+    const tmi = calculateTMI(income, { adults: profileData.adults || 2, children: profileData.children || 0 });
+
+    // Revenus fonciers annuels estimés = sum(loyer * 12 * (1 - vacance/100)) sur owned
+    const revenusFonciersEstimes = portfolioItems.reduce((sum, item) => {
+        const loyer = item.variablesData['loyer'] || 0;
+        const vacance = item.variablesData['vacance'] || 0;
+        return sum + loyer * 12 * (1 - vacance / 100);
+    }, 0);
+
+    // Taux d'endettement
+    const mensualitesCredit = portfolioItems.reduce((sum, item) => sum + (item.model.mensualiteTotale || 0), 0);
+    const revenusMensuels = income / 12;
+    const tauxEndettement = revenusMensuels > 0 ? (mensualitesCredit / revenusMensuels) * 100 : 0;
+
+    // --- RÈGLES FISCALES ---
+
+    const microFoncierItems = portfolioItems.filter(i => (i.variablesData['regime'] || '') === 'micro-foncier');
+
+    if (revenusFonciersEstimes > 15000 && microFoncierItems.length > 0) {
+        advice.push({
+            id: 'fiscal-reel-threshold',
+            severity: 'orange',
+            title: 'Régime réel potentiellement avantageux',
+            text: `Vos revenus fonciers estimés (${Math.round(revenusFonciersEstimes).toLocaleString('fr-FR')} €/an) dépassent 15 000 €. Le régime réel permet de déduire les charges réelles et peut réduire significativement votre imposition par rapport au micro-foncier.`,
+            action: null, actionLabel: null, assetId: null
+        });
+    }
+
+    if (tmi >= 30 && portfolioItems.length >= 2) {
+        const cfConsolide = portfolioItems.reduce((s, i) => s + (i.metrics.cfNetNet || 0), 0);
+        if (cfConsolide > 0) {
+            advice.push({
+                id: 'fiscal-sci-is',
+                severity: 'info',
+                title: 'SCI à l\'IS à étudier',
+                text: `Votre TMI est à ${tmi} % avec un CF consolidé positif sur ${portfolioItems.length} biens. La SCI à l'IS peut plafonner l'imposition à 15–25 % sur les bénéfices et optimiser la transmission patrimoniale.`,
+                action: null, actionLabel: null, assetId: null
+            });
+        }
+    }
+
+    portfolioItems.forEach(item => {
+        const regime = item.variablesData['regime'] || '';
+        const meta = assetMetaAll[item.id] || { travaux: [] };
+        const anneeAchat = item.variablesData['annee-achat'];
+        const anneesDetention = anneeAchat ? currentYear - anneeAchat : null;
+
+        // Intérêts encore significatifs + régime micro-foncier
+        if (regime === 'micro-foncier' && anneeAchat && anneesDetention !== null && anneesDetention < 10) {
+            const interetsAnnuels = item.model.interetsAnnee1 || 0;
+            if (interetsAnnuels > 2000) {
+                advice.push({
+                    id: `fiscal-interets-${item.id}`,
+                    severity: 'orange',
+                    title: `${escapeHtml(item.name)} — intérêts déductibles`,
+                    text: `Les intérêts d'emprunt représentent encore ${Math.round(interetsAnnuels).toLocaleString('fr-FR')} €/an. En régime réel, ils sont entièrement déductibles — ce qui peut être plus avantageux que l'abattement micro-foncier de 30 %.`,
+                    action: 'load-simulator', actionLabel: 'Simuler en régime réel', assetId: item.id
+                });
+            }
+        }
+
+        // Travaux déductibles non classifiés
+        const travauxAClassifier = meta.travaux.filter(t => t.tag === 'a-classifier');
+        if (travauxAClassifier.length > 0) {
+            const totalAClassifier = travauxAClassifier.reduce((s, t) => s + t.montant, 0);
+            advice.push({
+                id: `travaux-classifier-${item.id}`,
+                severity: 'red',
+                title: `${escapeHtml(item.name)} — travaux à classifier`,
+                text: `${travauxAClassifier.length} travaux (${Math.round(totalAClassifier).toLocaleString('fr-FR')} €) n'ont pas encore de classification fiscale. Tant qu'ils ne sont pas classifiés, leur impact sur votre imposition n'est pas calculé.`,
+                action: 'see-fiche', actionLabel: 'Voir la fiche', assetId: item.id
+            });
+        }
+
+        // Travaux déductibles significatifs + régime micro-foncier
+        if (regime === 'micro-foncier') {
+            const anneeEnCours = currentYear;
+            const travauxDeductiblesAnnee = meta.travaux
+                .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === anneeEnCours)
+                .reduce((s, t) => s + t.montant, 0);
+            if (travauxDeductiblesAnnee > 1500) {
+                advice.push({
+                    id: `fiscal-travaux-reel-${item.id}`,
+                    severity: 'orange',
+                    title: `${escapeHtml(item.name)} — travaux justifient le régime réel`,
+                    text: `Vous avez ${Math.round(travauxDeductiblesAnnee).toLocaleString('fr-FR')} € de travaux déductibles en ${anneeEnCours}. En régime réel, ces charges s'imputent sur vos revenus fonciers, ce qui peut effacer l'impôt foncier de l'année.`,
+                    action: 'load-simulator', actionLabel: 'Simuler en régime réel', assetId: item.id
+                });
+            }
+        }
+    });
+
+    // --- RÈGLES DETTE ---
+
+    if (tauxEndettement > 30 && tauxEndettement <= 35) {
+        advice.push({
+            id: 'debt-approaching-limit',
+            severity: 'orange',
+            title: 'Taux d\'endettement élevé',
+            text: `Votre taux d'endettement est à ${tauxEndettement.toFixed(1).replace('.', ',')} % — proche du plafond bancaire de 35 %. Une nouvelle acquisition devra être soigneusement cadrée pour rester finançable.`,
+            action: null, actionLabel: null, assetId: null
+        });
+    }
+
+    if (tauxEndettement <= 25 && (capacity.acquisitionBudget || 0) > 50000) {
+        advice.push({
+            id: 'debt-capacity-available',
+            severity: 'info',
+            title: 'Capacité d\'acquisition disponible',
+            text: `Taux d'endettement à ${tauxEndettement.toFixed(1).replace('.', ',')} %. Votre capacité d'emprunt restante est estimée à ${Math.round((capacity.acquisitionBudget || 0) / 1000)} k€ — suffisant pour une nouvelle acquisition.`,
+            action: null, actionLabel: null, assetId: null
+        });
+    }
+
+    // --- RÈGLES RISQUE ---
+
+    portfolioItems.forEach(item => {
+        if ((item.metrics.dscr || 0) < 1.1 && (item.metrics.dscr || 0) > 0) {
+            advice.push({
+                id: `risk-dscr-${item.id}`,
+                severity: 'orange',
+                title: `${escapeHtml(item.name)} — DSCR serré`,
+                text: `Le DSCR de ce bien est à ${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')} — en dessous de 1.1. Une vacance locative ou une hausse de charges peut faire passer le bien en CF négatif.`,
+                action: 'load-simulator', actionLabel: 'Simuler une vacance', assetId: item.id
+            });
+        }
+
+        if ((item.metrics.cfNetNet || 0) < -100) {
+            advice.push({
+                id: `risk-cf-neg-${item.id}`,
+                severity: 'red',
+                title: `${escapeHtml(item.name)} — CF négatif`,
+                text: `Ce bien génère ${Math.round(item.metrics.cfNetNet || 0).toLocaleString('fr-FR')} €/mois net-net. Il pèse sur votre cash-flow consolidé. Étudiez une renégociation de crédit, un changement de régime fiscal ou une hausse de loyer.`,
+                action: 'load-simulator', actionLabel: 'Simuler des leviers', assetId: item.id
+            });
+        }
+    });
+
+    // Concentration géographique
+    if (portfolioItems.length >= 2) {
+        const villes = new Set(portfolioItems.map(i => (i.city || '').toLowerCase().trim()));
+        if (villes.size === 1) {
+            advice.push({
+                id: 'risk-concentration',
+                severity: 'info',
+                title: 'Concentration géographique',
+                text: `Tous vos biens sont localisés dans la même ville. Un retournement du marché local ou une hausse de la vacance dans cette zone affecterait l'ensemble de votre portefeuille.`,
+                action: null, actionLabel: null, assetId: null
+            });
+        }
+    }
+
+    return advice;
+}
+
+
 function buildPortfolioKpiBanner(collectionsView) {
     if (!nodes.portfolioKpiBanner) return;
 
