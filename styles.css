@@ -8787,3 +8787,51 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .notes-add { display: flex; flex-direction: column; gap: 8px; }
 .notes-textarea { resize: vertical; min-height: 64px; }
 .notes-submit { align-self: flex-end; }
+
+/* Zone 4 : Pipeline comparatif */
+.pipeline-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+
+.pipeline-table th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.pipeline-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+}
+
+.pipeline-table tr:last-child td { border-bottom: none; }
+
+.pipeline-number {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    text-align: right;
+}
+
+.pipeline-name { font-weight: 600; color: var(--text-primary); }
+
+.pipeline-score {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+
+.pipeline-score--excellent, .pipeline-score--positive { background: color-mix(in srgb, #3FB950 15%, transparent); color: #3FB950; }
+.pipeline-score--neutral { background: var(--surface-mid); color: var(--text-secondary); }
+.pipeline-score--watch { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+.pipeline-score--negative { background: color-mix(in srgb, #F85149 15%, transparent); color: #F85149; }

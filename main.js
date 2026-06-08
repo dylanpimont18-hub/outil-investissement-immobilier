@@ -2534,6 +2534,63 @@ function buildFicheNotes(assetId, meta) {
     });
 }
 
+function buildPortfolioPipelineZone(collectionsView) {
+    if (!nodes.portfolioPipelineZone) return;
+    const items = collectionsView.comparisonItems || [];
+
+    if (!items.length) {
+        nodes.portfolioPipelineZone.hidden = true;
+        return;
+    }
+
+    nodes.portfolioPipelineZone.hidden = false;
+
+    const container = document.getElementById('portfolio-asset-grid-pipeline');
+    if (!container) return;
+
+    container.innerHTML = `
+        <table class="pipeline-table">
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Ville</th>
+                    <th>Prix net</th>
+                    <th>Rdt brut</th>
+                    <th>CF estimé</th>
+                    <th>DSCR</th>
+                    <th>Score</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(item => {
+                    const prixNet = (item.variablesData['prix'] || 0) - (item.variablesData['nego'] || 0);
+                    const cf = item.metrics.cfNetNet || 0;
+                    const cfTone = cf > 0 ? 'text--positive' : cf < 0 ? 'text--negative' : '';
+                    const dscrTone = (item.metrics.dscr || 0) >= 1.1 ? 'text--positive' : (item.metrics.dscr || 0) >= 1 ? 'text--watch' : 'text--negative';
+                    return `
+                    <tr>
+                        <td class="pipeline-name">${escapeHtml(item.name)}</td>
+                        <td>${escapeHtml(item.city)}</td>
+                        <td class="pipeline-number">${Math.round(prixNet).toLocaleString('fr-FR')} €</td>
+                        <td class="pipeline-number">${(item.metrics.rentaBrute || 0).toFixed(1).replace('.', ',')} %</td>
+                        <td class="pipeline-number ${cfTone}">${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €</td>
+                        <td class="pipeline-number ${dscrTone}">${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')}</td>
+                        <td><span class="pipeline-score pipeline-score--${escapeHtml(item.analysisModel?.decision?.tone || 'neutral')}">${escapeHtml(item.analysisModel?.decision?.label || '—')}</span></td>
+                        <td><button class="btn btn--ghost btn--sm" data-action="portfolio-load" data-asset-id="${escapeHtml(item.id)}">Charger</button></td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+
+    container.querySelectorAll('[data-action="portfolio-load"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            loadAssetIntoWorkspace(btn.dataset.assetId);
+            document.querySelector('[data-target="workspace-panel"]')?.click();
+        });
+    });
+}
+
 function buildPortfolioAssetCard(item, isPipeline) {
     const cf = item.metrics.cfNetNet || 0;
     const tone = isPipeline
@@ -3940,6 +3997,7 @@ function renderCollections() {
     buildPortfolioDashboardZone(collectionsView, advice);
     buildPortfolioAdviceZone(advice);
     buildPortfolioFiches(collectionsView, advice, loadAssetMeta());
+    buildPortfolioPipelineZone(collectionsView);
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);
