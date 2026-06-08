@@ -2217,6 +2217,74 @@ function buildPortfolioDashboardZone(collectionsView, advice) {
         : '';
 }
 
+function buildPortfolioAdviceZone(advice) {
+    if (!nodes.portfolioAdvice || !nodes.portfolioAdviceCards) return;
+
+    if (!advice.length) {
+        nodes.portfolioAdvice.hidden = true;
+        return;
+    }
+
+    nodes.portfolioAdvice.hidden = false;
+
+    const SEVERITY_LABEL = { red: 'Action recommandée', orange: 'À surveiller', info: 'Information' };
+
+    const THEME_GROUPS = [
+        { ids: ['fiscal-', 'travaux-classifier-'], label: 'Fiscalité' },
+        { ids: ['debt-'], label: 'Dette & financement' },
+        { ids: ['risk-'], label: 'Risque' }
+    ];
+
+    function getTheme(id) {
+        for (const g of THEME_GROUPS) {
+            if (g.ids.some(prefix => id.startsWith(prefix))) return g.label;
+        }
+        return 'Opportunité';
+    }
+
+    const grouped = {};
+    advice.forEach(a => {
+        const theme = getTheme(a.id);
+        if (!grouped[theme]) grouped[theme] = [];
+        grouped[theme].push(a);
+    });
+
+    nodes.portfolioAdviceCards.innerHTML = Object.entries(grouped).map(([theme, items]) => `
+        <div class="advice-group">
+            <div class="advice-group__label">${escapeHtml(theme)}</div>
+            ${items.map(a => `
+                <div class="advice-card advice-card--${a.severity}" data-advice-id="${escapeHtml(a.id)}">
+                    <div class="advice-card__header">
+                        <span class="advice-card__title">${escapeHtml(a.title)}</span>
+                        <span class="advice-card__badge advice-card__badge--${a.severity}">${escapeHtml(SEVERITY_LABEL[a.severity] || '')}</span>
+                    </div>
+                    <p class="advice-card__text">${escapeHtml(a.text)}</p>
+                    ${a.action && a.assetId ? `
+                        <button class="advice-card__action btn btn--ghost btn--sm"
+                            data-action="${escapeHtml(a.action)}"
+                            data-asset-id="${escapeHtml(a.assetId)}">
+                            ${escapeHtml(a.actionLabel || 'Voir')}
+                        </button>` : ''}
+                </div>`).join('')}
+        </div>`).join('');
+
+    // Gérer les clics sur les boutons d'action
+    nodes.portfolioAdviceCards.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            const assetId = btn.dataset.assetId;
+            if (action === 'load-simulator' && assetId) {
+                loadAssetIntoWorkspace(assetId);
+                document.querySelector('[data-target="workspace-panel"]')?.click();
+            }
+            if (action === 'see-fiche' && assetId) {
+                const fiche = document.querySelector(`[data-fiche-id="${CSS.escape(assetId)}"]`);
+                fiche?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+}
+
 function buildPortfolioAssetCard(item, isPipeline) {
     const cf = item.metrics.cfNetNet || 0;
     const tone = isPipeline
@@ -3621,6 +3689,7 @@ function renderCollections() {
         loadAssetMeta()
     );
     buildPortfolioDashboardZone(collectionsView, advice);
+    buildPortfolioAdviceZone(advice);
     buildPortfolioHero(collectionsView);
     buildCollectionMetricCards(collectionsView.dashboard);
     buildPortfolioAssetGrid(collectionsView);

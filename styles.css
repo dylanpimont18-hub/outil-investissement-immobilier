@@ -8539,6 +8539,76 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .portfolio-alert--red .portfolio-alert__dot    { background: #F85149; }
 .portfolio-alert--orange .portfolio-alert__dot { background: #ff9500; }
 
+/* Zone 2 : Conseils intelligents */
+.portfolio-advice-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.advice-group { display: flex; flex-direction: column; gap: 8px; }
+
+.advice-group__label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+}
+
+.advice-card {
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-low);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.advice-card--red    { border-color: color-mix(in srgb, #F85149 35%, transparent); }
+.advice-card--orange { border-color: color-mix(in srgb, #ff9500 35%, transparent); }
+.advice-card--info   { border-color: var(--border-subtle); }
+
+.advice-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.advice-card__title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.advice-card__badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.advice-card__badge--red    { background: color-mix(in srgb, #F85149 15%, transparent); color: #F85149; }
+.advice-card__badge--orange { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+.advice-card__badge--info   { background: var(--surface-mid); color: var(--text-secondary); }
+
+.advice-card__text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.advice-card__action { align-self: flex-start; margin-top: 4px; }
+
 /* Bouton Diagnostic IA */
 .portfolio-ai-trigger-row {
     display: flex;
