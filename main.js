@@ -2299,9 +2299,8 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
 
     // Déterminer le verdict de chaque fiche selon les conseils
     function getVerdict(assetId) {
-        const related = advice.filter(a => a.assetId === assetId || a.assetId === null);
-        if (related.some(a => a.severity === 'red' && a.assetId === assetId)) return 'red';
-        if (related.some(a => a.severity === 'orange' && a.assetId === assetId)) return 'orange';
+        if (advice.some(a => a.severity === 'red' && a.assetId === assetId)) return 'red';
+        if (advice.some(a => a.severity === 'orange' && a.assetId === assetId)) return 'orange';
         return 'green';
     }
 
