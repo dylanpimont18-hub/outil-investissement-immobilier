@@ -3741,6 +3741,17 @@ body.tuto-active {
     text-transform: uppercase;
     letter-spacing: .12em;
 }
+.scanner-price-drop {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--success);
+    background: rgba(63, 185, 80, 0.12);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+}
 
 .scanner-results-wrap {
     background: var(--surface);
@@ -7257,111 +7268,6 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     text-align: right;
 }
 
-/* ── Faisabilité ── */
-.feasibility-wrapper {
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-}
-.feasibility-target-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 20px;
-}
-.feasibility-label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted-strong);
-    margin-bottom: 8px;
-}
-.feasibility-input-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.feasibility-unit {
-    font-size: 13px;
-    color: var(--muted);
-    white-space: nowrap;
-}
-.feasibility-options {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-}
-@media (max-width: 640px) {
-    .feasibility-options { grid-template-columns: 1fr; }
-}
-.feasibility-option {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-.feasibility-option h3 {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text);
-}
-.feasibility-option p {
-    font-size: 13px;
-    color: var(--muted);
-    line-height: 1.5;
-}
-.feasibility-option-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.feasibility-option-badge {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    color: var(--accent);
-    background: var(--accent-soft);
-    border: 1px solid var(--accent-soft);
-    border-radius: var(--radius-pill);
-    padding: 2px 8px;
-}
-.feasibility-option-sub {
-    font-size: 12px;
-    color: var(--muted);
-}
-.feasibility-result {
-    margin-top: auto;
-    padding: 12px 16px;
-    background: var(--accent-gold-dim);
-    border: 1px solid var(--accent-gold-border);
-    border-radius: var(--radius-md);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-.feasibility-result-label {
-    font-size: 12px;
-    color: var(--muted);
-}
-.feasibility-result-value {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--accent-strong);
-}
-.feasibility-result-value--positive {
-    color: var(--success);
-}
-.feasibility-result-value--impossible {
-    font-size: 14px;
-    color: var(--danger);
-}
-
 /* ── Sliders ── */
 .variables-slider {
     width: 100%;
@@ -8129,13 +8035,6 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     border-radius: 2px;
 }
 
-/* ─── Champ profil — inputs avec unité ──────────────── */
-.profile-modal .feasibility-input-row,
-.profile-modal .feasibility-unit {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
 
 .is-saved-flash {
     background: rgba(var(--success-rgb), 0.07) !important;

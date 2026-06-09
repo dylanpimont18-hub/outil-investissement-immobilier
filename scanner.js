@@ -609,6 +609,12 @@ function _buildScannerSummaryRow(r) {
     r.type_bien ? `${r.type_bien.charAt(0).toUpperCase()}${r.type_bien.slice(1)}` : null,
   ].filter(Boolean).join(' · ');
 
+  const baisseValue = typeof r.baisse === 'number' && r.baisse > 0 ? r.baisse : null;
+  const baisseDateLabel = baisseValue && r.date_baisse ? r.date_baisse.slice(0, 10) : null;
+  const baisseLabel = baisseValue
+    ? `↓ -${_fmtEur(baisseValue)}`
+    : null;
+
   return {
     bienId: r.bien_id,
     title: r.titre || 'Bien sans titre',
@@ -628,6 +634,9 @@ function _buildScannerSummaryRow(r) {
     rankDetail: ranking.detail,
     priceLabel: _fmtEur(r.prix),
     priceValue: r.prix,
+    baisseLabel,
+    baisseDateLabel,
+    baisseValue,
     rentLabel: r.loyer_estime != null ? _fmtEur(r.loyer_estime) : '—',
     rentValue: r.loyer_estime,
     rentSourceLabel: _getLoyerSourceLabel(r.loyer_source),
@@ -1173,7 +1182,10 @@ function _renderGlobalOverviewTable(rows) {
         </td>
         <td class="scanner-align-left scanner-summary-cell">${statusPill}</td>
         <td class="scanner-align-left scanner-summary-cell">${decisionPill}</td>
-        <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">${row.priceLabel}</td>
+        <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
+          ${row.priceLabel}
+          ${row.baisseLabel ? `<span class="scanner-price-drop" title="Ancien prix : +${_esc(row.baisseLabel.replace('↓ ', ''))} — baisse le ${_esc(row.baisseDateLabel || '?')}">${_esc(row.baisseLabel)}</span>` : ''}
+        </td>
         <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
           <div class="scanner-summary-row__rent">${row.rentLabel}</div>
           <div class="scanner-summary-row__aux">${_esc(row.rentSourceLabel)}</div>

@@ -275,7 +275,13 @@ def _query_results_data(
                 a.immeuble_rapport, a.deja_loue, a.loyer_actuel,
                 a.meuble, a.parking_garage, a.chauffage,
                 a.date_enrichissement,
-                CASE WHEN a.id IS NULL THEN 0 ELSE 1 END AS ia_enrichi
+                CASE WHEN a.id IS NULL THEN 0 ELSE 1 END AS ia_enrichi,
+                (SELECT MAX(hp.prix_ancien) - b.prix
+                   FROM historique_prix hp WHERE hp.bien_id = b.id
+                   AND hp.prix_ancien > b.prix) AS baisse,
+                (SELECT MAX(hp.date_changement)
+                   FROM historique_prix hp WHERE hp.bien_id = b.id
+                   AND hp.prix_ancien > b.prix) AS date_baisse
             FROM biens b
             LEFT JOIN annonces a ON a.bien_id = b.id
         """
