@@ -2268,6 +2268,20 @@ function buildPortfolioAdviceZone(advice) {
                 </div>`).join('')}
         </div>`).join('');
 
+    // Accordion titre de zone
+    const adviceToggle = document.getElementById('portfolio-advice-toggle');
+    if (adviceToggle) {
+        adviceToggle.replaceWith(adviceToggle.cloneNode(true)); // retire les anciens listeners
+        const freshToggle = document.getElementById('portfolio-advice-toggle');
+        freshToggle.addEventListener('click', () => {
+            const expanded = freshToggle.getAttribute('aria-expanded') === 'true';
+            freshToggle.setAttribute('aria-expanded', String(!expanded));
+            nodes.portfolioAdviceCards.hidden = expanded;
+            const chevron = freshToggle.querySelector('.portfolio-zone-title__chevron');
+            if (chevron) chevron.textContent = expanded ? '▶' : '▼';
+        });
+    }
+
     // Gérer les clics sur les boutons d'action
     nodes.portfolioAdviceCards.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -2304,7 +2318,7 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
         return 'green';
     }
 
-    const VERDICT_LABELS = { green: 'RAS', orange: 'À surveiller', red: 'Action recommandée' };
+    const VERDICT_LABELS = { green: 'Aucune alerte', orange: 'À surveiller', red: 'Action recommandée' };
     const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Réel', 'sci-is': 'SCI-IS' };
 
     nodes.portfolioFiches.innerHTML = portfolioItems.map(item => {
@@ -2350,22 +2364,22 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
             </div>
 
             <div class="portfolio-fiche__actions-row">
-                <button class="btn btn--ghost btn--sm" data-action="portfolio-load" data-asset-id="${escapeHtml(item.id)}">
+                <button class="btn btn--accent btn--sm" data-action="portfolio-load" data-asset-id="${escapeHtml(item.id)}">
                     Charger dans le simulateur
                 </button>
-                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="travaux-${escapeHtml(item.id)}">
-                    Travaux${travauxCount > 0 ? ` (${travauxCount}${hasUnclassified ? ' ⚠' : ''})` : ''}
+                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="travaux-${escapeHtml(item.id)}" aria-expanded="false">
+                    ▶ Travaux${travauxCount > 0 ? ` (${travauxCount}${hasUnclassified ? ' ⚠' : ''})` : ''}
                 </button>
-                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="notes-${escapeHtml(item.id)}">
-                    Notes${notesCount > 0 ? ` (${notesCount})` : ''}
+                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="notes-${escapeHtml(item.id)}" aria-expanded="false">
+                    ▶ Notes${notesCount > 0 ? ` (${notesCount})` : ''}
                 </button>
             </div>
 
-            <div id="travaux-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--travaux" hidden>
+            <div id="travaux-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--travaux">
                 <!-- Rempli par buildFicheTravaux (tâche 8) -->
             </div>
 
-            <div id="notes-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--notes" hidden>
+            <div id="notes-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--notes">
                 <!-- Rempli par buildFicheNotes (tâche 9) -->
             </div>
         </article>`;
@@ -2380,11 +2394,24 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
         renderDonutChart(`donut-${item.id}`, credit, charges, impots, cf);
     });
 
-    // Boutons toggle sections
+    // Boutons toggle sections (avec animation et chevron)
     nodes.portfolioFiches.querySelectorAll('.portfolio-fiche__toggle').forEach(btn => {
         btn.addEventListener('click', () => {
             const target = document.getElementById(btn.dataset.target);
-            if (target) target.hidden = !target.hidden;
+            if (!target) return;
+            const isOpen = btn.getAttribute('aria-expanded') === 'true';
+            if (isOpen) {
+                target.classList.remove('is-open');
+                btn.setAttribute('aria-expanded', 'false');
+                // remplace ▼ par ▶ en début de texte
+                btn.textContent = btn.textContent.replace(/^▼\s*/, '▶ ');
+            } else {
+                // force reflow pour que la transition parte de 0
+                void target.offsetHeight;
+                target.classList.add('is-open');
+                btn.setAttribute('aria-expanded', 'true');
+                btn.textContent = btn.textContent.replace(/^▶\s*/, '▼ ');
+            }
         });
     });
 
@@ -2401,6 +2428,17 @@ function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
         const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
         buildFicheTravaux(item.id, meta);
         buildFicheNotes(item.id, meta);
+
+        // Auto-ouvrir la section Travaux si des travaux sont à classifier
+        if (meta.travaux.some(t => t.tag === 'a-classifier')) {
+            const travauxSection = document.getElementById(`travaux-${item.id}`);
+            const travauxBtn = nodes.portfolioFiches.querySelector(`[data-target="travaux-${item.id}"]`);
+            if (travauxSection && travauxBtn) {
+                travauxSection.classList.add('is-open');
+                travauxBtn.setAttribute('aria-expanded', 'true');
+                travauxBtn.textContent = travauxBtn.textContent.replace(/^▶\s*/, '▼ ');
+            }
+        }
     });
 }
 
