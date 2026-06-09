@@ -52,10 +52,6 @@
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
                         <span>Portefeuille</span>
                     </button>
-                    <button class="workspace-tab" data-target="feasibility-panel">
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="3" y1="4" x2="11" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/><line x1="3" y1="10" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
-                        <span>Faisabilité</span>
-                    </button>
                     <button class="workspace-tab" data-target="scanner-panel">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                         <span>Scanner</span>
@@ -705,145 +701,85 @@
 
             </section>
 
-            <section id="feasibility-panel" class="workspace-panel" style="display:none" aria-label="Faisabilité">
-                <div class="panel-head panel-head--stacked">
-                    <div>
-                        <p class="brand-kicker">Cadrage acquisition</p>
-                        <h2>Prix cible et loyer plancher</h2>
-                        <p class="panel-note">Calé sur vos hypothèses actuelles (apport, taux, durée, charges, régime fiscal).</p>
-                    </div>
-                </div>
-
-                <div class="feasibility-wrapper">
-                    <div class="feasibility-target-card">
-                        <label class="feasibility-label" for="feasibility-target-cf">
-                            Objectif de cash-flow net-net
-                        </label>
-                        <div class="feasibility-input-row">
-                            <input type="number" id="feasibility-target-cf" class="variables-input" value="100" step="10" min="-500" max="2000">
-                            <span class="feasibility-unit">€ / mois</span>
-                        </div>
-                    </div>
-
-                    <div class="feasibility-options">
-                        <div class="feasibility-option">
-                            <div class="feasibility-option-header">
-                                <span class="feasibility-option-badge">Option A</span>
-                                <span class="feasibility-option-sub">Vous partez du marché locatif</span>
-                            </div>
-                            <h3>Je pars du loyer de marché</h3>
-                            <p>Vous connaissez le loyer crédible du secteur. L'application vous donne le prix d'achat maximum à ne pas dépasser pour rester dans votre cible.</p>
-
-                            <label class="feasibility-label" for="feasibility-loyer-estime">
-                                Loyer estimé
-                            </label>
-                            <div class="feasibility-input-row">
-                                <input type="number" id="feasibility-loyer-estime" class="variables-input" value="500" step="10" min="0">
-                                <span class="feasibility-unit">€/mois</span>
-                            </div>
-
-                            <div class="feasibility-result">
-                                <span class="feasibility-result-label">Prix d'achat maximal (FAI)
-                                    <button class="field-hint" type="button" tabindex="-1" data-tip="Le prix maximum que vous pouvez payer frais inclus pour atteindre votre objectif de cash-flow avec ce loyer.">?</button>
-                                </span>
-                                <strong id="feasibility-prix-max" class="feasibility-result-value">—</strong>
-                            </div>
-                        </div>
-
-                        <div class="feasibility-option">
-                            <div class="feasibility-option-header">
-                                <span class="feasibility-option-badge">Option B</span>
-                                <span class="feasibility-option-sub">Vous partez d'un prix affiché</span>
-                            </div>
-                            <h3>Je pars du prix affiché</h3>
-                            <p>Vous avez déjà une annonce en tête. L'application vous indique le loyer minimum à sécuriser pour rester aligné avec votre objectif.</p>
-
-                            <label class="feasibility-label" for="feasibility-prix-annonce">
-                                Prix de l'annonce (FAI)
-                                <button class="field-hint" type="button" tabindex="-1" data-tip="FAI = Frais d'Agence Inclus. Prix affiché dans l'annonce, commission incluse.">?</button>
-                            </label>
-                            <div class="feasibility-input-row">
-                                <input type="number" id="feasibility-prix-annonce" class="variables-input" value="80000" step="1000" min="0">
-                                <span class="feasibility-unit">€</span>
-                            </div>
-
-                            <div class="feasibility-result">
-                                <span class="feasibility-result-label">Loyer minimum à sécuriser
-                                    <button class="field-hint" type="button" tabindex="-1" data-tip="Le loyer mensuel minimum que vous devez demander pour atteindre votre objectif de CF avec ce prix d'achat.">?</button>
-                                </span>
-                                <strong id="feasibility-loyer-min" class="feasibility-result-value">—</strong>
-                            </div>
-                        </div>
-                    </div>
-
-                    <p class="panel-note" style="margin-top: 16px;">Ces calculs réutilisent l'apport, le taux, la durée, les charges et le régime fiscal définis dans l'onglet Saisie &amp; Analyse.</p>
-                </div>
-            </section>
                         <section id="scanner-panel" style="display:none" aria-label="Scanner d'annonces">
-              <div class="scanner-header">
-                <div class="scanner-header-left">
-                                    <p class="scanner-header-kicker">Scanner d'annonces</p>
-                                    <h2 class="scanner-header-title">Base d'annonces locatives</h2>
-                  <p id="scanner-header-sub" class="scanner-header-sub">Centre-Val de Loire</p>
-                                                                        <p class="scanner-header-story">Constituez un lot d'annonces, structurez les fiches, puis isolez les dossiers compatibles avec vos seuils d'analyse.</p>
-                                    <div class="scanner-hero-meta">
-                                        <span class="scanner-meta-chip">Lot régional</span>
-                                                                                <span id="scanner-results-meta" class="scanner-meta-chip scanner-meta-chip--muted">Définissez une zone pour lancer un scan ciblé.</span>
+              <div class="workspace-hero scanner-workspace-hero">
+                <div class="workspace-hero-card">
+                  <div class="workspace-hero-copy">
+                    <div class="workspace-hero-eyebrow">Scanner d'annonces</div>
+                    <h2>Base d'annonces locatives</h2>
+                    <p id="scanner-header-sub" class="workspace-hero-summary">Vierzon 18100</p>
+                    <div class="workspace-hero-meta">
+                      <span id="scanner-zone-chip" class="workspace-hero-chip">Vierzon 18100</span>
+                      <span id="scanner-results-meta" class="workspace-hero-chip" style="opacity:.7">Définissez une zone pour lancer un scan ciblé.</span>
+                    </div>
                   </div>
-                </div>
-                                <div class="scanner-command-grid">
-                                    <section class="scanner-command-card scanner-command-card--primary">
-                                        <div class="scanner-command-card__eyebrow">Prochain scan</div>
-                                        <h3 class="scanner-command-card__title">Cibler une zone</h3>
-                                                                                <p class="scanner-command-card__copy">Lancez un scan par code postal ou ville pour constituer un lot de travail réutilisable et comparable dans le temps.</p>
-                                        <div class="scanner-target-cp-group">
-                                            <span class="scanner-target-cp-label">Zone</span>
-                                            <div class="scanner-target-cp-input-wrap">
-                                                <input id="scan-target-cp-input" type="text" placeholder="Code postal ou ville…"
-                                                    autocomplete="off"
-                                                    class="scanner-target-cp-input">
-                                                <div id="scan-target-cp-dropdown" class="scanner-dropdown"></div>
-                                            </div>
-                                            <span id="scan-target-cp-badge" class="scanner-target-cp-badge"></span>
-                                            <button id="scan-target-cp-reset" class="scanner-target-cp-reset">Réinitialiser</button>
-                                        </div>
-                                        <div class="scanner-command-card__actions">
-                                            <button id="btn-scan" class="scanner-btn scanner-btn--primary" disabled>Lancer un scan</button>
-                                            <button id="btn-scan-full" class="scanner-btn scanner-btn--outline" disabled>Scan complet</button>
-                                        </div>
-                                    </section>
-
-                                    <section class="scanner-command-card scanner-command-card--secondary">
-                                        <div class="scanner-command-card__top">
-                                            <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
-                                                <span id="scanner-status-dot" class="scanner-status-dot"></span>
-                                                <span id="scanner-status-label">En attente</span>
-                                            </div>
-                                            <label for="scanner-missing-threshold" class="scanner-missing-threshold">
-                                                <span>Biens absents</span>
-                                                <select id="scanner-missing-threshold" title="Masquer un bien après plusieurs scans manqués" class="scanner-missing-threshold__select">
-                                                    <option value="0">Jamais</option>
-                                                    <option value="1">1 scan</option>
-                                                    <option value="2">2 scans</option>
-                                                    <option value="3">3 scans</option>
-                                                    <option value="5">5 scans</option>
-                                                    <option value="7">7 scans</option>
-                                                    <option value="10">10 scans</option>
-                                                </select>
-                                            </label>
-                                        </div>
-                                        <p class="scanner-command-card__copy">Le lot courant reste disponible entre deux scans. Lancez l'analyse IA pour structurer les fiches et homogénéiser la lecture des dossiers.</p>
-                                        <div class="scanner-command-card__actions scanner-command-card__actions--secondary">
-                                            <button id="btn-enrich" class="scanner-btn scanner-btn--outline scanner-btn--accent" disabled>Analyser avec l'IA <span id="enrich-pending-badge" class="scanner-inline-badge"></span></button>
-                                            <button id="btn-clear-cache" class="scanner-btn scanner-btn--ghost">Vider le cache</button>
-                                        </div>
-                                    </section>
+                  <div class="workspace-hero-score scanner-command-panel">
+                    <section class="scanner-command-card scanner-command-card--primary">
+                      <div class="scanner-command-card__eyebrow">Prochain scan</div>
+                      <h3 class="scanner-command-card__title">Cibler une zone</h3>
+                      <div class="scanner-target-cp-group">
+                        <span class="scanner-target-cp-label">Zone</span>
+                        <div class="scanner-target-cp-input-wrap">
+                          <input id="scan-target-cp-input" type="text" placeholder="Code postal ou ville…"
+                            autocomplete="off" class="scanner-target-cp-input">
+                          <div id="scan-target-cp-dropdown" class="scanner-dropdown"></div>
+                        </div>
+                        <span id="scan-target-cp-badge" class="scanner-target-cp-badge"></span>
+                        <button id="scan-target-cp-reset" class="scanner-target-cp-reset">Réinitialiser</button>
+                      </div>
+                      <div id="scanner-rayon-group" class="scanner-rayon-group">
+                        <span class="scanner-rayon-label">Rayon</span>
+                        <div class="scanner-rayon-options">
+                          <label class="scanner-rayon-option"><input type="radio" name="scanner-rayon" value="5" checked> 5 km</label>
+                          <label class="scanner-rayon-option"><input type="radio" name="scanner-rayon" value="10"> 10 km</label>
+                          <label class="scanner-rayon-option"><input type="radio" name="scanner-rayon" value="20"> 20 km</label>
+                          <label class="scanner-rayon-option"><input type="radio" name="scanner-rayon" value="30"> 30 km</label>
+                        </div>
+                      </div>
+                      <div class="scanner-command-card__actions">
+                        <button id="btn-scan" class="btn btn--primary scanner-scan-btn" disabled>Lancer un scan</button>
+                        <div class="scanner-options-dropdown-wrap" style="position:relative;display:inline-block">
+                          <button id="btn-scan-options" class="btn btn--outline scanner-options-btn" type="button" aria-label="Options de scan">•••</button>
+                          <div id="scanner-options-dropdown" class="scanner-options-dropdown" hidden>
+                            <button id="btn-scan-full" type="button" class="scanner-options-item">Scan complet (vide cache)</button>
+                            <button id="btn-clear-cache" type="button" class="scanner-options-item">Vider le cache</button>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="scanner-command-card scanner-command-card--secondary">
+                      <div class="scanner-command-card__top">
+                        <div id="scanner-status-chip" class="scanner-status-chip scanner-status--idle">
+                          <span id="scanner-status-dot" class="scanner-status-dot"></span>
+                          <span id="scanner-status-label">En attente</span>
+                        </div>
+                        <label for="scanner-missing-threshold" class="scanner-missing-threshold">
+                          <span>Biens absents</span>
+                          <select id="scanner-missing-threshold" title="Masquer un bien après plusieurs scans manqués" class="scanner-missing-threshold__select">
+                            <option value="0">Jamais</option>
+                            <option value="1">1 scan</option>
+                            <option value="2">2 scans</option>
+                            <option value="3">3 scans</option>
+                            <option value="5">5 scans</option>
+                            <option value="7">7 scans</option>
+                            <option value="10">10 scans</option>
+                          </select>
+                        </label>
+                      </div>
+                      <p class="scanner-command-card__copy">Le lot courant reste disponible entre deux scans. Lancez l'analyse IA pour structurer les fiches et homogénéiser la lecture des dossiers.</p>
+                      <div class="scanner-command-card__actions scanner-command-card__actions--secondary">
+                        <button id="btn-enrich" class="btn btn--outline scanner-btn--accent" disabled>Analyser avec l'IA <span id="enrich-pending-badge" class="scanner-inline-badge"></span></button>
+                      </div>
+                    </section>
+                  </div>
                 </div>
               </div>
 
               <section id="scanner-hero-summary" class="workspace-hero" aria-label="Synthèse scanner"></section>
 
-              <div id="scanner-progress" class="scanner-progress" style="display:none">
+              <div id="scanner-progress-wrap" class="workspace-hero scanner-progress-hero" style="display:none">
+                <div class="workspace-hero-card scanner-progress-card">
+                  <div id="scanner-progress" class="scanner-progress">
                                 <div class="scanner-progress-head">
                                     <div>
                                         <div class="scanner-progress-eyebrow">Exécution en cours</div>
@@ -866,6 +802,8 @@
                                     <button id="scanner-log-toggle" type="button" class="scanner-log-toggle" aria-expanded="false">Journal détaillé</button>
                 </div>
                                 <div id="scanner-logs" class="scanner-logs" hidden></div>
+                  </div>
+                </div>
               </div>
 
               <div id="scanner-stats" class="scanner-stats-row" style="display:none"></div>
@@ -1186,18 +1124,18 @@
                         <label class="form-label" for="profile-objectif-cf">
                             Objectif CF mensuel net-net
                         </label>
-                        <div class="feasibility-input-row">
+                        <div style="display:flex;align-items:center;gap:8px;">
                             <input type="number" id="profile-objectif-cf" class="variables-input" min="0" max="50000" step="100" placeholder="1000">
-                            <span class="feasibility-unit">€ / mois</span>
+                            <span style="font-size:13px;color:var(--muted);white-space:nowrap;">€ / mois</span>
                         </div>
                     </div>
                     <div class="form-field">
                         <label class="form-label" for="profile-revalo-annuelle">
                             Revalorisation annuelle estimée
                         </label>
-                        <div class="feasibility-input-row">
+                        <div style="display:flex;align-items:center;gap:8px;">
                             <input type="number" id="profile-revalo-annuelle" class="variables-input" min="0" max="20" step="0.5" placeholder="2">
-                            <span class="feasibility-unit">% / an</span>
+                            <span style="font-size:13px;color:var(--muted);white-space:nowrap;">% / an</span>
                         </div>
                     </div>
                     </form>

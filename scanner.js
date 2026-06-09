@@ -228,6 +228,11 @@ function _setScanTarget(cp, commune, label) {
   if (reset) reset.style.display = '';
   const input = document.getElementById('scan-target-cp-input');
   if (input) input.value = label;
+  // M1 — update hero zone chip
+  const zoneChip = document.getElementById('scanner-zone-chip');
+  if (zoneChip) zoneChip.textContent = label;
+  const headerSub = document.getElementById('scanner-header-sub');
+  if (headerSub) headerSub.textContent = label;
   _updateScanButtonsState();
   _renderScannerHero();
 }
@@ -238,6 +243,8 @@ function _updateScanButtonsState() {
     const btn = document.getElementById(id);
     if (btn) btn.disabled = !canScan;
   });
+  const optionsBtn = document.getElementById('btn-scan-options');
+  if (optionsBtn) optionsBtn.disabled = _scanRunning;
   const input = document.getElementById('scan-target-cp-input');
   const reset = document.getElementById('scan-target-cp-reset');
   if (input) input.disabled = _scanRunning;
@@ -1373,6 +1380,16 @@ function _bindButtons() {
   });
   document.getElementById('scanner-log-toggle')?.addEventListener('click', () => {
     _setScannerLogsExpanded(!_scannerLogsExpanded);
+  });
+  // Options dropdown toggle (M1)
+  document.getElementById('btn-scan-options')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = document.getElementById('scanner-options-dropdown');
+    if (dd) dd.hidden = !dd.hidden;
+  });
+  document.addEventListener('click', () => {
+    const dd = document.getElementById('scanner-options-dropdown');
+    if (dd) dd.hidden = true;
   });
   document.getElementById('btn-toggle-filters')?.addEventListener('click', () => {
     if (_isMobileScannerFiltersMode()) {
@@ -2649,7 +2666,7 @@ function _updateProgress(data) {
 }
 
 function _showProgress(visible) {
-  const el = document.getElementById('scanner-progress');
+  const el = document.getElementById('scanner-progress-wrap');
   if (el) el.style.display = visible ? '' : 'none';
   if (visible) {
     const logsEl = document.getElementById('scanner-logs');

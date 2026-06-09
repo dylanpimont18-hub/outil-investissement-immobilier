@@ -37,6 +37,7 @@ html[data-theme='light'] {
     --border-subtle:  #E0E7FF;
 
     --primary:        #6366F1;
+    --primary-rgb:    99, 102, 241;
     --primary-soft:   rgba(99, 102, 241, 0.10);
 
     --accent:         #6366F1;
@@ -112,6 +113,7 @@ html[data-theme='dark'] {
 
     /* Accent interactif — indigo légèrement désaturé */
     --primary:        #7C7FE8;
+    --primary-rgb:    124, 127, 232;
     --primary-soft:   rgba(124, 127, 232, 0.12);
 
     --accent:         #7C7FE8;
@@ -542,7 +544,7 @@ html[data-theme='dark'] .workspace-hero-chip {
 }
 
 #scanner-panel .workspace-hero-card {
-    background: linear-gradient(180deg, color-mix(in srgb, rgba(59, 130, 246, 0.05) 100%, var(--surface-card)) 0%, var(--surface) 100%);
+    background: linear-gradient(180deg, color-mix(in srgb, rgba(var(--primary-rgb, 197, 160, 89), 0.05) 100%, var(--surface-card)) 0%, var(--surface) 100%);
 }
 
 html[data-theme='dark'] #collection-panel .workspace-hero-card {
@@ -550,7 +552,7 @@ html[data-theme='dark'] #collection-panel .workspace-hero-card {
 }
 
 html[data-theme='dark'] #scanner-panel .workspace-hero-card {
-    background: linear-gradient(180deg, color-mix(in srgb, rgba(59, 130, 246, 0.07) 100%, var(--surface-card)) 0%, var(--surface) 100%);
+    background: linear-gradient(180deg, color-mix(in srgb, rgba(var(--primary-rgb, 212, 175, 55), 0.07) 100%, var(--surface-card)) 0%, var(--surface) 100%);
 }
 
 .workspace-hero-score {
@@ -6024,6 +6026,105 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     min-width: min(100%, 520px);
 }
 
+/* M1 — scanner workspace-hero panel */
+.scanner-workspace-hero {
+    margin-bottom: 0;
+}
+
+.scanner-command-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+/* Scanner options dropdown */
+.scanner-options-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: var(--surface-card, #fff);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 200px;
+    z-index: 200;
+    overflow: hidden;
+}
+
+.scanner-options-item {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+
+.scanner-options-item:hover {
+    background: var(--surface-hover);
+}
+
+.scanner-options-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+}
+
+.scanner-scan-btn {
+    flex: 1;
+}
+
+/* Scanner rayon selector */
+.scanner-rayon-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.scanner-rayon-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+}
+
+.scanner-rayon-options {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.scanner-rayon-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text);
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-card);
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.scanner-rayon-option:has(input:checked) {
+    border-color: rgba(197, 160, 89, 0.5);
+    background: rgba(197, 160, 89, 0.08);
+    color: var(--accent-gold, #C5A059);
+}
+
+.scanner-rayon-option input {
+    display: none;
+}
+
 .scanner-command-card {
     display: flex;
     flex-direction: column;
@@ -6043,15 +6144,25 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 
 .scanner-command-card__eyebrow,
 .scanner-progress-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
+    font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+    font-size: 0.72rem;
     text-transform: uppercase;
-    color: var(--accent-gold);
-    font-weight: 700;
+    letter-spacing: 0.10em;
+    color: var(--primary, #C5A059);
+    font-weight: 600;
+    margin-bottom: 4px;
 }
 
-.scanner-command-card__title,
+.scanner-command-card__title {
+    font-size: clamp(1.4rem, 2vw, 1.8rem);
+    letter-spacing: -0.02em;
+    font-family: var(--font-display, 'Cormorant Garamond', Georgia, serif);
+    font-weight: 700;
+    margin: 0 0 6px;
+    line-height: 1.1;
+    color: var(--text);
+}
+
 .scanner-progress-title,
 .scanner-detail-title {
     font-family: var(--font-heading);
@@ -6092,6 +6203,11 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     padding: 14px;
     gap: 12px;
     border-radius: 20px;
+}
+
+.scanner-progress-hero .workspace-hero-card {
+    border-radius: 18px;
+    padding: 20px;
 }
 
 .scanner-progress {
@@ -6898,23 +7014,27 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 }
 
 .scanner-empty {
-    display: grid;
-    justify-items: center;
-    gap: 12px;
-    padding: 56px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 16px;
+    padding: 60px 24px;
     border: 1px dashed rgba(197, 160, 89, 0.24);
     border-radius: 24px;
     background: linear-gradient(180deg, rgba(197, 160, 89, 0.06), rgba(255, 255, 255, 0.78));
-    color: var(--muted-strong);
+    color: var(--muted);
 }
 
 .scanner-empty__icon {
+    font-size: 2.5rem;
+    opacity: 0.4;
     width: 56px;
     height: 56px;
     border-radius: 50%;
     display: grid;
     place-items: center;
-    font-size: 24px;
     color: var(--accent-gold);
     background: rgba(197, 160, 89, 0.12);
     border: 1px solid rgba(197, 160, 89, 0.24);
@@ -6922,9 +7042,17 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 
 .scanner-empty__title {
     font-family: var(--font-heading);
-    font-size: 2rem;
+    font-size: 1.1rem;
+    font-weight: 600;
     line-height: 1;
-    color: var(--text);
+    color: var(--fg, var(--text));
+    margin: 0;
+}
+
+.scanner-empty__sub {
+    font-size: 0.85rem;
+    margin: 0;
+    max-width: 380px;
 }
 
 .scanner-empty__copy {
