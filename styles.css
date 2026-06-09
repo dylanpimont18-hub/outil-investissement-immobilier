@@ -24,7 +24,13 @@ html[data-theme='light'] {
     --bg:             #F8FAFC;
     --surface:        #FFFFFF;
     --surface-strong: #F1F5F9;
+    --surface-low:    #F8FAFC;
+    --surface-mid:    #EEF2F7;
+    --surface-hover:  #EEF2FF;
     --text:           #0F172A;
+    --text-primary:   #0F172A;
+    --text-secondary: #475569;
+    --text-tertiary:  #94A3B8;
     --muted:          #64748B;
     --muted-strong:   #334155;
     --border:         #C7D2FE;
@@ -88,15 +94,21 @@ html[data-theme='dark'] {
     --bg:             #18171A;
     --surface:        #201E23;
     --surface-strong: #272428;
+    --surface-low:    #1C1A1F;
+    --surface-mid:    #272428;
+    --surface-hover:  #2D2A32;
 
     /* Texte — crème chaud, pas de bleu-blanc */
     --text:           #E8E4DF;
+    --text-primary:   #E8E4DF;
+    --text-secondary: #A09890;
+    --text-tertiary:  #7A7470;
     --muted:          #9E9890;
     --muted-strong:   #C0B4A8;
 
     /* Bordures — chaudes, pas de bleu-marine */
     --border:         #312D30;
-    --border-subtle:  #242022;
+    --border-subtle:  #2C2830;
 
     /* Accent interactif — indigo légèrement désaturé */
     --primary:        #7C7FE8;
