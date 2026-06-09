@@ -6,6 +6,9 @@ from abc import ABC, abstractmethod
 from curl_cffi import requests as crequests
 
 from config import PRIX_MIN, PRIX_MAX
+from logger import get_logger
+
+_logger = get_logger("spark.base")
 
 
 class BaseScraper(ABC):
@@ -27,15 +30,23 @@ class BaseScraper(ABC):
             try:
                 annonces = self.fetch_ville(ville)
             except Exception as e:
-                print(f"  [{self.site}] Erreur {ville['ville']} : {e}")
+                _logger.warning("[%s] Erreur %s : %s", self.site, ville['ville'], e)
                 annonces = []
 
+            cp_cible = ville["code_postal"]
+            has_rayon = bool(ville.get("rayon_km"))
             for a in annonces:
                 url = a.get("url", "")
-                if url and url not in seen_urls:
-                    seen_urls.add(url)
-                    a.setdefault("site", self.site)
-                    resultats.append(a)
+                if not url or url in seen_urls:
+                    continue
+                # Avec un rayon, l'API retourne des CP variés — ne pas filtrer strictement
+                if not has_rayon:
+                    cp_annonce = a.get("code_postal") or ""
+                    if cp_annonce and cp_annonce != cp_cible:
+                        continue
+                seen_urls.add(url)
+                a.setdefault("site", self.site)
+                resultats.append(a)
 
             if annonces:
                 time.sleep(1)  # politesse

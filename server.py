@@ -181,7 +181,7 @@ def _run_enrich():
         _update_state(log=f"ERREUR : {e}", error=str(e), finished=True)
 
 
-def _run_scanner(full: bool, ville: str = None, code_postal: str = None):
+def _run_scanner(full: bool, ville: str = None, code_postal: str = None, rayon_km: float = None):
     if SCRAPER_DIR not in sys.path:
         sys.path.insert(0, SCRAPER_DIR)
 
@@ -204,7 +204,9 @@ def _run_scanner(full: bool, ville: str = None, code_postal: str = None):
         def progress_callback(pct: int, msg: str):
             _update_state(progress=pct, log=msg)
 
-        villes_override = [{"ville": ville, "code_postal": code_postal, "dept": code_postal[:2]}]
+        villes_override = [{"ville": ville, "code_postal": code_postal, "dept": (code_postal or "")[:2]}]
+        if rayon_km:
+            villes_override[0]["rayon_km"] = rayon_km
         _invalidate_results_cache()
         _update_state(running=True, progress=0, log="Scan lancé…", error=None)
         scraper_main.main(villes_override=villes_override, progress_callback=progress_callback)
@@ -405,6 +407,11 @@ def api_scan():
     data = request.get_json(force=True, silent=True) or {}
     ville = (data.get("ville") or "").strip()
     code_postal = (data.get("code_postal") or "").strip()
+    rayon_km = data.get("rayon_km")
+    if isinstance(rayon_km, (int, float)) and rayon_km > 0:
+        rayon_km = float(rayon_km)
+    else:
+        rayon_km = None
     if not ville or not code_postal:
         return jsonify({"error": "ville_required"}), 400
 
@@ -413,7 +420,7 @@ def api_scan():
             return jsonify({"error": "scan_running"}), 409
         scan_state["logs"] = []
 
-    t = threading.Thread(target=_run_scanner, args=(False, ville, code_postal), daemon=True)
+    t = threading.Thread(target=_run_scanner, args=(False, ville, code_postal, rayon_km), daemon=True)
     t.start()
     return jsonify({"started": True})
 
@@ -423,6 +430,11 @@ def api_scan_full():
     data = request.get_json(force=True, silent=True) or {}
     ville = (data.get("ville") or "").strip()
     code_postal = (data.get("code_postal") or "").strip()
+    rayon_km = data.get("rayon_km")
+    if isinstance(rayon_km, (int, float)) and rayon_km > 0:
+        rayon_km = float(rayon_km)
+    else:
+        rayon_km = None
     if not ville or not code_postal:
         return jsonify({"error": "ville_required"}), 400
 
@@ -431,7 +443,7 @@ def api_scan_full():
             return jsonify({"error": "scan_running"}), 409
         scan_state["logs"] = []
 
-    t = threading.Thread(target=_run_scanner, args=(True, ville, code_postal), daemon=True)
+    t = threading.Thread(target=_run_scanner, args=(True, ville, code_postal, rayon_km), daemon=True)
     t.start()
     return jsonify({"started": True, "db_cleared": True})
 
@@ -618,6 +630,109 @@ def api_portfolio_diagnostic():
         return jsonify({'error': f'Réponse IA non parsable : {str(e)}'}), 502
     except Exception as e:
         return jsonify({'error': str(e)}), 502
+
+
+_pdf_html_store: dict = {}
+
+
+def _find_edge() -> str | None:
+    """Retourne le chemin de msedge.exe s'il est disponible."""
+    candidates = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ]
+    for c in candidates:
+        if Path(c).exists():
+            return c
+    try:
+        import subprocess as _sp
+        res = _sp.run(["where", "msedge"], capture_output=True, text=True, timeout=5)
+        if res.returncode == 0:
+            line = res.stdout.strip().splitlines()[0].strip()
+            if line and Path(line).exists():
+                return line
+    except Exception:
+        pass
+    return None
+
+
+@app.route("/api/pdf-preview/<token>")
+def pdf_preview(token: str):
+    """Sert le HTML brut une seule fois pour la capture Edge headless."""
+    html = _pdf_html_store.pop(token, None)
+    if html is None:
+        return "Not found", 404
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/generate-pdf", methods=["POST"])
+def api_generate_pdf():
+    import subprocess
+    import tempfile
+    import uuid
+    from flask import Response as FlaskResponse
+
+    data = request.get_json(force=True, silent=True) or {}
+    html_content = data.get("html", "")
+    filename = data.get("filename", "export.pdf")
+    if not html_content:
+        return jsonify({"error": "html manquant"}), 400
+
+    edge_exe = _find_edge()
+    if not edge_exe:
+        return jsonify({"error": "Microsoft Edge introuvable sur ce système"}), 500
+
+    token = str(uuid.uuid4())
+    _pdf_html_store[token] = html_content
+    preview_url = f"http://127.0.0.1:8080/api/pdf-preview/{token}"
+
+    # Destination : dossier Téléchargements de l'utilisateur
+    import os as _os
+    downloads_dir = Path(_os.path.expanduser("~")) / "Downloads"
+    downloads_dir.mkdir(exist_ok=True)
+    # Éviter d'écraser un fichier existant
+    dest = downloads_dir / filename
+    stem = dest.stem
+    suffix = dest.suffix
+    counter = 1
+    while dest.exists():
+        dest = downloads_dir / f"{stem} ({counter}){suffix}"
+        counter += 1
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdf_path = Path(tmpdir) / filename
+            subprocess.run(
+                [
+                    edge_exe,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    f"--print-to-pdf={pdf_path}",
+                    "--no-pdf-header-footer",
+                    preview_url,
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            # Edge spawne des processus enfants qui finissent après le processus principal.
+            # On attend jusqu'à 5 s que le fichier soit effectivement écrit.
+            import time as _time
+            for _ in range(50):
+                if pdf_path.exists() and pdf_path.stat().st_size > 0:
+                    break
+                _time.sleep(0.1)
+            if not pdf_path.exists() or pdf_path.stat().st_size == 0:
+                return jsonify({"error": "Edge n'a pas généré le PDF (fichier vide ou absent)"}), 500
+            dest.write_bytes(pdf_path.read_bytes())
+    except subprocess.TimeoutExpired:
+        _pdf_html_store.pop(token, None)
+        return jsonify({"error": "Délai dépassé lors de la génération du PDF"}), 500
+    except Exception as exc:
+        _pdf_html_store.pop(token, None)
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"saved_to": str(dest), "filename": dest.name})
 
 
 if __name__ == "__main__":
