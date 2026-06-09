@@ -5,15 +5,17 @@
 ---
 
 ## app.py
-Entrée desktop : lance Flask en thread + fenêtre PyWebView + icône barre système.
+Entrée desktop : lance Flask en thread (`threaded=True`) + fenêtre PyWebView + icône barre système.
 Pas de fonctions exportées — exécuté directement par `python app.py` ou PyInstaller.
 
 ---
 
 ## server.py
-Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA.
-- `api_scan` POST — lance scan partiel sur une ville
-- `api_scan_full` POST — réinitialise DB puis scan complet
+Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + export PDF.
+- `api_scan` POST — lance scan partiel sur une ville ; accepte `{ville, code_postal, rayon_km}`
+- `api_scan_full` POST — réinitialise DB puis scan complet ; même body que `api_scan`
+- `_run_scanner(full, ville, code_postal, rayon_km)` — thread worker : inject `rayon_km` dans `villes_override`
+- `_query_results_data(conn, ...)` — SELECT biens + jointure annonces + sous-requêtes `baisse`/`date_baisse` (historique_prix)
 - `api_enrich` POST — déclenche enrichissement IA des biens
 - `api_status` GET — statut du scan en cours (progress, logs)
 - `api_results` GET — liste paginée des biens avec stats
@@ -21,6 +23,8 @@ Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA.
 - `api_pending_count` GET — nombre de biens en attente d'enrichissement
 - `api_communes` GET — communes par code postal
 - `api_portfolio_diagnostic` POST `/api/portfolio-diagnostic` — appel Claude API, retourne 3-5 recommandations JSON
+- `api_generate_pdf` POST `/api/generate-pdf` — génère un PDF via Edge headless, sauvegarde dans ~/Downloads, retourne `{saved_to, filename}`
+- `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
 
 ---
 
@@ -67,9 +71,22 @@ Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
 ---
 
 ## scanner.js
-Interface scanner immobilier : déclenchement scrape, polling statut, rendu résultats, filtrage, détails.
+Interface scanner immobilier : déclenchement scrape, polling statut, rendu résultats, filtrage, carte, détails.
 - `initScanner(opts)` — initialise l'interface scanner complète
 - `onScannerTabActivated()` — refresh des résultats quand l'onglet devient actif
+- `_getScannerRayonKm()` / `_setRayonKm(km)` — rayon actif (5/10/20/30 km), persisté en localStorage `scannerRayonKm`
+- `_setScanTarget(cp, commune, label)` — cible du scan ; persiste en localStorage `investissementWebScannerTarget`
+- `_updateScannerHeaderSub()` — met à jour `#scanner-header-sub` et `#scanner-zone-chip` avec zone + rayon + nb biens
+- `_renderFreshnessLabel(date)` — badge "Vu il y a X j" (classe `--stale` si > 10 j)
+- `_buildScannerSummaryRow(r)` — construit la ligne résumé (inclut `baisseLabel`, `distLabel`, `distTone`)
+- `_renderGlobalOverviewTable(rows)` — tableau 8 colonnes (Rang/Bien/Prix/Loyer/CF/Renta/DPE/Score)
+- `_renderScannerRankingStrip(rows)` — top 5 curation cards avec résumé IA 120 chars
+- `_statCard(val, label, cls, note, extraClass)` — carte stat mini (`.workspace-hero-mini-card`)
+- `_haversineKm(lat1,lng1,lat2,lng2)` — distance géodésique en km
+- `_getDistanceKmFromVierzon(cp)` — distance depuis Vierzon via `_COMMUNE_COORDS` fallback statique
+- `_matchDistance(r)` — filtre JS par distance max (slider `#scanner-dist-filter`)
+- `_initMap()` — initialise carte Leaflet centrée sur Vierzon (47.222, 2.069) zoom 10
+- `_updateMapRadiusCircle()` — dessine/met à jour le cercle de rayon sur la carte
 
 ---
 
@@ -107,9 +124,12 @@ Structure DOM statique — tous les panels et formulaires pré-déclarés.
 
 ## styles.css
 Design system complet : tokens CSS, composants, thèmes light/dark.
-- Variables root : `--bg`, `--surface`, `--accent-gold`, `--success`, `--danger`, `--warning`
+- Variables root : `--bg`, `--surface`, `--accent-gold`, `--success`, `--danger`, `--warning`, `--primary-rgb`
 - Thèmes : `html[data-theme='dark']` / `html[data-theme='light']`
 - Composants : `.workspace`, `.panel-head`, `.variables-form`, `.verdict-*`, `.score-*`
+- Scanner workspace : `.scanner-workspace-hero`, `.scanner-command-panel`, `.scanner-command-card`, `.scanner-rayon-group`, `.scanner-options-dropdown`
+- Scanner table : `.scanner-dpe-badge--a/b/c/d/e/f/g`, `.scanner-price-drop`, `.scanner-dist-badge--near/mid/far`, `.scanner-freshness`, `.scanner-score-decision`
+- Scanner stats : `.workspace-hero-mini-card.scanner-stat--gold/pos/warn`, `.scanner-stat--insight`
 - Portfolio zones : `.portfolio-zone`, `.portfolio-donut-wrap`, `.portfolio-alerts`, `.portfolio-alert--red/orange`
 - Portfolio conseils : `.advice-card`, `.advice-card--red/orange/info`, `.advice-group`
 - Portfolio fiches : `.portfolio-fiche`, `.portfolio-fiche__verdict--green/orange/red`, `.portfolio-fiche__kpi`
@@ -125,6 +145,7 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 ## scraper/main.py
 Orchestrateur du scrape multi-sites Centre-Val de Loire.
 - `main(progress_callback, villes_override)` — scrape → filtre → IA → stockage SQLite
+- `_hydrate_descriptions(scraper, annonces, emit, pct)` — récupère descriptions manquantes en parallèle (ThreadPoolExecutor 3 workers, 1s/req)
 
 ---
 
@@ -165,7 +186,7 @@ Calculs financiers côté scraper : loyer marché, CF, score investisseur.
 
 ## scraper/enrich.py
 Pipeline d'enrichissement : récupère les descriptions manquantes + IA + calculs financiers.
-- `enrich_pending(conn, progress_callback)` — traite tous les biens en attente
+- `enrich_pending(conn, progress_callback)` — traite tous les biens en attente ; exclut pré-IA les biens sans description+surface+type_bien
 
 ---
 
@@ -177,7 +198,7 @@ Logger unifié pour tous les modules scraper (console + fichier `spark_scraper.l
 
 ## scraper/scrapers/base.py
 Classe abstraite commune à tous les scrapers (retry, filtrage prix, interface).
-- `BaseScraper` — `fetch_all(villes)`, `fetch_ville(ville)` (abstract)
+- `BaseScraper` — `fetch_all(villes)`, `fetch_ville(ville)` (abstract) ; filtre CP désactivé si `ville.get("rayon_km")` défini
 
 ---
 
@@ -189,4 +210,4 @@ Registre des scrapers disponibles.
 
 ## scraper/scrapers/leboncoin.py
 Scraper LeBonCoin via parsing `__NEXT_DATA__` avec pagination.
-- `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(cp, page)`
+- `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(loc_param, page)` ; si `ville.get("rayon_km")`, construit `locations={cp}__{rayon_m}` dans l'URL
