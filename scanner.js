@@ -408,6 +408,36 @@ function _loadRayonKm() {
 
 let _scannerRayonKm = _loadRayonKm();
 
+const VIERZON_LAT = 47.222;
+const VIERZON_LNG = 2.069;
+
+// Static fallback coords for common postal codes around Vierzon
+const _COMMUNE_COORDS = {
+  '18100': [47.222, 2.069],
+  '18200': [47.080, 2.397],
+  '18110': [47.166, 2.165],
+  '18120': [47.280, 1.951],
+  '18130': [47.090, 2.270],
+  '18300': [47.085, 2.394],
+  '36100': [46.836, 1.691],
+  '41200': [47.348, 1.733],
+  '45300': [48.178, 2.367],
+};
+
+function _haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function _getDistanceKmFromVierzon(codePostal) {
+  const coords = _COMMUNE_COORDS[codePostal];
+  if (!coords) return null;
+  return _haversineKm(VIERZON_LAT, VIERZON_LNG, coords[0], coords[1]);
+}
+
 function _getScannerRayonKm() {
   return _scannerRayonKm;
 }
@@ -416,10 +446,12 @@ function _setRayonKm(km) {
   _scannerRayonKm = km;
   try { localStorage.setItem(SCANNER_RAYON_STORAGE_KEY, String(km)); } catch {}
   _updateScannerHeaderSub();
+  _updateMapRadiusCircle();
 }
 
 let _missingScanThreshold = _loadMissingScanThreshold();
 let _scannerLogsExpanded = false;
+let _distanceFilterKm = 50;
 
 // ─── État tableau ─────────────────────────────────────────────────────────────
 let _allResultats = [];
@@ -666,6 +698,10 @@ function _buildScannerSummaryRow(r) {
     ? `↓ -${_fmtEur(baisseValue)}`
     : null;
 
+  const distKm = _getDistanceKmFromVierzon(r.code_postal);
+  const distLabel = distKm != null ? `${Math.round(distKm)} km` : null;
+  const distTone = distKm == null ? '' : distKm < 10 ? 'near' : distKm < 20 ? 'mid' : 'far';
+
   return {
     bienId: r.bien_id,
     title: r.titre || 'Bien sans titre',
@@ -708,6 +744,8 @@ function _buildScannerSummaryRow(r) {
     signalsLabel: _getScannerSignals(r),
     resumeLabel: r.resume_ia || '',
     url: r.url || '',
+    distLabel,
+    distTone,
     raw: r,
   };
 }
@@ -1245,6 +1283,9 @@ function _renderGlobalOverviewTable(rows) {
     const priceDrop = row.baisseLabel
       ? `<span class="scanner-price-drop" title="Baisse le ${_esc(row.baisseDateLabel || '?')}">${_esc(row.baisseLabel)}</span>`
       : '';
+    const distBadge = row.distLabel
+      ? `<span class="scanner-dist-badge scanner-dist-badge--${row.distTone}">${_esc(row.raw.ville || '')} · ${_esc(row.distLabel)}</span>`
+      : '';
     return `
       <tr class="scanner-summary-row${row.raw.ia_enrichi ? '' : ' scanner-summary-row--pending'}" data-bien-id="${row.bienId}">
         <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--rank">
@@ -1253,6 +1294,7 @@ function _renderGlobalOverviewTable(rows) {
         <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--primary">
           <div class="scanner-summary-row__title">${_esc(row.title)}</div>
           <div class="scanner-summary-row__subtitle">${_esc(row.subtitle || '')}</div>
+          ${distBadge}
           <div class="scanner-summary-row__badges">${statusInline}${signals}</div>
           ${freshness}
         </td>
@@ -1658,6 +1700,15 @@ function _bindButtons() {
     radio.addEventListener('change', () => {
       if (radio.checked) _setRayonKm(Number(radio.value));
     });
+  });
+
+  // Distance filter slider
+  const distSlider = document.getElementById('scanner-dist-filter');
+  const distLabelEl = document.getElementById('scanner-dist-filter-value');
+  distSlider?.addEventListener('input', () => {
+    _distanceFilterKm = Number(distSlider.value);
+    if (distLabelEl) distLabelEl.textContent = _distanceFilterKm >= 50 ? 'Illimité' : `${_distanceFilterKm} km`;
+    _applyTable();
   });
 }
 
@@ -2462,8 +2513,15 @@ function _matchFilters(r, filters) {
   return true;
 }
 
+function _matchDistance(r) {
+  if (_distanceFilterKm >= 50) return true;
+  const dist = _getDistanceKmFromVierzon(r.code_postal);
+  if (dist == null) return true; // CP inconnu → ne pas exclure
+  return dist <= _distanceFilterKm;
+}
+
 function _getCurrentFilteredResults(filters = _captureFilterSnapshot()) {
-  return _allResultats.filter(r => _matchFilters(r, filters));
+  return _allResultats.filter(r => _matchFilters(r, filters) && _matchDistance(r));
 }
 
 function _getSummarySignature(resultats) {
@@ -3148,8 +3206,8 @@ function _initMap() {
   if (typeof L === 'undefined') return;
 
   _leafletMap = L.map('scanner-map', {
-    center: [47.5, 1.5],  // Centre-Val de Loire
-    zoom: 8,
+    center: [VIERZON_LAT, VIERZON_LNG],
+    zoom: 10,
   });
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -3162,11 +3220,29 @@ function _initMap() {
   _leafletMap.once('tileerror', () => {
     document.getElementById('scanner-map-offline').style.display = '';
   });
+
+  _updateMapRadiusCircle();
+}
+
+let _mapRadiusCircle = null;
+
+function _updateMapRadiusCircle() {
+  if (!_leafletMap) return;
+  if (_mapRadiusCircle) { _mapRadiusCircle.remove(); _mapRadiusCircle = null; }
+  const rayonM = _getScannerRayonKm() * 1000;
+  _mapRadiusCircle = L.circle([VIERZON_LAT, VIERZON_LNG], {
+    radius: rayonM,
+    color: '#D4AF37',
+    fillColor: '#D4AF37',
+    fillOpacity: 0.05,
+    weight: 2,
+  }).addTo(_leafletMap);
 }
 
 async function _renderMap(resultats) {
   if (typeof L === 'undefined') return;
   _initMap();
+  _updateMapRadiusCircle();
   _leafletMarkers.clearLayers();
 
   // Collecter les villes/CP uniques à géocoder

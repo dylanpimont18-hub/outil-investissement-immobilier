@@ -1019,6 +1019,20 @@
                   </div>
                 </div>
 
+                <!-- ── Distance ──────────────────────────────────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">DISTANCE</div>
+                  <div class="scanner-filter-section-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                      <span style="font-size:0.8rem;color:var(--muted)">Distance max depuis Vierzon</span>
+                      <span id="scanner-dist-filter-value" style="font-size:0.8rem;font-weight:600">Illimité</span>
+                    </div>
+                    <input type="range" id="scanner-dist-filter" min="1" max="50" value="50" step="1"
+                      class="scanner-range-input" style="width:100%">
+                    <div class="scanner-range-labels"><span>1 km</span><span>Illimité</span></div>
+                  </div>
+                </div>
+
                 <!-- ── Footer ─────────────────────────────────────────────── -->
                 <div class="scanner-filter-footer">
                                     <button id="scanner-filter-reset" class="scanner-btn scanner-btn--ghost scanner-btn--compact">↺ Réinitialiser</button>
