@@ -4028,6 +4028,13 @@ body.tuto-active {
     z-index: 1;
 }
 
+.scanner-curation-card__resume {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
 .scanner-curation-card__metrics {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

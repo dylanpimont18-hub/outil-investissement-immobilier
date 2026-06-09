@@ -847,12 +847,15 @@ function _renderRankPill(rankIndex, rankLabel, rankScore) {
 }
 
 function _renderScannerRankingStrip(rows) {
-  const ranked = rows.filter(row => row.raw.ia_enrichi).slice(0, 3);
+  const ranked = rows.filter(row => row.raw.ia_enrichi).slice(0, 5);
   if (!ranked.length) return '';
 
   const cards = ranked.map(row => {
     const badge = _buildRankBadge(row.rankIndex);
     const cfTone = row.cfAfterTaxValue != null && row.cfAfterTaxValue >= 0 ? 'positive' : 'negative';
+    const resumeSnippet = row.resumeLabel
+      ? `<div class="scanner-curation-card__resume">${_esc(row.resumeLabel.slice(0, 120))}${row.resumeLabel.length > 120 ? '…' : ''}</div>`
+      : '';
     return `
       <article class="scanner-curation-card">
         <div class="scanner-curation-card__top">
@@ -872,6 +875,7 @@ function _renderScannerRankingStrip(rows) {
           </div>
         </div>
         <div class="scanner-curation-card__detail">${_esc(row.rankDetail || row.signalsLabel)}</div>
+        ${resumeSnippet}
       </article>`;
   }).join('');
 
