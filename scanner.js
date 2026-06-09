@@ -1184,7 +1184,7 @@ function _renderGlobalOverviewTable(rows) {
         <td class="scanner-align-left scanner-summary-cell">${decisionPill}</td>
         <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
           ${row.priceLabel}
-          ${row.baisseLabel ? `<span class="scanner-price-drop" title="Ancien prix : +${_esc(row.baisseLabel.replace('↓ ', ''))} — baisse le ${_esc(row.baisseDateLabel || '?')}">${_esc(row.baisseLabel)}</span>` : ''}
+          ${row.baisseLabel ? `<span class="scanner-price-drop" title="Baisse de ${_esc(row.baisseLabel.replace('↓ -', ''))} le ${_esc(row.baisseDateLabel || '?')}">${_esc(row.baisseLabel)}</span>` : ''}
         </td>
         <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
           <div class="scanner-summary-row__rent">${row.rentLabel}</div>
