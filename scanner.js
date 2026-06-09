@@ -3200,6 +3200,7 @@ function _detailInfo(label, val) {
 
 let _leafletMap = null;
 let _leafletMarkers = null;
+let _mapRadiusCircle = null;
 
 function _initMap() {
   if (_leafletMap) return;
@@ -3224,10 +3225,8 @@ function _initMap() {
   _updateMapRadiusCircle();
 }
 
-let _mapRadiusCircle = null;
-
 function _updateMapRadiusCircle() {
-  if (!_leafletMap) return;
+  if (!_leafletMap || typeof L === 'undefined') return;
   if (_mapRadiusCircle) { _mapRadiusCircle.remove(); _mapRadiusCircle = null; }
   const rayonM = _getScannerRayonKm() * 1000;
   _mapRadiusCircle = L.circle([VIERZON_LAT, VIERZON_LNG], {
