@@ -545,6 +545,7 @@ html[data-theme='dark'] .workspace-hero-chip {
 
 #scanner-panel .workspace-hero-card {
     background: linear-gradient(180deg, color-mix(in srgb, rgba(var(--primary-rgb, 197, 160, 89), 0.05) 100%, var(--surface-card)) 0%, var(--surface) 100%);
+    overflow: visible;
 }
 
 html[data-theme='dark'] #collection-panel .workspace-hero-card {
@@ -553,6 +554,7 @@ html[data-theme='dark'] #collection-panel .workspace-hero-card {
 
 html[data-theme='dark'] #scanner-panel .workspace-hero-card {
     background: linear-gradient(180deg, color-mix(in srgb, rgba(var(--primary-rgb, 212, 175, 55), 0.07) 100%, var(--surface-card)) 0%, var(--surface) 100%);
+    overflow: visible;
 }
 
 .workspace-hero-score {
@@ -8500,15 +8502,24 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     align-items: center;
     justify-content: center;
     gap: 6px;
-    border-radius: 8px;
+    border-radius: 999px;
+    padding: 9px 18px;
     font-family: inherit;
-    font-weight: 500;
+    font-size: 0.875rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-    border: none;
+    transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    border: 1px solid transparent;
     white-space: nowrap;
 }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
 .btn--sm { font-size: 0.78rem; padding: 5px 12px; }
+.btn--outline {
+    background: transparent;
+    border-color: var(--border-strong, var(--border));
+    color: var(--fg, var(--text));
+}
+.btn--outline:hover:not(:disabled) { background: var(--surface-hover); }
 .btn--ghost {
     background: transparent;
     border: 1px solid var(--border);
