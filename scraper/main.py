@@ -1,27 +1,37 @@
 """
 Scraper immobilier — Centre-Val de Loire
-Orchestration complète : scrape → filtre → IA batch → calculs → DB
+Orchestration : scrape → filtre → stockage biens bruts (sans IA)
+L'enrichissement IA se fait séparément via enrich.py.
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Ajout du répertoire courant au path pour les imports relatifs
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import VILLES, SCRAPERS_ACTIFS, ANTHROPIC_API_KEY
+# Protection encodage Windows (cp1252 → utf-8) pour les print() dans les sous-modules
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+from config import VILLES, SCRAPERS_ACTIFS
 from db import init_db
+from fingerprint import make_fingerprint
 from filtrage import filtrer_nouvelles_annonces
-from ia import enrichir_batch
-from calculs import enrichir as enrichir_calculs
-from utils import inserer_bien, inserer_annonce
+from utils import inserer_bien, incrementer_scans_manques
 from scrapers import REGISTRY
 from marche_locatif import main as marche_main, est_stale as marche_stale
+from logger import get_logger
+
+_logger = get_logger("spark.scraper")
+VENTES_TTL_JOURS = 3
 
 
 def _log(msg: str):
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+    _logger.info(msg)
 
 
 def _afficher_stats(stats: dict, site: str):
@@ -34,32 +44,51 @@ def _afficher_stats(stats: dict, site: str):
     )
 
 
-def _afficher_resume(toutes_nouvelles: list[dict]):
-    calculables = [a for a in toutes_nouvelles if a.get("calculable")]
-    if not calculables:
-        _log("Aucun bien calculable.")
+def ventes_stale(conn, villes: list[dict], ttl_jours: int = VENTES_TTL_JOURS) -> bool:
+    """True si les ventes d'une ville cible n'ont jamais été vues récemment."""
+    for ville in villes:
+        row = conn.execute(
+            "SELECT MAX(date_derniere_vue) FROM biens WHERE code_postal = ?",
+            (ville["code_postal"],),
+        ).fetchone()
+        if not row or not row[0]:
+            return True
+        try:
+            date = datetime.fromisoformat(row[0])
+        except Exception:
+            return True
+        if datetime.now() - date > timedelta(days=ttl_jours):
+            return True
+    return False
+
+
+def _hydrate_descriptions(scraper, annonces: list[dict], emit, pct_scrape: int):
+    if not annonces or not hasattr(scraper, "fetch_description"):
         return
 
-    positifs = [a for a in calculables if (a.get("cf_net") or 0) > 0]
-    scores   = [a["score"] for a in calculables if a.get("score") is not None]
+    to_fetch = [a for a in annonces if not a.get("description") and a.get("url")]
+    if not to_fetch:
+        return
 
-    _log("─" * 60)
-    _log(f"RÉSUMÉ FINAL")
-    _log(f"  Biens enrichis et calculables : {len(calculables)}")
-    _log(f"  CF net positif                : {len(positifs)} ({len(positifs)/len(calculables)*100:.0f}%)")
-    if scores:
-        _log(f"  Score moyen                   : {sum(scores)//len(scores)}/100")
+    emit(min(pct_scrape + 1, 95), f"  >> Extraction du contenu brut ({len(to_fetch)} annonces, 3 workers)…")
 
-    top5 = sorted(calculables, key=lambda x: x.get("score") or 0, reverse=True)[:5]
-    _log("TOP 5 par score :")
-    for r in top5:
-        _log(
-            f"  [{r.get('score',0):3d}/100] {r.get('titre','')[:45]:45s} "
-            f"CF={r.get('cf_apres_impot',0):+6.0f}€  "
-            f"Renta={r.get('renta_brute',0):.1f}%  "
-            f"({r.get('site','')}/{r.get('ville','')})"
-        )
-    _log("─" * 60)
+    import threading
+    _rate_lock = threading.Semaphore(3)
+
+    def _fetch_one(annonce):
+        with _rate_lock:
+            try:
+                annonce["description"] = scraper.fetch_description(annonce["url"]) or ""
+            except Exception as e:
+                emit(pct_scrape, f"  [{scraper.site}] Description indisponible '{annonce['url'][:60]}' : {e}")
+                annonce["description"] = ""
+            import time as _t; _t.sleep(1)
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {pool.submit(_fetch_one, a): a for a in to_fetch}
+        for future in as_completed(futures):
+            future.result()
 
 
 def main(progress_callback=None, villes_override=None):
@@ -73,7 +102,8 @@ def main(progress_callback=None, villes_override=None):
     _emit(0, "=" * 60)
     _emit(0, "SCRAPER IMMOBILIER — Centre-Val de Loire")
     _emit(0, f"Scrapers actifs : {', '.join(SCRAPERS_ACTIFS)}")
-    _emit(0, f"Villes cibles   : {len(villes)}")
+    villes_str = ", ".join(f"{v['ville']} ({v['code_postal']})" for v in villes)
+    _emit(0, f"Villes cibles   : {len(villes)} — {villes_str}")
     _emit(0, "=" * 60)
 
     # ── 1. Base de données ────────────────────────────────────────────────────
@@ -81,89 +111,105 @@ def main(progress_callback=None, villes_override=None):
     _emit(5, "Base SQLite initialisée.")
 
     # ── 1.5 Marché locatif (si stale) ────────────────────────────────────────
-    if marche_stale(conn):
+    if marche_stale(conn, villes=villes):
         _emit(3, "Analyse du marché locatif (premières données ou expirées)…")
         try:
-            marche_main(conn, progress_callback=lambda p, m: _emit(int(3 + p * 0.02), m))
+            marche_main(conn, villes=villes, progress_callback=lambda p, m: _emit(int(3 + p * 0.02), m))
         except Exception as e:
             _emit(5, f"  [Marché] ERREUR : {e} — on continue sans loyers de marché.")
     else:
         _emit(3, "Données marché locatif à jour — réutilisation du cache.")
 
+    if not ventes_stale(conn, villes):
+        conn.close()
+        _emit(100, "Données ventes à jour — réutilisation du cache. Lancez l'analyse IA si besoin.")
+        return
+
     # ── 2. Scraping multi-sites ───────────────────────────────────────────────
-    toutes_nouvelles: list[dict] = []
-    total_par_site:   dict[str, int] = {}
+    total_par_site: dict[str, int] = {}
     n_scrapers = len(SCRAPERS_ACTIFS)
+    total_inseres = 0
+    seen_urls_by_cp: dict[str, set[str]] = {
+        ville["code_postal"]: set() for ville in villes if ville.get("code_postal")
+    }
+    seen_fingerprints_by_cp: dict[str, set[str]] = {
+        ville["code_postal"]: set() for ville in villes if ville.get("code_postal")
+    }
+    sources_reconciliees_by_cp: dict[str, set[str]] = {
+        ville["code_postal"]: set() for ville in villes if ville.get("code_postal")
+    }
 
     for i, nom_scraper in enumerate(SCRAPERS_ACTIFS):
-        pct_scrape = 5 + int((i / n_scrapers) * 50)
+        pct_scrape = 5 + int((i / n_scrapers) * 90)
         ScraperClass = REGISTRY.get(nom_scraper)
         if not ScraperClass:
             _emit(pct_scrape, f"  [WARN] Scraper inconnu : {nom_scraper}")
             continue
 
         _emit(pct_scrape, f"Scraping {nom_scraper}…")
+        fetch_ok = True
         try:
             scraper  = ScraperClass()
             annonces = scraper.fetch_all(villes)
         except Exception as e:
+            fetch_ok = False
             _emit(pct_scrape, f"  [{nom_scraper}] ERREUR : {e}")
             annonces = []
 
-        _emit(pct_scrape, f"  → {len(annonces)} annonces récupérées")
+        if fetch_ok:
+            for ville in villes:
+                cp = ville.get("code_postal")
+                if not cp:
+                    continue
+                sources_reconciliees_by_cp.setdefault(cp, set()).add(nom_scraper)
+
+            for annonce in annonces:
+                cp = (annonce.get("code_postal") or "").strip()
+                url = (annonce.get("url") or "").strip()
+                if not cp:
+                    continue
+                if url:
+                    seen_urls_by_cp.setdefault(cp, set()).add(url)
+                seen_fingerprints_by_cp.setdefault(cp, set()).add(make_fingerprint(annonce))
+
+        _emit(pct_scrape, f"  >> {len(annonces)} annonces récupérées")
 
         # ── 3. Filtrage 3 cas ─────────────────────────────────────────────────
         nouvelles, stats = filtrer_nouvelles_annonces(annonces, conn)
         _afficher_stats(stats, nom_scraper)
-
-        toutes_nouvelles.extend(nouvelles)
         total_par_site[nom_scraper] = stats["nouvelles"]
 
-    total_nouvelles = len(toutes_nouvelles)
-    _emit(55, f"Total nouvelles annonces à enrichir : {total_nouvelles}")
+        # ── 3.5 Hydratation du contenu brut pour les nouvelles annonces ─────
+        _hydrate_descriptions(scraper, nouvelles, _emit, pct_scrape)
 
-    if not toutes_nouvelles:
-        _emit(100, "Aucune nouvelle annonce. Fin.")
-        conn.close()
-        return
+        # ── 4. Stockage biens bruts ───────────────────────────────────────────
+        with conn:
+            for annonce in nouvelles:
+                try:
+                    fp = annonce.pop("_fingerprint", None)
+                    if not fp:
+                        continue
+                    inserer_bien(annonce, fp, conn, commit=False)
+                    total_inseres += 1
+                except Exception as e:
+                    _emit(pct_scrape, f"  [DB] Erreur insertion '{annonce.get('url','')[:60]}' : {e}")
 
-    # ── 4. Enrichissement IA (batch Anthropic) ────────────────────────────────
-    ia_active = bool(ANTHROPIC_API_KEY and not ANTHROPIC_API_KEY.startswith("sk-ant-REMPLACE"))
-    if ia_active:
-        _emit(60, f"Enrichissement IA — {total_nouvelles} annonces en batch…")
-        try:
-            toutes_nouvelles = enrichir_batch(toutes_nouvelles)
-            _emit(80, "Enrichissement IA terminé.")
-        except Exception as e:
-            _emit(80, f"  [IA] ERREUR : {e} — on continue sans enrichissement IA.")
-    else:
-        _emit(60, "[WARN] Clé API Anthropic non configurée — enrichissement IA ignoré.")
-
-    # ── 5. Calculs financiers ─────────────────────────────────────────────────
-    _emit(82, "Calculs financiers…")
-    for annonce in toutes_nouvelles:
-        enrichir_calculs(annonce, conn)
-
-    # ── 6. Stockage en base ───────────────────────────────────────────────────
-    _emit(90, "Enregistrement en base…")
-    inseres = 0
-    for annonce in toutes_nouvelles:
-        try:
-            fp      = annonce.pop("_fingerprint", None)
-            if not fp:
+    with conn:
+        for ville in villes:
+            cp = ville.get("code_postal")
+            if not cp:
                 continue
-            bien_id = inserer_bien(annonce, fp, conn)
-            inserer_annonce(bien_id, annonce, conn)
-            inseres += 1
-        except Exception as e:
-            _emit(90, f"  [DB] Erreur insertion '{annonce.get('url','')[:60]}' : {e}")
+            incrementer_scans_manques(
+                cp,
+                seen_urls_by_cp.get(cp, set()),
+                seen_fingerprints_by_cp.get(cp, set()),
+                sources_reconciliees_by_cp.get(cp, set()),
+                conn,
+                commit=False,
+            )
 
-    _emit(95, f"  {inseres}/{total_nouvelles} biens enregistrés.")
-
-    # ── 7. Résumé ─────────────────────────────────────────────────────────────
-    _afficher_resume(toutes_nouvelles)
     conn.close()
-    _emit(100, "Terminé.")
+    _emit(100, f"Terminé. {total_inseres} nouveaux biens stockés. Lancez l'analyse IA pour les enrichir.")
 
 
 if __name__ == "__main__":
