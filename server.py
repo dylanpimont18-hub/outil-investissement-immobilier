@@ -408,7 +408,7 @@ def api_scan():
     ville = (data.get("ville") or "").strip()
     code_postal = (data.get("code_postal") or "").strip()
     rayon_km = data.get("rayon_km")
-    if isinstance(rayon_km, (int, float)) and rayon_km > 0:
+    if isinstance(rayon_km, (int, float)) and 0 < rayon_km <= 100:
         rayon_km = float(rayon_km)
     else:
         rayon_km = None
@@ -431,7 +431,7 @@ def api_scan_full():
     ville = (data.get("ville") or "").strip()
     code_postal = (data.get("code_postal") or "").strip()
     rayon_km = data.get("rayon_km")
-    if isinstance(rayon_km, (int, float)) and rayon_km > 0:
+    if isinstance(rayon_km, (int, float)) and 0 < rayon_km <= 100:
         rayon_km = float(rayon_km)
     else:
         rayon_km = None
