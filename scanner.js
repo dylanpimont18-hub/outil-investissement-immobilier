@@ -222,6 +222,7 @@ function _setCPFilter(cp, commune, label) {
 
 function _setScanTarget(cp, commune, label) {
   _scanTarget = { cp, commune, label };
+  _saveScanTargetToStorage(_scanTarget);
   const badge = document.getElementById('scan-target-cp-badge');
   const reset = document.getElementById('scan-target-cp-reset');
   if (badge) { badge.textContent = label; badge.style.display = ''; }
@@ -374,6 +375,49 @@ let _pollInterval = null;
 let _scanRunning = false;
 let _saveCurrentStudy = null;
 let _scanTarget = null; // { cp, commune, label } — ville cible du prochain scan
+
+// ─── Persistance zone cible ───────────────────────────────────────────────────
+const SCANNER_TARGET_STORAGE_KEY = 'investissementWebScannerTarget';
+
+function _loadScanTargetFromStorage() {
+  try {
+    const raw = localStorage.getItem(SCANNER_TARGET_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.cp && parsed.commune && parsed.label) return parsed;
+    return null;
+  } catch { return null; }
+}
+
+function _saveScanTargetToStorage(target) {
+  try {
+    localStorage.setItem(SCANNER_TARGET_STORAGE_KEY, JSON.stringify(target));
+  } catch {}
+}
+
+// ─── Persistance rayon ────────────────────────────────────────────────────────
+const SCANNER_RAYON_STORAGE_KEY = 'scannerRayonKm';
+
+function _loadRayonKm() {
+  try {
+    const raw = localStorage.getItem(SCANNER_RAYON_STORAGE_KEY);
+    const parsed = Number(raw);
+    return [5, 10, 20, 30].includes(parsed) ? parsed : 5;
+  } catch { return 5; }
+}
+
+let _scannerRayonKm = _loadRayonKm();
+
+function _getScannerRayonKm() {
+  return _scannerRayonKm;
+}
+
+function _setRayonKm(km) {
+  _scannerRayonKm = km;
+  try { localStorage.setItem(SCANNER_RAYON_STORAGE_KEY, String(km)); } catch {}
+  _updateScannerHeaderSub();
+}
+
 let _missingScanThreshold = _loadMissingScanThreshold();
 let _scannerLogsExpanded = false;
 
@@ -1568,6 +1612,17 @@ function _bindButtons() {
 
   _initCPSelector();
   _initScanTargetSelector();
+
+  // Pré-remplir Vierzon si aucune zone sauvegardée
+  const _savedTarget = _loadScanTargetFromStorage();
+  if (_savedTarget) {
+    _setScanTarget(_savedTarget.cp, _savedTarget.commune, _savedTarget.label);
+  } else {
+    _loadCommunesData().then(() => {
+      _setScanTarget('18100', 'Vierzon', 'Vierzon — 18100');
+    });
+  }
+
   _initFilterSections();
   _setScannerView('table');
 
@@ -1592,6 +1647,14 @@ function _bindButtons() {
   document.getElementById('tab-tableau')?.addEventListener('click', () => _setScannerView('table'));
 
   document.getElementById('tab-carte')?.addEventListener('click', () => _setScannerView('map'));
+
+  // Rayon sélecteur
+  document.querySelectorAll('input[name="scanner-rayon"]').forEach(radio => {
+    if (Number(radio.value) === _scannerRayonKm) radio.checked = true;
+    radio.addEventListener('change', () => {
+      if (radio.checked) _setRayonKm(Number(radio.value));
+    });
+  });
 }
 
 function _isMobileScannerFiltersMode() {
@@ -1888,7 +1951,11 @@ async function _startScan(endpoint) {
     const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code_postal: _scanTarget.cp, ville: _scanTarget.commune }),
+      body: JSON.stringify({
+        code_postal: _scanTarget.cp,
+        ville: _scanTarget.commune,
+        rayon_km: _getScannerRayonKm(),
+      }),
     });
     if (resp.status === 409) { alert('Un scan est déjà en cours.'); return; }
     if (!resp.ok) throw new Error(await resp.text());
@@ -2233,11 +2300,12 @@ function _renderScannerHero() {
 }
 
 function _statCard(val, label, cls, note = '', extraClass = '') {
-  return `<div class="scanner-stat ${extraClass}">
-    <div class="scanner-stat-val ${cls}">${_esc(String(val))}</div>
-    <div class="scanner-stat-lbl">${_esc(label)}</div>
+  const toneClass = cls ? ` scanner-stat--${cls}` : '';
+  return `<article class="workspace-hero-mini-card${toneClass}${extraClass ? ' ' + extraClass : ''}">
+    <span>${_esc(label)}</span>
+    <strong class="${cls || ''}">${_esc(String(val))}</strong>
     ${note ? `<div class="scanner-stat-note">${_esc(note)}</div>` : ''}
-  </div>`;
+  </article>`;
 }
 
 // ─── Rendu tableau ────────────────────────────────────────────────────────────

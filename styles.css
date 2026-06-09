@@ -629,6 +629,23 @@ html[data-theme='dark'] #scanner-panel .workspace-hero-card {
     line-height: 1.15;
 }
 
+.workspace-hero-mini-card.scanner-stat--gold strong { color: var(--accent-gold, #D4AF37); }
+.workspace-hero-mini-card.scanner-stat--pos strong { color: var(--positive, var(--success)); }
+.workspace-hero-mini-card.scanner-stat--warn strong { color: var(--watch, #d97706); }
+.scanner-stat--insight { grid-column: span 2; }
+.scanner-stat-note {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+#scanner-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+
 .workspace-hero-card--decision {
     display: flex;
     align-items: center;
