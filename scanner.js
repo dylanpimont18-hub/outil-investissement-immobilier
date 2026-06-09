@@ -1150,6 +1150,14 @@ function _openScannerGlobalReport(resultats) {
   reportWindow.document.close();
 }
 
+function _renderFreshnessLabel(dateDerniereVue) {
+  if (!dateDerniereVue) return '';
+  const daysDiff = Math.floor((Date.now() - new Date(dateDerniereVue).getTime()) / 86400000);
+  const label = daysDiff === 0 ? 'Vu aujourd\'hui' : `Vu il y a ${daysDiff} j`;
+  const staleClass = daysDiff > 10 ? ' scanner-freshness--stale' : '';
+  return `<div class="scanner-freshness${staleClass}">${label}</div>`;
+}
+
 function _renderGlobalOverviewTable(rows) {
   const enrichedCount = rows.filter(row => row.raw.ia_enrichi).length;
   const pendingCount = Math.max(0, rows.length - enrichedCount);
@@ -1175,37 +1183,49 @@ function _renderGlobalOverviewTable(rows) {
   }
 
   const rowsHtml = rows.map(row => {
-    const statusPill = _renderScannerTonePill(row.statusLabel, row.statusTone);
-    const decisionPill = _renderScannerTonePill(row.decisionLabel, row.decisionTone);
-    const rankPill = _renderRankPill(row.rankIndex, row.rankLabel, row.rankScore);
     const cfTone = row.cfAfterTaxValue != null && row.cfAfterTaxValue >= 0 ? 'positive' : 'negative';
+    const dpeBadge = row.raw.dpe
+      ? `<span class="scanner-dpe-badge scanner-dpe-badge--${row.raw.dpe.toLowerCase()}">${row.raw.dpe.toUpperCase()}</span>`
+      : '<span class="scanner-dpe-badge scanner-dpe-badge--nc">—</span>';
+    const statusInline = _renderScannerTonePill(row.statusLabel, row.statusTone);
+    const signals = row.raw.ia_enrichi && row.signalsLabel !== 'RAS'
+      ? `<span class="scanner-signal-inline">${_esc(row.signalsLabel)}</span>`
+      : '';
+    const freshness = row.raw.date_derniere_vue
+      ? _renderFreshnessLabel(row.raw.date_derniere_vue)
+      : '';
+    const priceDrop = row.baisseLabel
+      ? `<span class="scanner-price-drop" title="Baisse le ${_esc(row.baisseDateLabel || '?')}">${_esc(row.baisseLabel)}</span>`
+      : '';
     return `
       <tr class="scanner-summary-row${row.raw.ia_enrichi ? '' : ' scanner-summary-row--pending'}" data-bien-id="${row.bienId}">
-        <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--rank">${rankPill}</td>
+        <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--rank">
+          ${_renderRankPill(row.rankIndex, row.rankLabel, row.rankScore)}
+        </td>
         <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--primary">
           <div class="scanner-summary-row__title">${_esc(row.title)}</div>
-          <div class="scanner-summary-row__subtitle">${_esc(row.subtitle || 'Informations principales indisponibles')}</div>
-          ${row.resumeLabel ? `<div class="scanner-summary-row__note">${_esc(row.resumeLabel)}</div>` : ''}
-        </td>
-        <td class="scanner-align-left scanner-summary-cell">${statusPill}</td>
-        <td class="scanner-align-left scanner-summary-cell">${decisionPill}</td>
-        <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
-          ${row.priceLabel}
-          ${row.baisseLabel ? `<span class="scanner-price-drop" title="Baisse de ${_esc(row.baisseLabel.replace('↓ -', ''))} le ${_esc(row.baisseDateLabel || '?')}">${_esc(row.baisseLabel)}</span>` : ''}
+          <div class="scanner-summary-row__subtitle">${_esc(row.subtitle || '')}</div>
+          <div class="scanner-summary-row__badges">${statusInline}${signals}</div>
+          ${freshness}
         </td>
         <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
-          <div class="scanner-summary-row__rent">${row.rentLabel}</div>
+          <div>${row.priceLabel}${priceDrop}</div>
+        </td>
+        <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
+          <div>${row.rentLabel}</div>
           <div class="scanner-summary-row__aux">${_esc(row.rentSourceLabel)}</div>
         </td>
         <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">
           <span class="scanner-summary-row__value scanner-summary-row__value--${cfTone}">${row.cfAfterTaxLabel}</span>
         </td>
         <td class="scanner-align-right scanner-summary-cell scanner-summary-cell--numeric">${row.rentaNetNetLabel}</td>
-        <td class="scanner-align-center scanner-summary-cell scanner-summary-cell--numeric">${row.dscrLabel}</td>
-        <td class="scanner-align-center scanner-summary-cell scanner-summary-cell--numeric">${row.scoreLabel}</td>
-        <td class="scanner-align-left scanner-summary-cell">${_esc(row.regimeLabel)}</td>
-        <td class="scanner-align-left scanner-summary-cell">${_esc(row.dpeLabel)}</td>
-        <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--signals">${_esc(row.signalsLabel)}</td>
+        <td class="scanner-align-center scanner-summary-cell">${dpeBadge}</td>
+        <td class="scanner-align-left scanner-summary-cell">
+          <div class="scanner-score-decision">
+            <span class="scanner-score-decision__score">${row.scoreLabel}</span>
+            ${_renderScannerTonePill(row.decisionLabel, row.decisionTone)}
+          </div>
+        </td>
       </tr>`;
   }).join('');
 
@@ -1247,19 +1267,14 @@ function _renderGlobalOverviewTable(rows) {
         <table class="scanner-table scanner-table--summary">
           <thead>
             <tr>
-              <th class="scanner-align-left">Classement</th>
+              <th class="scanner-align-left" style="width:60px">Rang</th>
               <th class="scanner-align-left">Bien</th>
-              <th class="scanner-align-left">Statut</th>
-              <th class="scanner-align-left">Décision</th>
               <th class="scanner-align-right">Prix</th>
               <th class="scanner-align-right">Loyer</th>
-              <th class="scanner-align-right">CF après impôt</th>
+              <th class="scanner-align-right">CF fiscal</th>
               <th class="scanner-align-right">Renta N/N</th>
-              <th class="scanner-align-center">DSCR</th>
-              <th class="scanner-align-center"><abbr title="Score scanner : calculé par l'algorithme d'analyse automatique (CF, DSCR, renta brute, DPE). Non comparable au score du simulateur.">Score scanner</abbr></th>
-              <th class="scanner-align-left">Régime</th>
-              <th class="scanner-align-left">DPE</th>
-              <th class="scanner-align-left">Signaux</th>
+              <th class="scanner-align-center" style="width:60px">DPE</th>
+              <th class="scanner-align-left">Score / Décision</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
@@ -2112,6 +2127,19 @@ function _renderStats(stats, resultats = []) {
   _renderScannerHero();
 }
 
+function _updateScannerHeaderSub() {
+  const sub = document.getElementById('scanner-header-sub');
+  const chip = document.getElementById('scanner-zone-chip');
+  const rayonKm = typeof _getScannerRayonKm === 'function' ? _getScannerRayonKm() : 5;
+  const zone = _scanTarget ? `${_scanTarget.commune} ${_scanTarget.cp}` : 'Vierzon 18100';
+  const count = _allResultats.length;
+  const label = count
+    ? `${zone} · ${rayonKm} km · ${count} bien${count > 1 ? 's' : ''}`
+    : zone;
+  if (sub) sub.textContent = label;
+  if (chip) chip.textContent = zone;
+}
+
 function _renderScannerHero() {
   const container = document.getElementById('scanner-hero-summary');
   if (!container) return;
@@ -2201,6 +2229,7 @@ function _renderScannerHero() {
       </aside>
     </div>
   `;
+  _updateScannerHeaderSub();
 }
 
 function _statCard(val, label, cls, note = '', extraClass = '') {
@@ -2225,6 +2254,7 @@ function _renderTable(resultats) {
   _renderScannerHero();
   _initRangeFilters(resultats);
   _applyTable();
+  _updateScannerHeaderSub();
 }
 
 function _initRangeFilters(resultats) {
