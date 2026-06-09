@@ -5,6 +5,8 @@ L'enrichissement IA se fait séparément via enrich.py.
 """
 
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -72,19 +74,14 @@ def _hydrate_descriptions(scraper, annonces: list[dict], emit, pct_scrape: int):
 
     emit(min(pct_scrape + 1, 95), f"  >> Extraction du contenu brut ({len(to_fetch)} annonces, 3 workers)…")
 
-    import threading
-    _rate_lock = threading.Semaphore(3)
-
     def _fetch_one(annonce):
-        with _rate_lock:
-            try:
-                annonce["description"] = scraper.fetch_description(annonce["url"]) or ""
-            except Exception as e:
-                emit(pct_scrape, f"  [{scraper.site}] Description indisponible '{annonce['url'][:60]}' : {e}")
-                annonce["description"] = ""
-            import time as _t; _t.sleep(1)
+        try:
+            annonce["description"] = scraper.fetch_description(annonce["url"]) or ""
+        except Exception as e:
+            emit(pct_scrape, f"  [{scraper.site}] Description indisponible '{annonce['url'][:60]}' : {e}")
+            annonce["description"] = ""
+        time.sleep(1)
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = {pool.submit(_fetch_one, a): a for a in to_fetch}
         for future in as_completed(futures):
@@ -147,6 +144,7 @@ def main(progress_callback=None, villes_override=None):
             continue
 
         _emit(pct_scrape, f"Scraping {nom_scraper}…")
+        scraper = None
         fetch_ok = True
         try:
             scraper  = ScraperClass()
