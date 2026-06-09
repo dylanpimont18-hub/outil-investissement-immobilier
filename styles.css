@@ -8475,6 +8475,10 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     align-items: flex-start;
     flex-wrap: wrap;
     margin-top: 16px;
+    background: var(--surface-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 20px;
 }
 
 .portfolio-donut-wrap {
@@ -8495,6 +8499,11 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .portfolio-donut-wrap canvas {
     width: 220px !important;
     height: 220px !important;
+}
+
+.portfolio-donut-wrap canvas,
+.portfolio-fiche__donut-wrap canvas {
+    background: transparent !important;
 }
 
 /* Alertes */
@@ -8541,9 +8550,10 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 
 /* Zone 2 : Conseils intelligents */
 .portfolio-advice-cards {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+    align-items: start;
 }
 
 .advice-group { display: flex; flex-direction: column; gap: 8px; }
@@ -8646,6 +8656,13 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     display: flex;
     flex-direction: column;
     gap: 16px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    cursor: default;
+}
+
+.portfolio-fiche:hover {
+    border-color: var(--accent-gold, #C5A059);
+    box-shadow: 0 2px 12px rgba(197, 160, 89, 0.12);
 }
 
 .portfolio-fiche__header {
@@ -8711,6 +8728,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 
 .portfolio-fiche__section {
     padding-top: 16px;
+    padding-bottom: 16px;
     border-top: 1px solid var(--border-subtle);
 }
 
