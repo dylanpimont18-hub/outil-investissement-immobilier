@@ -459,6 +459,7 @@ let _displayedResultats = [];
 let _detailCache = new Map();
 let _summaryRowsById = new Map();
 let _resultsById = new Map();
+let _selectedBienIds = new Set();
 let _summaryRenderCache = { signature: null, rows: [], html: '' };
 let _resultsLoadInfo = { total: 0, loaded: 0, pages: 0 };
 let _latestGeneratedAt = null;
@@ -1252,17 +1253,22 @@ function _renderGlobalOverviewTable(rows) {
   const rankingStrip = _renderScannerRankingStrip(rows);
 
   if (!rows.length) {
+    const hasResults = _allResultats.length > 0;
     return `
+      ${_renderScannerRankingStrip([])}
       <section class="scanner-overview scanner-overview--empty">
-        <div class="scanner-overview__head">
-          <div>
-            <div class="scanner-overview__eyebrow">Lecture du lot</div>
-            <div class="scanner-overview__title">Aucun dossier ne passe les filtres courants</div>
-            <div class="scanner-overview__meta">La combinaison de filtres est plus restrictive que le lot actuellement disponible.</div>
-          </div>
-          <div class="scanner-overview__empty-actions">
-            <button id="scanner-reset-filters-empty" type="button" class="scanner-btn scanner-btn--outline">Réinitialiser les filtres</button>
-            <div class="scanner-overview__hint">${_allResultats.length ? `${_allResultats.length} biens restent disponibles dans le lot complet.` : 'Définissez une zone puis lancez un scan pour constituer un premier lot.'}</div>
+        <div class="scanner-empty-state">
+          <div class="scanner-empty-state__icon">🔍</div>
+          <h3 class="scanner-empty-state__title">${hasResults ? 'Aucun bien ne correspond aux filtres' : 'Aucun bien dans le lot'}</h3>
+          <p class="scanner-empty-state__sub">${hasResults
+            ? `${_allResultats.length} bien${_allResultats.length > 1 ? 's' : ''} disponible${_allResultats.length > 1 ? 's' : ''} dans le lot complet — ajustez les filtres pour les voir.`
+            : 'Définissez une zone, choisissez un rayon, puis lancez un scan pour constituer votre premier lot.'
+          }</p>
+          <div class="scanner-empty-state__actions">
+            ${hasResults
+              ? `<button id="scanner-reset-filters-empty" type="button" class="btn btn--primary">Réinitialiser les filtres</button>`
+              : `<button id="scanner-empty-launch-scan" type="button" class="btn btn--primary" onclick="document.getElementById('scan-target-cp-input')?.focus()">Configurer un scan →</button>`
+            }
           </div>
         </div>
       </section>`;
@@ -1288,6 +1294,9 @@ function _renderGlobalOverviewTable(rows) {
       : '';
     return `
       <tr class="scanner-summary-row${row.raw.ia_enrichi ? '' : ' scanner-summary-row--pending'}" data-bien-id="${row.bienId}">
+        <td class="scanner-align-center scanner-summary-cell scanner-col-check">
+          <input type="checkbox" class="scanner-row-check" data-bien-id="${row.bienId}" title="Sélectionner pour comparer">
+        </td>
         <td class="scanner-align-left scanner-summary-cell scanner-summary-cell--rank">
           ${_renderRankPill(row.rankIndex, row.rankLabel, row.rankScore)}
         </td>
@@ -1357,6 +1366,9 @@ function _renderGlobalOverviewTable(rows) {
         <table class="scanner-table scanner-table--summary">
           <thead>
             <tr>
+              <th class="scanner-align-center scanner-col-check" style="width:36px">
+                <input type="checkbox" id="scanner-check-all" class="scanner-check-header" title="Sélectionner tout">
+              </th>
               <th class="scanner-align-left" style="width:60px">Rang</th>
               <th class="scanner-align-left">Bien</th>
               <th class="scanner-align-right">Prix</th>
@@ -1576,6 +1588,29 @@ function _bindButtons() {
   });
 
   resultsContainer?.addEventListener('change', event => {
+    const cb = event.target.closest('.scanner-row-check');
+    if (cb) {
+      const id = parseInt(cb.dataset.bienId, 10);
+      if (cb.checked) {
+        if (_selectedBienIds.size >= 3) { cb.checked = false; return; }
+        _selectedBienIds.add(id);
+      } else {
+        _selectedBienIds.delete(id);
+      }
+      _updateCompareBar();
+      return;
+    }
+    const allCb = event.target.closest('#scanner-check-all');
+    if (allCb) {
+      const checks = document.querySelectorAll('.scanner-row-check');
+      const toSelect = allCb.checked ? [...checks].slice(0, 3) : [];
+      checks.forEach(c => { c.checked = false; });
+      toSelect.forEach(c => { c.checked = true; _selectedBienIds.add(parseInt(c.dataset.bienId, 10)); });
+      if (!allCb.checked) _selectedBienIds.clear();
+      _updateCompareBar();
+      return;
+    }
+
     const sortSelect = event.target.closest('#scanner-sort-select');
     if (sortSelect) {
       _sortKey = sortSelect.value || _sortKey;
@@ -2183,6 +2218,7 @@ async function _loadResults(showEmpty) {
     _renderStats(data.stats, resultats);
     _renderTable(resultats);
     _showEmpty(false);
+    document.querySelector('.scanner-workspace-hero')?.classList.add('scanner-workspace-hero--has-results');
     document.getElementById('scanner-stats').style.display = '';
     document.getElementById('scanner-results').style.display = '';
     document.getElementById('scanner-view-tabs')?.style.setProperty('display', 'flex');
@@ -2366,6 +2402,7 @@ function _statCard(val, label, cls, note = '', extraClass = '') {
 // ─── Rendu tableau ────────────────────────────────────────────────────────────
 
 function _renderTable(resultats) {
+  _selectedBienIds = new Set();
   _allResultats = resultats;
   _resultsById = new Map(resultats.map(result => [parseInt(result.bien_id, 10), result]));
   _detailCache = new Map();
@@ -2836,6 +2873,72 @@ function _showProgress(visible) {
   }
 }
 
+// ─── Barre de comparaison flottante ────────────────────────────────────────────
+
+function _updateCompareBar() {
+  let bar = document.getElementById('scanner-compare-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'scanner-compare-bar';
+    bar.className = 'scanner-compare-bar';
+    bar.innerHTML = `
+      <span class="scanner-compare-bar__count"></span>
+      <button class="btn btn--primary scanner-compare-bar__btn">Comparer les biens</button>
+      <button class="scanner-compare-bar__close" title="Effacer la sélection">✕</button>`;
+    bar.querySelector('.scanner-compare-bar__btn').addEventListener('click', _openCompareOverlay);
+    bar.querySelector('.scanner-compare-bar__close').addEventListener('click', () => {
+      _selectedBienIds.clear();
+      document.querySelectorAll('.scanner-row-check').forEach(c => c.checked = false);
+      const allCb = document.getElementById('scanner-check-all');
+      if (allCb) allCb.checked = false;
+      _updateCompareBar();
+    });
+    document.body.appendChild(bar);
+  }
+  const n = _selectedBienIds.size;
+  bar.querySelector('.scanner-compare-bar__count').textContent = `${n} bien${n > 1 ? 's' : ''} sélectionné${n > 1 ? 's' : ''}`;
+  bar.style.display = n >= 2 ? 'flex' : 'none';
+}
+
+function _openCompareOverlay() {
+  const biens = [..._selectedBienIds].map(id => _resultsById.get(id)).filter(Boolean);
+  if (!biens.length) return;
+
+  const rows = biens.map(r => _buildScannerSummaryRow(r));
+  const cols = rows.map(row => `
+    <div class="scanner-compare-col">
+      <div class="scanner-compare-col__rank">${_renderRankPill(row.rankIndex ?? 0, row.rankLabel, row.rankScore)}</div>
+      <div class="scanner-compare-col__title">${_esc(row.title)}</div>
+      <div class="scanner-compare-col__sub">${_esc(row.subtitle || '')}</div>
+      <table class="scanner-compare-table">
+        <tr><th>Prix</th><td>${row.priceLabel}</td></tr>
+        <tr><th>Loyer estimé</th><td>${row.rentLabel}</td></tr>
+        <tr><th>CF après impôt</th><td><span class="scanner-summary-row__value--${row.cfAfterTaxValue >= 0 ? 'positive' : 'negative'}">${row.cfAfterTaxLabel}</span></td></tr>
+        <tr><th>Renta N/N</th><td>${row.rentaNetNetLabel}</td></tr>
+        <tr><th>DPE</th><td>${row.raw.dpe ? `<span class="scanner-dpe-badge scanner-dpe-badge--${row.raw.dpe.toLowerCase()}">${row.raw.dpe.toUpperCase()}</span>` : '—'}</td></tr>
+        <tr><th>Score</th><td>${row.scoreLabel}</td></tr>
+        <tr><th>Décision</th><td>${_renderScannerTonePill(row.decisionLabel, row.decisionTone)}</td></tr>
+      </table>
+      ${row.resumeLabel ? `<div class="scanner-compare-col__resume">${_esc(row.resumeLabel.slice(0, 200))}${row.resumeLabel.length > 200 ? '…' : ''}</div>` : ''}
+      <a href="${_esc(row.url)}" target="_blank" class="scanner-compare-col__link">Voir l'annonce →</a>
+    </div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'scanner-compare-overlay';
+  overlay.className = 'scanner-compare-overlay';
+  overlay.innerHTML = `
+    <div class="scanner-compare-modal">
+      <div class="scanner-compare-modal__head">
+        <h3>Comparaison · ${biens.length} bien${biens.length > 1 ? 's' : ''}</h3>
+        <button class="scanner-compare-modal__close">✕</button>
+      </div>
+      <div class="scanner-compare-grid">${cols}</div>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector('.scanner-compare-modal__close').addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
+}
+
 function _showEmpty(visible) {
   const el = document.getElementById('scanner-empty');
   if (el) el.style.display = visible ? '' : 'none';
@@ -2843,6 +2946,7 @@ function _showEmpty(visible) {
     _allResultats = [];
     _displayedResultats = [];
     _renderScannerHero();
+    document.querySelector('.scanner-workspace-hero')?.classList.remove('scanner-workspace-hero--has-results');
   }
   if (!visible) {
     document.getElementById('scanner-stats')?.style.setProperty('display', '');

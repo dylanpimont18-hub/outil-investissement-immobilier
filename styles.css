@@ -4118,6 +4118,41 @@ body.tuto-active {
     box-shadow: var(--shadow-soft);
 }
 
+.scanner-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 72px 24px;
+    gap: 12px;
+}
+.scanner-empty-state__icon {
+    font-size: 2.8rem;
+    opacity: 0.5;
+    line-height: 1;
+}
+.scanner-empty-state__title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--fg, var(--text));
+    margin: 0;
+}
+.scanner-empty-state__sub {
+    font-size: 0.875rem;
+    color: var(--muted);
+    max-width: 420px;
+    margin: 0;
+    line-height: 1.6;
+}
+.scanner-empty-state__actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
 .scanner-overview__title-wrap {
     display: grid;
     gap: 6px;
@@ -5990,13 +6025,14 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .scanner-view-tabs {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
     width: fit-content;
-    margin: 14px 16px 0;
-    padding: 6px;
-    border: 1px solid var(--border-subtle);
+    margin: 12px 0 0 0;
+    padding: 4px;
+    border: 1px solid var(--border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--surface) 86%, var(--page-highlight) 14%);
+    background: var(--surface-card);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .scanner-view-tab {
@@ -6150,6 +6186,26 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 /* M1 — scanner workspace-hero panel */
 .scanner-workspace-hero {
     margin-bottom: 0;
+}
+
+/* Hero compact quand les résultats sont chargés */
+.scanner-workspace-hero--has-results .workspace-hero-card {
+    padding-top: 16px;
+    padding-bottom: 16px;
+}
+.scanner-workspace-hero--has-results .workspace-hero-copy h2 {
+    font-size: clamp(1rem, 1.5vw, 1.2rem);
+    margin-bottom: 2px;
+}
+.scanner-workspace-hero--has-results .workspace-hero-eyebrow {
+    display: none;
+}
+.scanner-workspace-hero--has-results .scanner-command-card--secondary {
+    display: none;
+}
+.scanner-workspace-hero--has-results .scanner-command-card__title {
+    font-size: 1rem;
+    margin-bottom: 4px;
 }
 
 .scanner-command-panel {
@@ -9227,3 +9283,144 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .ai-rec__text { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.55; margin: 0; }
 
 .ai-rec__action { font-size: 0.82rem; color: var(--accent); font-weight: 600; }
+
+/* ─── Compare bar ─────────────────────────────────────────── */
+.scanner-compare-bar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 10px 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    z-index: 500;
+    white-space: nowrap;
+}
+.scanner-compare-bar__count {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--fg, var(--text));
+}
+.scanner-compare-bar__close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px;
+    line-height: 1;
+}
+.scanner-compare-bar__close:hover { color: var(--danger); }
+
+/* ─── Compare overlay ────────────────────────────────────── */
+.scanner-compare-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    z-index: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.scanner-compare-modal {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    width: min(960px, 100%);
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 24px;
+}
+.scanner-compare-modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+.scanner-compare-modal__head h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+}
+.scanner-compare-modal__close {
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+.scanner-compare-modal__close:hover { background: var(--surface-hover); color: var(--danger); }
+.scanner-compare-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+.scanner-compare-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.scanner-compare-col__title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--fg, var(--text));
+    line-height: 1.3;
+}
+.scanner-compare-col__sub {
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+.scanner-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.scanner-compare-table th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 4px 0;
+    width: 45%;
+}
+.scanner-compare-table td {
+    font-weight: 600;
+    padding: 4px 0;
+    color: var(--fg, var(--text));
+}
+.scanner-compare-table tr + tr { border-top: 1px solid var(--border-subtle); }
+.scanner-compare-col__resume {
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.5;
+    padding-top: 4px;
+    border-top: 1px solid var(--border-subtle);
+}
+.scanner-compare-col__link {
+    font-size: 0.78rem;
+    color: var(--primary);
+    text-decoration: none;
+    margin-top: auto;
+}
+.scanner-compare-col__link:hover { text-decoration: underline; }
+
+/* ─── Checkbox column ────────────────────────────────────── */
+.scanner-col-check { width: 36px; }
+.scanner-row-check, .scanner-check-header {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
