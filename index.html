@@ -766,8 +766,7 @@
                           </select>
                         </label>
                       </div>
-                      <p class="scanner-command-card__copy">Le lot courant reste disponible entre deux scans. Lancez l'analyse IA pour structurer les fiches et homogénéiser la lecture des dossiers.</p>
-                      <div class="scanner-command-card__actions scanner-command-card__actions--secondary">
+<div class="scanner-command-card__actions scanner-command-card__actions--secondary">
                         <button id="btn-enrich" class="btn btn--outline scanner-btn--accent" disabled>Analyser avec l'IA <span id="enrich-pending-badge" class="scanner-inline-badge"></span></button>
                       </div>
                     </section>
@@ -788,11 +787,11 @@
                                     <span id="scanner-pct" class="scanner-progress-pct">0%</span>
                                 </div>
                                 <div id="scanner-progress-stages" class="scanner-progress-stages">
-                                    <span class="scanner-progress-stage is-active">Préparer</span>
-                                    <span class="scanner-progress-stage">Collecter</span>
-                                    <span class="scanner-progress-stage">Qualifier</span>
-                                    <span class="scanner-progress-stage">Classer</span>
-                                    <span class="scanner-progress-stage">Clôturer</span>
+                                  <span class="scanner-progress-stage is-active"><span class="scanner-progress-stage__num">1</span>Préparer</span>
+                                  <span class="scanner-progress-stage"><span class="scanner-progress-stage__num">2</span>Collecter</span>
+                                  <span class="scanner-progress-stage"><span class="scanner-progress-stage__num">3</span>Qualifier</span>
+                                  <span class="scanner-progress-stage"><span class="scanner-progress-stage__num">4</span>Classer</span>
+                                  <span class="scanner-progress-stage"><span class="scanner-progress-stage__num">5</span>Clôturer</span>
                                 </div>
                                 <div class="scanner-progress-bar">
                                     <div id="scanner-progress-fill" class="scanner-progress-fill" style="width:0%"></div>
@@ -862,17 +861,54 @@
                                     <button id="scanner-filters-close" type="button" class="scanner-filters-close">Fermer</button>
                 </div>
 
-                <!-- ── Section : À PROPOS DU BIEN ─────────────────────────── -->
+                <!-- ── Section : BUDGET ET SURFACE ────────────────────────── -->
                 <div class="scanner-filter-section">
-                  <div class="scanner-filter-section-title">À PROPOS DU BIEN</div>
-                  <div class="scanner-filter-group">
-                    <span class="scanner-filter-title">Nombre de pièces</span>
-                    <div class="scanner-filter-chips">
-                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="1"><span>1 pièce</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="2"><span>2 pièces</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="3"><span>3 pièces</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="4"><span>4 pièces</span></label>
-                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="5"><span>5+ pièces</span></label>
+                  <div class="scanner-filter-section-title">BUDGET ET SURFACE</div>
+                                    <div class="scanner-range-layout">
+                                        <div class="scanner-range-group scanner-range-group--flex scanner-range-group--wide">
+                      <span class="scanner-filter-title">Prix (€)</span>
+                      <div class="scanner-range-row">
+                        <input type="number" id="prix-min" class="scanner-range-input" placeholder="Min" min="0" step="1000">
+                        <input type="range" id="range-prix-min" class="scanner-range-slider" step="1000">
+                        <span class="scanner-range-sep">–</span>
+                        <input type="range" id="range-prix-max" class="scanner-range-slider" step="1000">
+                        <input type="number" id="prix-max" class="scanner-range-input" placeholder="Max" min="0" step="1000">
+                      </div>
+                    </div>
+                    <div class="scanner-range-group scanner-range-group--flex scanner-range-group--wide">
+                      <span class="scanner-filter-title">Surface (m²)</span>
+                      <div class="scanner-range-row">
+                        <input type="number" id="surface-min" class="scanner-range-input" placeholder="Min" min="0" step="5">
+                        <input type="range" id="range-surface-min" class="scanner-range-slider" step="5">
+                        <span class="scanner-range-sep">–</span>
+                        <input type="range" id="range-surface-max" class="scanner-range-slider" step="5">
+                        <input type="number" id="surface-max" class="scanner-range-input" placeholder="Max" min="0" step="5">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ── Section : PERFORMANCES INVESTISSEMENT ─────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">INDICATEURS D'INVESTISSEMENT</div>
+                  <div class="scanner-filter-row scanner-filter-row--wide">
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Score global</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Très élevé 80+</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Élevé 60–79</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Intermédiaire 40–59</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Faible 20–39</span></label>
+                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Très faible &lt;20</span></label>
+                      </div>
+                    </div>
+                    <div class="scanner-filter-group">
+                      <span class="scanner-filter-title">Cash-flow</span>
+                      <div class="scanner-filter-chips">
+                        <label class="scanner-chip"><input type="checkbox" id="filter-cf-positif"><span>CF net positif</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-cf-negatif"><span>CF net négatif</span></label>
+                        <label class="scanner-chip"><input type="checkbox" id="filter-cfai-positif"><span>CF après impôt positif</span></label>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -889,6 +925,20 @@
                     <label class="scanner-dpe-block scanner-chip--dpe-f"><input type="checkbox" name="dpe-filter" value="f"><span>F</span></label>
                     <label class="scanner-dpe-block scanner-chip--dpe-g"><input type="checkbox" name="dpe-filter" value="g"><span>G</span></label>
                     <label class="scanner-chip scanner-chip--offset"><input type="checkbox" id="filter-dpe-safe"><span>Sans risque (A–D)</span></label>
+                  </div>
+                </div>
+
+                <!-- ── Distance ──────────────────────────────────────────── -->
+                <div class="scanner-filter-section">
+                  <div class="scanner-filter-section-title">DISTANCE</div>
+                  <div class="scanner-filter-section-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                      <span style="font-size:0.8rem;color:var(--muted)">Distance max depuis Vierzon</span>
+                      <span id="scanner-dist-filter-value" style="font-size:0.8rem;font-weight:600">Illimité</span>
+                    </div>
+                    <input type="range" id="scanner-dist-filter" min="1" max="50" value="50" step="1"
+                      class="scanner-range-input" style="width:100%">
+                    <div class="scanner-range-labels"><span>1 km</span><span>Illimité</span></div>
                   </div>
                 </div>
 
@@ -929,54 +979,17 @@
                   </div>
                 </div>
 
-                <!-- ── Section : PERFORMANCES INVESTISSEMENT ─────────────── -->
+                <!-- ── Section : À PROPOS DU BIEN ─────────────────────────── -->
                 <div class="scanner-filter-section">
-                  <div class="scanner-filter-section-title">INDICATEURS D'INVESTISSEMENT</div>
-                  <div class="scanner-filter-row scanner-filter-row--wide">
-                    <div class="scanner-filter-group">
-                      <span class="scanner-filter-title">Score global</span>
-                      <div class="scanner-filter-chips">
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="excellent"><span>Très élevé 80+</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="bon"><span>Élevé 60–79</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="neutre"><span>Intermédiaire 40–59</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="attention"><span>Faible 20–39</span></label>
-                        <label class="scanner-chip"><input type="checkbox" name="score-filter" value="faible"><span>Très faible &lt;20</span></label>
-                      </div>
-                    </div>
-                    <div class="scanner-filter-group">
-                      <span class="scanner-filter-title">Cash-flow</span>
-                      <div class="scanner-filter-chips">
-                        <label class="scanner-chip"><input type="checkbox" id="filter-cf-positif"><span>CF net positif</span></label>
-                        <label class="scanner-chip"><input type="checkbox" id="filter-cf-negatif"><span>CF net négatif</span></label>
-                        <label class="scanner-chip"><input type="checkbox" id="filter-cfai-positif"><span>CF après impôt positif</span></label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- ── Section : BUDGET ET SURFACE ────────────────────────── -->
-                <div class="scanner-filter-section">
-                  <div class="scanner-filter-section-title">BUDGET ET SURFACE</div>
-                                    <div class="scanner-range-layout">
-                                        <div class="scanner-range-group scanner-range-group--flex scanner-range-group--wide">
-                      <span class="scanner-filter-title">Prix (€)</span>
-                      <div class="scanner-range-row">
-                        <input type="number" id="prix-min" class="scanner-range-input" placeholder="Min" min="0" step="1000">
-                        <input type="range" id="range-prix-min" class="scanner-range-slider" step="1000">
-                        <span class="scanner-range-sep">–</span>
-                        <input type="range" id="range-prix-max" class="scanner-range-slider" step="1000">
-                        <input type="number" id="prix-max" class="scanner-range-input" placeholder="Max" min="0" step="1000">
-                      </div>
-                    </div>
-                    <div class="scanner-range-group scanner-range-group--flex scanner-range-group--wide">
-                      <span class="scanner-filter-title">Surface (m²)</span>
-                      <div class="scanner-range-row">
-                        <input type="number" id="surface-min" class="scanner-range-input" placeholder="Min" min="0" step="5">
-                        <input type="range" id="range-surface-min" class="scanner-range-slider" step="5">
-                        <span class="scanner-range-sep">–</span>
-                        <input type="range" id="range-surface-max" class="scanner-range-slider" step="5">
-                        <input type="number" id="surface-max" class="scanner-range-input" placeholder="Max" min="0" step="5">
-                      </div>
+                  <div class="scanner-filter-section-title">À PROPOS DU BIEN</div>
+                  <div class="scanner-filter-group">
+                    <span class="scanner-filter-title">Nombre de pièces</span>
+                    <div class="scanner-filter-chips">
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="1"><span>1 pièce</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="2"><span>2 pièces</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="3"><span>3 pièces</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="4"><span>4 pièces</span></label>
+                      <label class="scanner-chip"><input type="checkbox" name="pieces-filter" value="5"><span>5+ pièces</span></label>
                     </div>
                   </div>
                 </div>
@@ -1016,20 +1029,6 @@
                         <span class="scanner-range-unit">/100</span>
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                <!-- ── Distance ──────────────────────────────────────────── -->
-                <div class="scanner-filter-section">
-                  <div class="scanner-filter-section-title">DISTANCE</div>
-                  <div class="scanner-filter-section-body">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                      <span style="font-size:0.8rem;color:var(--muted)">Distance max depuis Vierzon</span>
-                      <span id="scanner-dist-filter-value" style="font-size:0.8rem;font-weight:600">Illimité</span>
-                    </div>
-                    <input type="range" id="scanner-dist-filter" min="1" max="50" value="50" step="1"
-                      class="scanner-range-input" style="width:100%">
-                    <div class="scanner-range-labels"><span>1 km</span><span>Illimité</span></div>
                   </div>
                 </div>
 

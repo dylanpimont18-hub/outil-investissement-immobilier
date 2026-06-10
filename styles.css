@@ -3645,7 +3645,17 @@ body.tuto-active {
 .scanner-btn--accent {
     border-color: var(--accent-gold-border);
     color: var(--accent-gold);
-    background: linear-gradient(180deg, rgba(197, 160, 89, 0.08), rgba(197, 160, 89, 0.15));
+    background: var(--accent-gold-dim);
+    font-weight: 600;
+    transition: background .15s, transform .15s;
+}
+.scanner-btn--accent:hover:not(:disabled) {
+    background: rgba(var(--watch-rgb, 212,175,55), 0.18);
+    transform: translateY(-1px);
+}
+.scanner-btn--accent:disabled {
+    opacity: .45;
+    cursor: not-allowed;
 }
 
 .scanner-inline-badge {
@@ -3673,14 +3683,33 @@ body.tuto-active {
 .scanner-status--error { background: rgba(248, 81, 73, 0.12); color: var(--danger); }
 
 .scanner-status-dot {
-  width: 7px; height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
+  flex-shrink: 0;
+  position: relative;
 }
 .scanner-status--running .scanner-status-dot {
-  animation: scannerPulse 1.2s infinite;
+  animation: scannerDotPulse 1.4s ease-in-out infinite;
 }
-@keyframes scannerPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.scanner-status--running .scanner-status-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  animation: scannerRingExpand 1.4s ease-out infinite;
+}
+@keyframes scannerDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .6; transform: scale(.85); }
+}
+@keyframes scannerRingExpand {
+  0%   { opacity: .8; transform: scale(.8); }
+  70%  { opacity: 0;  transform: scale(2.2); }
+  100% { opacity: 0;  transform: scale(2.2); }
+}
 
 .scanner-progress {
     background: var(--surface-card);
@@ -4161,7 +4190,10 @@ body.tuto-active {
 .scanner-table--detail thead th {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 2;
+    background: var(--surface-card);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 1px 0 var(--border);
 }
 
 .scanner-summary-row {
@@ -6324,37 +6356,67 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 }
 
 .scanner-progress-stages {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
-
 .scanner-progress-stage {
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 38px;
-    padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid var(--border-subtle);
-    background: rgba(255, 255, 255, 0.56);
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  position: relative;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
 }
-
+/* Ligne de connexion entre étapes */
+.scanner-progress-stage + .scanner-progress-stage::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  width: 36px;
+  height: 1px;
+  background: var(--border);
+  top: 10px;
+}
+.scanner-progress-stage + .scanner-progress-stage.is-done::before,
+.scanner-progress-stage + .scanner-progress-stage.is-active::before {
+  background: var(--success);
+}
+/* Cercle numéroté */
+.scanner-progress-stage__num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all .2s;
+}
+.scanner-progress-stage.is-active .scanner-progress-stage__num {
+  border-color: var(--accent-gold);
+  background: var(--accent-gold-dim);
+  color: var(--accent-gold);
+}
+.scanner-progress-stage.is-done .scanner-progress-stage__num {
+  border-color: var(--success);
+  background: rgba(var(--success-rgb), 0.12);
+  color: var(--success);
+}
 .scanner-progress-stage.is-active {
-    border-color: rgba(197, 160, 89, 0.32);
-    background: rgba(197, 160, 89, 0.14);
-    color: var(--accent-gold);
+  color: var(--accent-gold);
 }
-
 .scanner-progress-stage.is-done {
-    border-color: rgba(45, 164, 78, 0.24);
-    background: rgba(45, 164, 78, 0.12);
-    color: var(--success);
+  color: var(--success);
 }
 
 .scanner-log-toggle {
