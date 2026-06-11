@@ -22,7 +22,7 @@ Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + expo
 - `api_bien_detail` GET — détails complets d'un bien + analyses
 - `api_pending_count` GET — nombre de biens en attente d'enrichissement
 - `api_communes` GET — communes par code postal
-- `api_portfolio_diagnostic` POST `/api/portfolio-diagnostic` — appel Claude API, retourne 3-5 recommandations JSON
+- `api_portfolio_diagnostic` POST `/api/portfolio-diagnostic` — accepte `{ bien: {...} }` (bien unique), retourne 3-5 recommandations JSON via Claude API
 - `api_generate_pdf` POST `/api/generate-pdf` — génère un PDF via Edge headless, sauvegarde dans ~/Downloads, retourne `{saved_to, filename}`
 - `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
 
@@ -42,17 +42,21 @@ Orchestration UI complète : état, rendu, sync multi-fenêtres, routing des pan
 - `showToast(msg)` — notification temporaire
 - `createAssetId()` — génère un ID unique pour une étude
 - `getPanelMode()` — détecte si on est dans la vue analysis ou workspace
-- `loadAssetMeta()` / `saveAssetMeta()` / `getAssetMeta()` / `setAssetMeta()` — CRUD localStorage `investissementWebAssetMeta`
-- `addTravail(assetId, travail)` / `deleteTravail(assetId, travailId)` — CRUD travaux
-- `addNote(assetId, text)` — ajout note horodatée
-- `computePortfolioAdvice(portfolioItems, profileData, capacity, assetMetaAll)` — moteur de règles : retourne conseils actionnables (fiscal, dette, risque)
-- `buildPortfolioDashboardZone(collectionsView, advice)` — zone 1 : donut consolidé + alertes actives
-- `buildPortfolioAdviceZone(advice)` — zone 2 : cards conseils intelligents groupés par thème
-- `buildPortfolioFiches(collectionsView, advice, assetMetaAll)` — zone 3 : grille fiches biens avec donut individuel + KPIs + sections Travaux/Notes
-- `buildFicheTravaux(assetId, meta)` — section Travaux d'une fiche (liste + totaux + formulaire CRUD)
-- `buildFicheNotes(assetId, meta)` — section Notes d'une fiche (liste horodatée + ajout)
-- `buildPortfolioPipelineZone(collectionsView)` — zone 4 : tableau comparatif biens à l'étude
-- `initPortfolioAiDiagnostic()` — zone 5 : bouton + drawer diagnostic IA (fetch `/api/portfolio-diagnostic`)
+- Portfolio biens détenus (`STORAGE_KEYS.ownedAssets` = `investissementWebOwnedAssets`) :
+  - `loadOwnedAssets()` / `saveOwnedAssets()` / `createOwnedAsset(nom, ville)` / `getOwnedAsset(id)` / `updateOwnedAsset(id, patch)` / `deleteOwnedAsset(id)` — CRUD biens
+  - `updateOwnedAcquisition(id, patch)` / `updateOwnedCredit(id, patch)` / `updateOwnedPostAchat(id, patch)` — patch sous-objets
+  - `addOwnedTravail(assetId, travail)` / `deleteOwnedTravail(assetId, travailId)` — CRUD travaux
+  - `addOwnedNote(assetId, text)` — ajout note horodatée
+  - `addOwnedScenario(assetId)` / `updateOwnedScenarioVar(assetId, scenarioId, key, val)` / `updateOwnedScenarioNom(assetId, scenarioId, nom)` / `deleteOwnedScenario(assetId, scenarioId)` — CRUD scénarios
+  - `renderCollections()` — dispatcher vue liste ↔ vue détaillée
+  - `renderOwnedPortfolioList()` — liste biens + KPIs consolidés + état vide
+  - `openOwnedDetail(assetId)` / `closeOwnedDetail()` — navigation vue liste ↔ vue détaillée
+  - `renderOwnedDetail()` — header fiche + câblage accordéons
+  - `renderAccordionAcquisition(asset)` — formulaire données figées + crédit
+  - `renderAccordionPostAchat(asset)` — charges, travaux CRUD, notes
+  - `renderAccordionSimulateur(asset)` — matrice scénarios avec CF net-net recalculé
+  - `callOwnedDiagnosticIA(assetId)` — appel `POST /api/portfolio-diagnostic` + drawer résultat
+  - `initOwnedPortfolioEvents()` — câblage des events du portefeuille (modal ajout, retour, IA, drawer)
 
 ---
 
@@ -67,6 +71,8 @@ Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
 - `getHouseholdTaxParts(adults, enfants)` — nombre de parts fiscales du foyer
 - `capitalRestantDu(mensualite, dateFinStr)` — capital restant dû à une date
 - `CSG_CRDS_RATE` — constante 17.2%
+- `buildFinancialModel(prixNet, loyerMensuel, inputs, tmi)` — modèle financier bas niveau (exporté ; utilisé par `computeOwnedAssetCF`)
+- `computeOwnedAssetCF(asset, scenario, tmi)` — CF net-net mensuel d'un bien détenu selon un scénario ; retourne `{ cfNetNet, mensualiteTotale, chargesMensuelles, impotsAnnee, loyerEffectif, rentaBrute, dscr }`
 
 ---
 
@@ -115,10 +121,14 @@ Composants UI réutilisables : graphes, tableaux comparatifs, validation, toasts
 Structure DOM statique — tous les panels et formulaires pré-déclarés.
 - Panels principaux : `#workspace-panel`, `#analysis-panel`, `#collection-panel`, `#feasibility-panel`, `#scanner-panel`
 - Formulaires : `#variables-form`, `#profile-form`, `#profile-modal`
-- Zones de rendu : `#analysis-sticky-summary`, `#analysis-metrics`, `#portfolio-kpi-banner`
+- Zones de rendu : `#analysis-sticky-summary`, `#analysis-metrics`
 - Champ optionnel : `#annee-achat` (dans fieldset Identité — active les conseils temporels)
-- Portfolio zones : `#portfolio-donut-consolidated-wrap`, `#portfolio-alerts`, `#portfolio-advice`, `#portfolio-owned-zone`, `#portfolio-fiches`, `#portfolio-pipeline-zone`
-- Zone 5 : `#portfolio-ai-trigger`, `#portfolio-ai-drawer`, `#portfolio-ai-overlay`, `#portfolio-ai-drawer-content`
+- Portefeuille biens détenus (dans `#collection-panel`) :
+  - Vue liste : `#owned-list-view`, `#owned-kpi-banner`, `#owned-list-table`, `#owned-add-btn`
+  - Modal ajout : `#owned-add-modal`, `#owned-add-form`, `#owned-add-nom`, `#owned-add-ville`
+  - Vue détaillée : `#owned-detail-view`, `#owned-back-btn`, `#owned-detail-title`, `#owned-diagnostic-btn`
+  - Accordéons : `#acc-acquisition`, `#acc-acquisition-body`, `#acc-acquisition-content`, `#acc-postachat`, `#acc-simulateur`
+  - Drawer IA : `#owned-ai-drawer`, `#owned-ai-overlay`, `#owned-ai-drawer-content`
 
 ---
 
@@ -130,6 +140,7 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 - Scanner workspace : `.scanner-workspace-hero`, `.scanner-command-panel`, `.scanner-command-card`, `.scanner-rayon-group`, `.scanner-options-dropdown`
 - Scanner table : `.scanner-dpe-badge--a/b/c/d/e/f/g`, `.scanner-price-drop`, `.scanner-dist-badge--near/mid/far`, `.scanner-freshness`, `.scanner-score-decision`
 - Scanner stats : `.workspace-hero-mini-card.scanner-stat--gold/pos/warn`, `.scanner-stat--insight`
+- Portefeuille biens détenus : `.owned-list-header`, `.owned-kpi-banner`, `.owned-kpi-card`, `.owned-list-table`, `.owned-add-modal`, `.owned-detail-header`, `.owned-accordion`, `.owned-accordion__header[aria-expanded]`, `.owned-form-grid`, `.owned-travaux-row`, `.owned-notes-add`, `.owned-simulator-table`
 - Portfolio zones : `.portfolio-zone`, `.portfolio-donut-wrap`, `.portfolio-alerts`, `.portfolio-alert--red/orange`
 - Portfolio conseils : `.advice-card`, `.advice-card--red/orange/info`, `.advice-group`
 - Portfolio fiches : `.portfolio-fiche`, `.portfolio-fiche__verdict--green/orange/red`, `.portfolio-fiche__kpi`
