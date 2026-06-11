@@ -1,4 +1,4 @@
-import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu, computeOwnedAssetCF } from './calculs.js';
+﻿import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu, computeOwnedAssetCF, computeOwnedAssetTimeline } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
 import { initScanner, onScannerTabActivated } from './scanner.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
@@ -77,9 +77,9 @@ function createOwnedAsset(nom, ville) {
             travaux: [], notes: []
         },
         scenarios: [
-            { id: 'pessimiste', nom: 'Pessimiste', variables: { loyer: 0, taxeFonciere: 0, vacance: 8, regime: 'micro-foncier' } },
-            { id: 'realiste', nom: 'Réaliste', variables: { loyer: 0, taxeFonciere: 0, vacance: 5, regime: 'micro-foncier' } },
-            { id: 'optimiste', nom: 'Optimiste', variables: { loyer: 0, taxeFonciere: 0, vacance: 2, regime: 'micro-foncier' } }
+            { id: 'pessimiste', nom: 'Pessimiste', variables: { vacance: 8, regime: 'micro-foncier' } },
+            { id: 'realiste',   nom: 'Réaliste',   variables: { vacance: 5, regime: 'micro-foncier' } },
+            { id: 'optimiste',  nom: 'Optimiste',  variables: { vacance: 2, regime: 'micro-foncier' } }
         ],
         lastDiagnostic: null
     };
@@ -161,12 +161,30 @@ function addOwnedNote(assetId, text) {
     saveOwnedAssets(all);
 }
 
+function addOwnedChargesAnnuelles(assetId, entry) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    const list = [...(post.chargesAnnuelles || [])].filter(e => e.annee !== entry.annee);
+    list.push(entry);
+    list.sort((a, b) => a.annee - b.annee);
+    updateOwnedPostAchat(assetId, { chargesAnnuelles: list });
+}
+
+function deleteOwnedChargesAnnuelles(assetId, annee) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    const list = (post.chargesAnnuelles || []).filter(e => e.annee !== annee);
+    updateOwnedPostAchat(assetId, { chargesAnnuelles: list });
+}
+
 function addOwnedScenario(assetId) {
     const all = loadOwnedAssets();
     if (!all[assetId]) return;
     const id = `sc-${Date.now()}`;
     all[assetId].scenarios.push({
-        id, nom: 'Nouveau', variables: { loyer: 0, taxeFonciere: 0, vacance: 5, regime: 'micro-foncier' }
+        id, nom: 'Nouveau', variables: { vacance: 5, regime: 'micro-foncier' }
     });
     saveOwnedAssets(all);
     return id;
@@ -197,55 +215,6 @@ function deleteOwnedScenario(assetId, scenarioId) {
     saveOwnedAssets(all);
 }
 
-const ASSET_META_KEY = 'investissementWebAssetMeta';
-
-function loadAssetMeta() {
-    try { return JSON.parse(localStorage.getItem(ASSET_META_KEY)) || {}; }
-    catch { return {}; }
-}
-
-function saveAssetMeta(meta) {
-    localStorage.setItem(ASSET_META_KEY, JSON.stringify(meta));
-}
-
-function getAssetMeta(assetId) {
-    const all = loadAssetMeta();
-    return all[assetId] || { travaux: [], notes: [], lastDiagnostic: null };
-}
-
-function setAssetMeta(assetId, patch) {
-    const all = loadAssetMeta();
-    all[assetId] = { ...getAssetMeta(assetId), ...patch };
-    saveAssetMeta(all);
-}
-
-function addTravail(assetId, travail) {
-    const meta = getAssetMeta(assetId);
-    const entry = {
-        id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        date: travail.date || '',
-        description: travail.description || '',
-        montant: Math.max(0, Number(travail.montant) || 0),
-        tag: ['deductible', 'non-deductible', 'a-classifier'].includes(travail.tag) ? travail.tag : 'a-classifier'
-    };
-    setAssetMeta(assetId, { travaux: [...meta.travaux, entry] });
-}
-
-function deleteTravail(assetId, travailId) {
-    const meta = getAssetMeta(assetId);
-    setAssetMeta(assetId, { travaux: meta.travaux.filter(t => t.id !== travailId) });
-}
-
-function addNote(assetId, text) {
-    if (!text.trim()) return;
-    const meta = getAssetMeta(assetId);
-    const entry = {
-        id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        createdAt: new Date().toISOString(),
-        text: text.trim()
-    };
-    setAssetMeta(assetId, { notes: [...meta.notes, entry] });
-}
 
 const PROFILE_OPTIONS = [
     {
@@ -453,7 +422,8 @@ const state = {
     guidedStepIndex: 0,
     analysisPopupBlocked: false,
     ownedAssets: loadOwnedAssets(),
-    activeOwnedAssetId: null
+    activeOwnedAssetId: null,
+    ownedRegime: localStorage.getItem('investissementWebOwnedRegime') || 'micro-foncier',
 };
 
 let analysisWindowRef = null;
@@ -498,6 +468,12 @@ const nodes = {
     accPostAchatBody: document.getElementById('acc-postachat-body'),
     accPostAchatContent: document.getElementById('acc-postachat-content'),
     accPostAchatSummary: document.getElementById('acc-postachat-summary'),
+    ownedSynthese: document.getElementById('owned-synthese'),
+    ownedDeleteModal: document.getElementById('owned-delete-modal'),
+    ownedDeleteModalName: document.getElementById('owned-delete-modal-name'),
+    ownedDeleteModalInput: document.getElementById('owned-delete-modal-input'),
+    ownedDeleteModalCancel: document.getElementById('owned-delete-modal-cancel'),
+    ownedDeleteModalConfirm: document.getElementById('owned-delete-modal-confirm'),
     accSimulateurBody: document.getElementById('acc-simulateur-body'),
     accSimulateurContent: document.getElementById('acc-simulateur-content'),
     accSimulateurSummary: document.getElementById('acc-simulateur-summary'),
@@ -535,21 +511,9 @@ const nodes = {
     portfolioHero: document.getElementById('portfolio-hero'),
     portfolioSimulator: document.getElementById('portfolio-simulator'),
     portfolioSummary: document.getElementById('portfolio-summary'),
-    portfolioKpiBanner: document.getElementById('portfolio-kpi-banner'),
-    portfolioAssetGridOwned: document.getElementById('portfolio-asset-grid-owned'),
-    portfolioAssetGridPipeline: document.getElementById('portfolio-asset-grid-pipeline'),
-    portfolioAlerts: document.getElementById('portfolio-alerts'),
-    portfolioAdvice: document.getElementById('portfolio-advice'),
-    portfolioAdviceCards: document.getElementById('portfolio-advice-cards'),
-    portfolioOwnedZone: document.getElementById('portfolio-owned-zone'),
-    portfolioFiches: document.getElementById('portfolio-fiches'),
-    portfolioPipelineZone: document.getElementById('portfolio-pipeline-zone'),
-    portfolioDonutConsolidatedWrap: document.getElementById('portfolio-donut-consolidated-wrap'),
     portfolioAiDrawer: document.getElementById('portfolio-ai-drawer'),
     portfolioAiOverlay: document.getElementById('portfolio-ai-overlay'),
     portfolioAiDrawerContent: document.getElementById('portfolio-ai-drawer-content'),
-    portfolioAiTrigger: document.getElementById('portfolio-ai-trigger'),
-    portfolioAiLastDate: document.getElementById('portfolio-ai-last-date'),
     creditDrawerOverlay: document.getElementById('credit-drawer-overlay'),
     creditDrawer: document.getElementById('credit-drawer'),
     creditDrawerAssetId: document.getElementById('credit-drawer-asset-id'),
@@ -2118,840 +2082,6 @@ function buildPortfolioHero(collectionsView) {
     `;
 }
 
-
-/**
- * Évalue le portefeuille et retourne une liste de conseils actionnables.
- * @returns {Array<{id:string, severity:'red'|'orange'|'info', title:string, text:string, action:string|null, actionLabel:string|null, assetId:string|null}>}
- */
-function computePortfolioAdvice(portfolioItems, profileData, capacity, assetMetaAll) {
-    const advice = [];
-    const currentYear = new Date().getFullYear();
-    const income = profileData.income || 0;
-    const tmi = calculateTMI(income, { adults: profileData.adults || 2, children: profileData.children || 0 });
-
-    // Revenus fonciers annuels estimés = sum(loyer * 12 * (1 - vacance/100)) sur owned
-    const revenusFonciersEstimes = portfolioItems.reduce((sum, item) => {
-        const loyer = item.variablesData['loyer'] || 0;
-        const vacance = item.variablesData['vacance'] || 0;
-        return sum + loyer * 12 * (1 - vacance / 100);
-    }, 0);
-
-    // Taux d'endettement
-    const mensualitesCredit = portfolioItems.reduce((sum, item) => sum + (item.model.mensualiteTotale || 0), 0);
-    const revenusMensuels = income / 12;
-    const tauxEndettement = revenusMensuels > 0 ? (mensualitesCredit / revenusMensuels) * 100 : 0;
-
-    // --- RÈGLES FISCALES ---
-
-    const microFoncierItems = portfolioItems.filter(i => (i.variablesData['regime'] || '') === 'micro-foncier');
-
-    if (revenusFonciersEstimes > 15000 && microFoncierItems.length > 0) {
-        advice.push({
-            id: 'fiscal-reel-threshold',
-            severity: 'orange',
-            title: 'Régime réel potentiellement avantageux',
-            text: `Vos revenus fonciers estimés (${Math.round(revenusFonciersEstimes).toLocaleString('fr-FR')} €/an) dépassent 15 000 €. Le régime réel permet de déduire les charges réelles et peut réduire significativement votre imposition par rapport au micro-foncier.`,
-            action: null, actionLabel: null, assetId: null
-        });
-    }
-
-    if (tmi >= 30 && portfolioItems.length >= 2) {
-        const cfConsolide = portfolioItems.reduce((s, i) => s + (i.metrics.cfNetNet || 0), 0);
-        if (cfConsolide > 0) {
-            advice.push({
-                id: 'fiscal-sci-is',
-                severity: 'info',
-                title: 'SCI à l\'IS à étudier',
-                text: `Votre TMI est à ${tmi} % avec un CF consolidé positif sur ${portfolioItems.length} biens. La SCI à l'IS peut plafonner l'imposition à 15–25 % sur les bénéfices et optimiser la transmission patrimoniale.`,
-                action: null, actionLabel: null, assetId: null
-            });
-        }
-    }
-
-    portfolioItems.forEach(item => {
-        const regime = item.variablesData['regime'] || '';
-        const meta = assetMetaAll[item.id] || { travaux: [] };
-        const anneeAchat = item.variablesData['annee-achat'];
-        const anneesDetention = anneeAchat ? currentYear - anneeAchat : null;
-
-        // Intérêts encore significatifs + régime micro-foncier
-        if (regime === 'micro-foncier' && anneeAchat && anneesDetention !== null && anneesDetention < 10) {
-            const interetsAnnuels = item.model.interetsAnnee1 || 0;
-            if (interetsAnnuels > 2000) {
-                advice.push({
-                    id: `fiscal-interets-${item.id}`,
-                    severity: 'orange',
-                    title: `${escapeHtml(item.name)} — intérêts déductibles`,
-                    text: `Les intérêts d'emprunt représentent encore ${Math.round(interetsAnnuels).toLocaleString('fr-FR')} €/an. En régime réel, ils sont entièrement déductibles — ce qui peut être plus avantageux que l'abattement micro-foncier de 30 %.`,
-                    action: 'load-simulator', actionLabel: 'Simuler en régime réel', assetId: item.id
-                });
-            }
-        }
-
-        // Travaux déductibles non classifiés
-        const travauxAClassifier = meta.travaux.filter(t => t.tag === 'a-classifier');
-        if (travauxAClassifier.length > 0) {
-            const totalAClassifier = travauxAClassifier.reduce((s, t) => s + t.montant, 0);
-            advice.push({
-                id: `travaux-classifier-${item.id}`,
-                severity: 'red',
-                title: `${escapeHtml(item.name)} — travaux à classifier`,
-                text: `${travauxAClassifier.length} travaux (${Math.round(totalAClassifier).toLocaleString('fr-FR')} €) n'ont pas encore de classification fiscale. Tant qu'ils ne sont pas classifiés, leur impact sur votre imposition n'est pas calculé.`,
-                action: 'see-fiche', actionLabel: 'Voir la fiche', assetId: item.id
-            });
-        }
-
-        // Travaux déductibles significatifs + régime micro-foncier
-        if (regime === 'micro-foncier') {
-            const anneeEnCours = currentYear;
-            const travauxDeductiblesAnnee = meta.travaux
-                .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === anneeEnCours)
-                .reduce((s, t) => s + t.montant, 0);
-            if (travauxDeductiblesAnnee > 1500) {
-                advice.push({
-                    id: `fiscal-travaux-reel-${item.id}`,
-                    severity: 'orange',
-                    title: `${escapeHtml(item.name)} — travaux justifient le régime réel`,
-                    text: `Vous avez ${Math.round(travauxDeductiblesAnnee).toLocaleString('fr-FR')} € de travaux déductibles en ${anneeEnCours}. En régime réel, ces charges s'imputent sur vos revenus fonciers, ce qui peut effacer l'impôt foncier de l'année.`,
-                    action: 'load-simulator', actionLabel: 'Simuler en régime réel', assetId: item.id
-                });
-            }
-        }
-    });
-
-    // --- RÈGLES DETTE ---
-
-    if (tauxEndettement > 30 && tauxEndettement <= 35) {
-        advice.push({
-            id: 'debt-approaching-limit',
-            severity: 'orange',
-            title: 'Taux d\'endettement élevé',
-            text: `Votre taux d'endettement est à ${tauxEndettement.toFixed(1).replace('.', ',')} % — proche du plafond bancaire de 35 %. Une nouvelle acquisition devra être soigneusement cadrée pour rester finançable.`,
-            action: null, actionLabel: null, assetId: null
-        });
-    }
-
-    if (tauxEndettement > 35) {
-        advice.push({
-            id: 'debt-over-limit',
-            severity: 'red',
-            title: 'Taux d\'endettement dépassé',
-            text: `Votre taux d'endettement est à ${tauxEndettement.toFixed(1).replace('.', ',')} % — au-dessus du plafond bancaire de 35 %. Une nouvelle acquisition sera très difficile à financer sans apport significatif ou remboursement partiel.`,
-            action: null, actionLabel: null, assetId: null
-        });
-    }
-
-    if (tauxEndettement <= 25 && (capacity.acquisitionBudget || 0) > 50000) {
-        advice.push({
-            id: 'debt-capacity-available',
-            severity: 'info',
-            title: 'Capacité d\'acquisition disponible',
-            text: `Taux d'endettement à ${tauxEndettement.toFixed(1).replace('.', ',')} %. Votre capacité d'emprunt restante est estimée à ${Math.round((capacity.acquisitionBudget || 0) / 1000)} k€ — suffisant pour une nouvelle acquisition.`,
-            action: null, actionLabel: null, assetId: null
-        });
-    }
-
-    // --- RÈGLES RISQUE ---
-
-    portfolioItems.forEach(item => {
-        if ((item.metrics.dscr || 0) < 1.1 && (item.metrics.dscr || 0) > 0) {
-            advice.push({
-                id: `risk-dscr-${item.id}`,
-                severity: 'orange',
-                title: `${escapeHtml(item.name)} — DSCR serré`,
-                text: `Le DSCR de ce bien est à ${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')} — en dessous de 1.1. Une vacance locative ou une hausse de charges peut faire passer le bien en CF négatif.`,
-                action: 'load-simulator', actionLabel: 'Simuler une vacance', assetId: item.id
-            });
-        }
-
-        if ((item.metrics.cfNetNet || 0) < -100) {
-            advice.push({
-                id: `risk-cf-neg-${item.id}`,
-                severity: 'red',
-                title: `${escapeHtml(item.name)} — CF négatif`,
-                text: `Ce bien génère ${Math.round(item.metrics.cfNetNet || 0).toLocaleString('fr-FR')} €/mois net-net. Il pèse sur votre cash-flow consolidé. Étudiez une renégociation de crédit, un changement de régime fiscal ou une hausse de loyer.`,
-                action: 'load-simulator', actionLabel: 'Simuler des leviers', assetId: item.id
-            });
-        }
-    });
-
-    // Concentration géographique
-    if (portfolioItems.length >= 2) {
-        const villes = new Set(
-            portfolioItems
-                .map(i => (i.city || '').toLowerCase().trim())
-                .filter(c => c && c !== 'ville non renseignée')
-        );
-        if (villes.size === 1) {
-            advice.push({
-                id: 'risk-concentration',
-                severity: 'info',
-                title: 'Concentration géographique',
-                text: `Tous vos biens sont localisés dans la même ville. Un retournement du marché local ou une hausse de la vacance dans cette zone affecterait l'ensemble de votre portefeuille.`,
-                action: null, actionLabel: null, assetId: null
-            });
-        }
-    }
-
-    return advice;
-}
-
-
-function buildPortfolioKpiBanner(collectionsView) {
-    if (!nodes.portfolioKpiBanner) return;
-
-    const { dashboard, capacity, decision, portfolioItems } = collectionsView;
-
-    if (!dashboard.assetCount) {
-        nodes.portfolioKpiBanner.innerHTML = '';
-        return;
-    }
-
-    const avgRdtBrut = portfolioItems.length
-        ? portfolioItems.reduce((s, i) => s + (i.metrics.rentaBrute || 0), 0) / portfolioItems.length
-        : 0;
-
-    const cfTone = dashboard.totalCashflow >= 0 ? 'success' : 'danger';
-    const dscrTone = dashboard.dscr >= 1.1 ? 'success' : dashboard.dscr >= 1 ? 'watch' : 'danger';
-    const scoreRank = decision.rank ?? 0;
-    const scoreTone = scoreRank >= 3 ? 'positive' : scoreRank >= 2 ? 'neutral' : scoreRank >= 1 ? 'watch' : 'negative';
-    const scoreValue = [15, 35, 55, 75, 90][Math.min(4, scoreRank)];
-
-    nodes.portfolioKpiBanner.innerHTML = `
-        <div class="portfolio-health-bar">
-            <div class="portfolio-health-score portfolio-health-score--${scoreTone}">${scoreValue}</div>
-            <div class="portfolio-health-copy">
-                <div class="portfolio-health-title">Score santé portefeuille · ${escapeHtml(decision.label)}</div>
-                <div class="portfolio-health-note">${escapeHtml(decision.summary || decision.action || '')}</div>
-            </div>
-            <div class="portfolio-health-meta">${dashboard.ownedCount} bien${dashboard.ownedCount > 1 ? 's' : ''} détenu${dashboard.ownedCount > 1 ? 's' : ''} · ${collectionsView.comparisonItems.length} suivi${collectionsView.comparisonItems.length > 1 ? 's' : ''}</div>
-        </div>
-        <div class="portfolio-kpi-banner">
-            <div class="portfolio-kpi-card portfolio-kpi-card--${cfTone === 'success' ? 'success' : 'neutral'}">
-                <div class="portfolio-kpi-label">CF net-net</div>
-                <div class="portfolio-kpi-value portfolio-kpi-value--${cfTone}">${formatSignedCurrency(dashboard.totalCashflow)}</div>
-                <div class="portfolio-kpi-sub">/ mois consolidé</div>
-            </div>
-            <div class="portfolio-kpi-card portfolio-kpi-card--gold">
-                <div class="portfolio-kpi-label">Rendement</div>
-                <div class="portfolio-kpi-value portfolio-kpi-value--gold">${avgRdtBrut.toFixed(1).replace('.', ',')} %</div>
-                <div class="portfolio-kpi-sub">brut moyen</div>
-            </div>
-            <div class="portfolio-kpi-card portfolio-kpi-card--info">
-                <div class="portfolio-kpi-label">Patrimoine</div>
-                <div class="portfolio-kpi-value portfolio-kpi-value--info">${Math.round(dashboard.totalValue / 1000)} k€</div>
-                <div class="portfolio-kpi-sub">coût total investi</div>
-            </div>
-            <div class="portfolio-kpi-card portfolio-kpi-card--${dscrTone === 'success' ? 'success' : dscrTone}">
-                <div class="portfolio-kpi-label">DSCR moyen</div>
-                <div class="portfolio-kpi-value portfolio-kpi-value--${dscrTone}">${dashboard.dscr.toFixed(2).replace('.', ',')}</div>
-                <div class="portfolio-kpi-sub">couverture dette</div>
-            </div>
-            <div class="portfolio-kpi-card portfolio-kpi-card--neutral">
-                <div class="portfolio-kpi-label">Loyers / mois</div>
-                <div class="portfolio-kpi-value">${formatCurrency(dashboard.totalRentMonthly)}</div>
-                <div class="portfolio-kpi-sub">bruts encaissés</div>
-            </div>
-            <div class="portfolio-kpi-card portfolio-kpi-card--purple">
-                <div class="portfolio-kpi-label">Capacité restante</div>
-                <div class="portfolio-kpi-value portfolio-kpi-value--purple">${Math.round((capacity.acquisitionBudget || 0) / 1000)} k€</div>
-                <div class="portfolio-kpi-sub">endettement estimé</div>
-            </div>
-        </div>
-    `;
-}
-
-function buildPortfolioDashboardZone(collectionsView, advice) {
-    const { portfolioItems } = collectionsView;
-    if (!nodes.portfolioDonutConsolidatedWrap) return;
-
-    if (!portfolioItems.length) {
-        nodes.portfolioDonutConsolidatedWrap.hidden = true;
-        if (nodes.portfolioAlerts) nodes.portfolioAlerts.innerHTML = '';
-        return;
-    }
-
-    // Donut consolidé
-    const totalCredit  = portfolioItems.reduce((s, i) => s + (i.model.mensualiteTotale || 0), 0);
-    const totalCharges = portfolioItems.reduce((s, i) => s + (i.model.chargesExploitationAnnuelles || 0) / 12, 0);
-    const totalImpots  = portfolioItems.reduce((s, i) => s + (i.model.impotsAnnee || 0) / 12, 0);
-    const totalCf      = portfolioItems.reduce((s, i) => s + (i.metrics.cfNetNet || 0), 0);
-
-    nodes.portfolioDonutConsolidatedWrap.hidden = false;
-    renderDonutChart('portfolio-donut-consolidated', totalCredit, totalCharges, totalImpots, totalCf);
-
-    // Alertes actives (max 3, les plus sévères en premier, exclure 'info')
-    if (!nodes.portfolioAlerts) return;
-    const redFirst = [...advice].sort((a, b) => {
-        const rank = { red: 0, orange: 1, info: 2 };
-        return (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3);
-    });
-    const topAlerts = redFirst.filter(a => a.severity !== 'info').slice(0, 3);
-
-    nodes.portfolioAlerts.innerHTML = topAlerts.length
-        ? topAlerts.map(a => `
-            <div class="portfolio-alert portfolio-alert--${a.severity}" data-advice-id="${escapeHtml(a.id)}">
-                <span class="portfolio-alert__dot"></span>
-                <span class="portfolio-alert__text">${escapeHtml(a.title)}</span>
-            </div>`).join('')
-        : '';
-}
-
-function buildPortfolioAdviceZone(advice) {
-    if (!nodes.portfolioAdvice || !nodes.portfolioAdviceCards) return;
-
-    if (!advice.length) {
-        nodes.portfolioAdvice.hidden = true;
-        return;
-    }
-
-    nodes.portfolioAdvice.hidden = false;
-
-    const SEVERITY_LABEL = { red: 'Action recommandée', orange: 'À surveiller', info: 'Information' };
-
-    const THEME_GROUPS = [
-        { ids: ['fiscal-', 'travaux-classifier-'], label: 'Fiscalité' },
-        { ids: ['debt-'], label: 'Dette & financement' },
-        { ids: ['risk-'], label: 'Risque' }
-    ];
-
-    function getTheme(id) {
-        for (const g of THEME_GROUPS) {
-            if (g.ids.some(prefix => id.startsWith(prefix))) return g.label;
-        }
-        return 'Opportunité';
-    }
-
-    const grouped = {};
-    advice.forEach(a => {
-        const theme = getTheme(a.id);
-        if (!grouped[theme]) grouped[theme] = [];
-        grouped[theme].push(a);
-    });
-
-    nodes.portfolioAdviceCards.innerHTML = Object.entries(grouped).map(([theme, items]) => `
-        <div class="advice-group">
-            <div class="advice-group__label">${escapeHtml(theme)}</div>
-            ${items.map(a => `
-                <div class="advice-card advice-card--${a.severity}" data-advice-id="${escapeHtml(a.id)}">
-                    <div class="advice-card__header">
-                        <span class="advice-card__title">${escapeHtml(a.title)}</span>
-                        <span class="advice-card__badge advice-card__badge--${a.severity}">${escapeHtml(SEVERITY_LABEL[a.severity] || '')}</span>
-                    </div>
-                    <p class="advice-card__text">${escapeHtml(a.text)}</p>
-                    ${a.action && a.assetId ? `
-                        <button class="advice-card__action btn btn--ghost btn--sm"
-                            data-action="${escapeHtml(a.action)}"
-                            data-asset-id="${escapeHtml(a.assetId)}">
-                            ${escapeHtml(a.actionLabel || 'Voir')}
-                        </button>` : ''}
-                </div>`).join('')}
-        </div>`).join('');
-
-    // Accordion titre de zone
-    const adviceToggle = document.getElementById('portfolio-advice-toggle');
-    if (adviceToggle) {
-        adviceToggle.replaceWith(adviceToggle.cloneNode(true)); // retire les anciens listeners
-        const freshToggle = document.getElementById('portfolio-advice-toggle');
-        freshToggle.addEventListener('click', () => {
-            const expanded = freshToggle.getAttribute('aria-expanded') === 'true';
-            freshToggle.setAttribute('aria-expanded', String(!expanded));
-            nodes.portfolioAdviceCards.hidden = expanded;
-            const chevron = freshToggle.querySelector('.portfolio-zone-title__chevron');
-            if (chevron) chevron.textContent = expanded ? '▶' : '▼';
-        });
-    }
-
-    // Gérer les clics sur les boutons d'action
-    nodes.portfolioAdviceCards.querySelectorAll('[data-action]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const action = btn.dataset.action;
-            const assetId = btn.dataset.assetId;
-            if (action === 'load-simulator' && assetId) {
-                loadAssetIntoWorkspace(assetId);
-                document.querySelector('[data-target="workspace-panel"]')?.click();
-            }
-            if (action === 'see-fiche' && assetId) {
-                const fiche = document.querySelector(`[data-fiche-id="${CSS.escape(assetId)}"]`);
-                fiche?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        });
-    });
-}
-
-function buildPortfolioFiches(collectionsView, advice, assetMetaAll) {
-    if (!nodes.portfolioOwnedZone || !nodes.portfolioFiches) return;
-
-    const { portfolioItems } = collectionsView;
-
-    if (!portfolioItems.length) {
-        nodes.portfolioOwnedZone.hidden = true;
-        return;
-    }
-
-    nodes.portfolioOwnedZone.hidden = false;
-
-    // Déterminer le verdict de chaque fiche selon les conseils
-    function getVerdict(assetId) {
-        if (advice.some(a => a.severity === 'red' && a.assetId === assetId)) return 'red';
-        if (advice.some(a => a.severity === 'orange' && a.assetId === assetId)) return 'orange';
-        return 'green';
-    }
-
-    const VERDICT_LABELS = { green: 'Aucune alerte', orange: 'À surveiller', red: 'Action recommandée' };
-    const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Réel', 'sci-is': 'SCI-IS' };
-
-    nodes.portfolioFiches.innerHTML = portfolioItems.map(item => {
-        const verdict = getVerdict(item.id);
-        const regime = item.variablesData['regime'] || '';
-        const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
-        const travauxCount = meta.travaux.length;
-        const notesCount = meta.notes.length;
-        const hasUnclassified = meta.travaux.some(t => t.tag === 'a-classifier');
-
-        return `
-        <article class="portfolio-fiche" data-fiche-id="${escapeHtml(item.id)}">
-            <div class="portfolio-fiche__header">
-                <div class="portfolio-fiche__identity">
-                    <span class="portfolio-fiche__name">${escapeHtml(item.name)}</span>
-                    <span class="portfolio-fiche__meta">${escapeHtml(item.city)} · <span class="portfolio-fiche__regime">${escapeHtml(REGIME_LABELS_SHORT[regime] || regime)}</span></span>
-                </div>
-                <span class="portfolio-fiche__verdict portfolio-fiche__verdict--${verdict}">${escapeHtml(VERDICT_LABELS[verdict])}</span>
-            </div>
-
-            <div class="portfolio-fiche__body">
-                <div class="portfolio-fiche__donut-wrap">
-                    <canvas id="donut-${escapeHtml(item.id)}" width="160" height="160"></canvas>
-                </div>
-                <div class="portfolio-fiche__kpis">
-                    <div class="portfolio-fiche__kpi">
-                        <span class="portfolio-fiche__kpi-label">Rendement brut</span>
-                        <span class="portfolio-fiche__kpi-value">${(item.metrics.rentaBrute || 0).toFixed(1).replace('.', ',')} %</span>
-                    </div>
-                    <div class="portfolio-fiche__kpi">
-                        <span class="portfolio-fiche__kpi-label">CF net-net</span>
-                        <span class="portfolio-fiche__kpi-value ${(item.metrics.cfNetNet || 0) >= 0 ? 'text--positive' : 'text--negative'}">
-                            ${(item.metrics.cfNetNet || 0) >= 0 ? '+' : ''}${Math.round(item.metrics.cfNetNet || 0).toLocaleString('fr-FR')} €/mois
-                        </span>
-                    </div>
-                    <div class="portfolio-fiche__kpi">
-                        <span class="portfolio-fiche__kpi-label">DSCR</span>
-                        <span class="portfolio-fiche__kpi-value ${(item.metrics.dscr || 0) >= 1.1 ? 'text--positive' : (item.metrics.dscr || 0) >= 1 ? 'text--watch' : 'text--negative'}">
-                            ${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="portfolio-fiche__actions-row">
-                <button class="btn btn--accent btn--sm" data-action="portfolio-load" data-asset-id="${escapeHtml(item.id)}">
-                    Charger dans le simulateur
-                </button>
-                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="travaux-${escapeHtml(item.id)}" aria-expanded="false">
-                    ▶ Travaux${travauxCount > 0 ? ` (${travauxCount}${hasUnclassified ? ' ⚠' : ''})` : ''}
-                </button>
-                <button class="portfolio-fiche__toggle btn btn--ghost btn--sm" data-target="notes-${escapeHtml(item.id)}" aria-expanded="false">
-                    ▶ Notes${notesCount > 0 ? ` (${notesCount})` : ''}
-                </button>
-            </div>
-
-            <div id="travaux-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--travaux">
-                <!-- Rempli par buildFicheTravaux (tâche 8) -->
-            </div>
-
-            <div id="notes-${escapeHtml(item.id)}" class="portfolio-fiche__section portfolio-fiche__section--notes">
-                <!-- Rempli par buildFicheNotes (tâche 9) -->
-            </div>
-        </article>`;
-    }).join('');
-
-    // Rendre les donuts après injection dans le DOM
-    portfolioItems.forEach(item => {
-        const credit  = item.model.mensualiteTotale || 0;
-        const charges = (item.model.chargesExploitationAnnuelles || 0) / 12;
-        const impots  = (item.model.impotsAnnee || 0) / 12;
-        const cf      = item.metrics.cfNetNet || 0;
-        renderDonutChart(`donut-${item.id}`, credit, charges, impots, cf);
-    });
-
-    // Boutons toggle sections (avec animation et chevron)
-    nodes.portfolioFiches.querySelectorAll('.portfolio-fiche__toggle').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = document.getElementById(btn.dataset.target);
-            if (!target) return;
-            const isOpen = btn.getAttribute('aria-expanded') === 'true';
-            if (isOpen) {
-                target.classList.remove('is-open');
-                btn.setAttribute('aria-expanded', 'false');
-                // remplace ▼ par ▶ en début de texte
-                btn.textContent = btn.textContent.replace(/^▼\s*/, '▶ ');
-            } else {
-                // force reflow pour que la transition parte de 0
-                void target.offsetHeight;
-                target.classList.add('is-open');
-                btn.setAttribute('aria-expanded', 'true');
-                btn.textContent = btn.textContent.replace(/^▶\s*/, '▼ ');
-            }
-        });
-    });
-
-    // Boutons charger dans simulateur
-    nodes.portfolioFiches.querySelectorAll('[data-action="portfolio-load"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            loadAssetIntoWorkspace(btn.dataset.assetId);
-            document.querySelector('[data-target="workspace-panel"]')?.click();
-        });
-    });
-
-    // Remplir les sections Travaux et Notes
-    portfolioItems.forEach(item => {
-        const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
-        buildFicheTravaux(item.id, meta);
-        buildFicheNotes(item.id, meta);
-
-        // Auto-ouvrir la section Travaux si des travaux sont à classifier
-        if (meta.travaux.some(t => t.tag === 'a-classifier')) {
-            const travauxSection = document.getElementById(`travaux-${item.id}`);
-            const travauxBtn = nodes.portfolioFiches.querySelector(`[data-target="travaux-${item.id}"]`);
-            if (travauxSection && travauxBtn) {
-                travauxSection.classList.add('is-open');
-                travauxBtn.setAttribute('aria-expanded', 'true');
-                travauxBtn.textContent = travauxBtn.textContent.replace(/^▶\s*/, '▼ ');
-            }
-        }
-    });
-}
-
-function buildFicheTravaux(assetId, meta) {
-    const container = document.getElementById(`travaux-${assetId}`);
-    if (!container) return;
-
-    const currentYear = new Date().getFullYear();
-    const travaux = meta.travaux || [];
-    const totalDeductible = travaux
-        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
-        .reduce((s, t) => s + t.montant, 0);
-    const totalNonDed = travaux
-        .filter(t => t.tag === 'non-deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
-        .reduce((s, t) => s + t.montant, 0);
-
-    const TAG_LABELS = {
-        'deductible': 'Déductible réel',
-        'non-deductible': 'Non déductible',
-        'a-classifier': 'À classifier'
-    };
-    const TAG_CSS = {
-        'deductible': 'tag--green',
-        'non-deductible': 'tag--grey',
-        'a-classifier': 'tag--orange'
-    };
-
-    const sorted = [...travaux].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-    container.innerHTML = `
-        <div class="travaux-list">
-            ${sorted.length ? sorted.map(t => `
-                <div class="travaux-row" data-travail-id="${escapeHtml(t.id)}">
-                    <span class="travaux-date">${escapeHtml(t.date || '—')}</span>
-                    <span class="travaux-desc">${escapeHtml(t.description || '—')}</span>
-                    <span class="travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
-                    <span class="travaux-tag tag ${escapeHtml(TAG_CSS[t.tag] || 'tag--grey')}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
-                    <button class="travaux-delete btn btn--icon" data-delete-travail="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer ce travail">✕</button>
-                </div>`).join('') : '<p class="travaux-empty">Aucun travail enregistré.</p>'}
-        </div>
-
-        ${travaux.length ? `
-        <div class="travaux-totals">
-            <span>Déductible ${currentYear} : <strong>${Math.round(totalDeductible).toLocaleString('fr-FR')} €</strong></span>
-            <span>Non déductible : <strong>${Math.round(totalNonDed).toLocaleString('fr-FR')} €</strong></span>
-        </div>` : ''}
-
-        <form class="travaux-form" data-asset-id="${escapeHtml(assetId)}" novalidate>
-            <div class="travaux-form__row">
-                <input type="date" name="date" class="variables-input travaux-form__date" required>
-                <input type="text" name="description" class="variables-input travaux-form__desc" placeholder="Description (ex : chaudière)" required>
-            </div>
-            <div class="travaux-form__row">
-                <input type="number" name="montant" class="variables-input travaux-form__montant" placeholder="Montant (€)" min="0" required>
-                <select name="tag" class="variables-input travaux-form__tag">
-                    <option value="a-classifier">À classifier</option>
-                    <option value="deductible">Déductible réel</option>
-                    <option value="non-deductible">Non déductible</option>
-                </select>
-                <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
-            </div>
-            <span class="travaux-form__error" hidden></span>
-        </form>`;
-
-    container.querySelector('.travaux-form').addEventListener('submit', e => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const date = fd.get('date');
-        const description = fd.get('description')?.trim();
-        const montant = Number(fd.get('montant'));
-        const tag = fd.get('tag');
-        const errEl = container.querySelector('.travaux-form__error');
-
-        if (!date || !description || !(montant > 0)) {
-            errEl.textContent = 'Date, description et montant sont obligatoires.';
-            errEl.hidden = false;
-            return;
-        }
-        errEl.hidden = true;
-        addTravail(assetId, { date, description, montant, tag });
-        e.target.reset();
-        render();
-        setTimeout(() => {
-            const sec = document.getElementById(`travaux-${assetId}`);
-            if (sec) sec.hidden = false;
-        }, 0);
-    });
-
-    container.querySelectorAll('[data-delete-travail]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            deleteTravail(assetId, btn.dataset.deleteTravail);
-            render();
-            setTimeout(() => {
-                const sec = document.getElementById(`travaux-${assetId}`);
-                if (sec) sec.hidden = false;
-            }, 0);
-        });
-    });
-}
-
-function buildFicheNotes(assetId, meta) {
-    const container = document.getElementById(`notes-${assetId}`);
-    if (!container) return;
-
-    const notes = [...(meta.notes || [])].reverse();
-
-    container.innerHTML = `
-        <div class="notes-list">
-            ${notes.length ? notes.map(n => `
-                <div class="notes-entry" data-note-id="${escapeHtml(n.id)}">
-                    <p class="notes-text">${escapeHtml(n.text)}</p>
-                    <span class="notes-date">${new Date(n.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                </div>`).join('') : '<p class="notes-empty">Aucune note.</p>'}
-        </div>
-        <div class="notes-add">
-            <textarea class="variables-input notes-textarea" placeholder="Ajouter une note…" rows="3" data-asset-id="${escapeHtml(assetId)}"></textarea>
-            <button class="btn btn--primary btn--sm notes-submit" data-asset-id="${escapeHtml(assetId)}">Enregistrer</button>
-        </div>`;
-
-    container.querySelector('.notes-submit').addEventListener('click', () => {
-        const textarea = container.querySelector('.notes-textarea');
-        const text = textarea.value.trim();
-        if (!text) return;
-        addNote(assetId, text);
-        textarea.value = '';
-        render();
-        setTimeout(() => {
-            const sec = document.getElementById(`notes-${assetId}`);
-            if (sec) sec.hidden = false;
-        }, 0);
-    });
-}
-
-function buildPortfolioPipelineZone(collectionsView) {
-    if (!nodes.portfolioPipelineZone) return;
-    const items = collectionsView.comparisonItems || [];
-
-    if (!items.length) {
-        nodes.portfolioPipelineZone.hidden = true;
-        return;
-    }
-
-    nodes.portfolioPipelineZone.hidden = false;
-
-    const container = document.getElementById('portfolio-asset-grid-pipeline');
-    if (!container) return;
-
-    container.innerHTML = `
-        <table class="pipeline-table">
-            <thead>
-                <tr>
-                    <th>Nom</th>
-                    <th>Ville</th>
-                    <th>Prix net</th>
-                    <th>Rdt brut</th>
-                    <th>CF estimé</th>
-                    <th>DSCR</th>
-                    <th>Score</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                ${items.map(item => {
-                    const prixNet = (item.variablesData?.['prix'] || 0) - (item.variablesData?.['nego'] || 0);
-                    const cf = item.metrics.cfNetNet || 0;
-                    const cfTone = cf > 0 ? 'text--positive' : cf < 0 ? 'text--negative' : '';
-                    const dscrTone = (item.metrics.dscr || 0) >= 1.1 ? 'text--positive' : (item.metrics.dscr || 0) >= 1 ? 'text--watch' : 'text--negative';
-                    return `
-                    <tr>
-                        <td class="pipeline-name">${escapeHtml(item.name)}</td>
-                        <td>${escapeHtml(item.city)}</td>
-                        <td class="pipeline-number">${Math.round(prixNet).toLocaleString('fr-FR')} €</td>
-                        <td class="pipeline-number">${(item.metrics.rentaBrute || 0).toFixed(1).replace('.', ',')} %</td>
-                        <td class="pipeline-number ${cfTone}">${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €</td>
-                        <td class="pipeline-number ${dscrTone}">${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')}</td>
-                        <td><span class="pipeline-score pipeline-score--${escapeHtml(item.analysisModel?.decision?.tone || 'neutral')}">${escapeHtml(item.analysisModel?.decision?.label || '—')}</span></td>
-                        <td><button class="btn btn--ghost btn--sm" data-action="portfolio-load" data-asset-id="${escapeHtml(item.id)}">Charger</button></td>
-                    </tr>`;
-                }).join('')}
-            </tbody>
-        </table>`;
-
-    container.querySelectorAll('[data-action="portfolio-load"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            loadAssetIntoWorkspace(btn.dataset.assetId);
-            document.querySelector('[data-target="workspace-panel"]')?.click();
-        });
-    });
-}
-
-function buildPortfolioAssetCard(item, isPipeline) {
-    const cf = item.metrics.cfNetNet || 0;
-    const tone = isPipeline
-        ? (item.analysisModel.acquisitionDecision?.tone || 'neutral')
-        : (item.analysisModel.decision?.tone || 'neutral');
-    const cfTone = cf > 0 ? 'positive' : cf < 0 ? 'negative' : 'watch';
-
-    const loyerMensuel = (item.model.loyersEncaisses || 0) / 12;
-    const creditMensuel = item.model.mensualiteTotale || (loyerMensuel * 0.55);
-    const chargesMensuel = (item.model.chargesExploitationAnnuelles || 0) / 12;
-    const netMensuel = cf;
-    const totalFlux = Math.max(loyerMensuel, 1);
-
-    function segWidth(val) {
-        return Math.max(4, Math.min(60, (Math.abs(val) / totalFlux) * 100)).toFixed(1) + '%';
-    }
-
-    const prix = item.variablesData?.['prix']
-        ? item.variablesData['prix'] - (item.variablesData['nego'] || 0)
-        : item.metrics.coutTotal || 0;
-    const regime = item.variablesData?.['regime'] || '';
-    const decisionLabel = isPipeline
-        ? (item.analysisModel.acquisitionDecision?.label || '')
-        : (item.analysisModel.decision?.label || '');
-    const decisionTone = isPipeline
-        ? (item.analysisModel.acquisitionDecision?.tone || 'neutral')
-        : (item.analysisModel.decision?.tone || 'neutral');
-    const decisionValueTone = decisionTone === 'excellent' || decisionTone === 'positive' ? 'positive'
-        : decisionTone === 'negative' ? 'negative' : 'watch';
-
-    const detailParts = [
-        loyerMensuel > 0 ? `Loyers ${formatCurrency(loyerMensuel)}` : null,
-        creditMensuel > 0 ? `Crédit ${formatCurrency(creditMensuel)}` : null,
-        chargesMensuel > 0 ? `Charges ${formatCurrency(chargesMensuel)}` : null,
-        regime ? escapeHtml(regime.replace('micro-foncier','Micro-foncier').replace('reel','Réel').replace('sci-is','SCI-IS')) : null,
-    ].filter(Boolean).join(' · ');
-
-    return `
-        <div class="asset-card asset-card--${tone}" data-asset-id="${escapeHtml(item.id)}">
-            <div class="asset-card__inner">
-                <div class="asset-card__header">
-                    <div>
-                        <div class="asset-card__name">${escapeHtml(item.name)}</div>
-                        <div class="asset-card__meta">${escapeHtml(item.typeBien || '')} · ${escapeHtml(item.city || '')}${item.isActive ? ' · <strong>En cours</strong>' : ''}</div>
-                    </div>
-                    <div class="asset-card__cf">
-                        <span class="asset-card__cf-value asset-card__cf-value--${cfTone}">${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €</span>
-                        <span class="asset-card__cf-label">/mois net-net</span>
-                    </div>
-                </div>
-                <div class="asset-card__waterfall" title="Loyers → Crédit → Charges → Net">
-                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--income"  style="flex:${segWidth(loyerMensuel)}"></div>
-                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--expense" style="flex:${segWidth(creditMensuel)}"></div>
-                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--charges" style="flex:${segWidth(chargesMensuel)}"></div>
-                    <div class="asset-card__waterfall-seg asset-card__waterfall-seg--${netMensuel >= 0 ? 'net-pos' : 'net-neg'}" style="flex:${segWidth(Math.abs(netMensuel))}"></div>
-                </div>
-                <div class="asset-card__kpis">
-                    <div class="asset-card__kpi">
-                        <span class="asset-card__kpi-value asset-card__kpi-value--gold">${(item.metrics.rentaBrute || 0).toFixed(1).replace('.', ',')} %</span>
-                        <span class="asset-card__kpi-label">Rdt brut</span>
-                    </div>
-                    <div class="asset-card__kpi">
-                        <span class="asset-card__kpi-value ${(item.metrics.dscr || 0) < 1 ? 'asset-card__kpi-value--negative' : ''}">${(item.metrics.dscr || 0).toFixed(2).replace('.', ',')}</span>
-                        <span class="asset-card__kpi-label">DSCR</span>
-                    </div>
-                    <div class="asset-card__kpi">
-                        <span class="asset-card__kpi-value asset-card__kpi-value--info">${Math.round(prix / 1000)} k€</span>
-                        <span class="asset-card__kpi-label">Prix net</span>
-                    </div>
-                    <div class="asset-card__kpi">
-                        <span class="asset-card__kpi-value asset-card__kpi-value--${decisionValueTone}">${escapeHtml(decisionLabel)}</span>
-                        <span class="asset-card__kpi-label">Décision</span>
-                    </div>
-                </div>
-                ${detailParts ? `<div class="asset-card__detail">${detailParts}</div>` : ''}
-                <div class="asset-card__actions">
-                    <button type="button" class="asset-card__action${isPipeline ? ' asset-card__action--primary' : ''}" data-action="open-asset" data-id="${escapeHtml(item.id)}">↩ Ouvrir</button>
-                    <button type="button" class="asset-card__action" data-action="preview-asset" data-scope="${isPipeline ? 'comparison' : 'portfolio'}" data-id="${escapeHtml(item.id)}">Fiche</button>
-                    <button type="button" class="asset-card__action" data-action="pdf-asset" data-id="${escapeHtml(item.id)}">PDF</button>
-                    ${!isPipeline ? `<button type="button" class="asset-card__action${item.creditSchedule ? ' asset-card__action--has-credit' : ''}" data-action="edit-credit" data-id="${escapeHtml(item.id)}">Crédit${item.creditSchedule ? ' ✓' : ''}</button>` : ''}
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function buildPortfolioAssetGrid(collectionsView) {
-    const { portfolioItems, comparisonItems } = collectionsView;
-    const pipelineItems = comparisonItems.filter(item => !item.inPortfolio);
-
-    if (nodes.portfolioAssetGridOwned) {
-        if (!portfolioItems.length) {
-            nodes.portfolioAssetGridOwned.innerHTML = `
-                <div class="portfolio-asset-section-head">
-                    <span class="portfolio-asset-section-title">Parc détenu</span>
-                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--neutral">0 bien</span>
-                </div>
-                <p class="collection-empty">Aucun bien détenu enregistré. Ajoutez un bien avec le statut "Déjà au portefeuille".</p>
-            `;
-        } else {
-            nodes.portfolioAssetGridOwned.innerHTML = `
-                <div class="portfolio-asset-section-head">
-                    <span class="portfolio-asset-section-title">Parc détenu</span>
-                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--success">${portfolioItems.length} bien${portfolioItems.length > 1 ? 's' : ''}</span>
-                </div>
-                <div class="portfolio-asset-grid">
-                    ${portfolioItems.map(item => buildPortfolioAssetCard(item, false)).join('')}
-                </div>
-            `;
-        }
-    }
-
-    if (nodes.portfolioAssetGridPipeline) {
-        if (!pipelineItems.length) {
-            nodes.portfolioAssetGridPipeline.innerHTML = `
-                <div class="portfolio-asset-section-head">
-                    <span class="portfolio-asset-section-title">Pipeline d'acquisition</span>
-                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--watch">0 dossier</span>
-                </div>
-                <p class="collection-empty">Aucun dossier dans le comparateur. Enregistrez une étude depuis Saisie &amp; Analyse.</p>
-            `;
-        } else {
-            const placeholder = pipelineItems.length < 6
-                ? `<div class="asset-card asset-card--placeholder">
-                    <div style="text-align:center">
-                        <span style="font-size:22px;color:var(--border);display:block;margin-bottom:4px">+</span>
-                        <span style="font-size:10px;color:var(--muted)">Enregistrer une étude<br>depuis le simulateur</span>
-                    </div>
-                </div>` : '';
-            nodes.portfolioAssetGridPipeline.innerHTML = `
-                <div class="portfolio-asset-section-head">
-                    <span class="portfolio-asset-section-title">Pipeline d'acquisition</span>
-                    <span class="portfolio-asset-section-badge portfolio-asset-section-badge--watch">${pipelineItems.length} dossier${pipelineItems.length > 1 ? 's' : ''}</span>
-                </div>
-                <div class="portfolio-asset-grid">
-                    ${pipelineItems.map(item => buildPortfolioAssetCard(item, true)).join('')}
-                    ${placeholder}
-                </div>
-            `;
-        }
-    }
-}
-
 function buildComparisonTable(items) {
     const positiveCount = items.filter(item => {
         const tone = item.analysisModel.acquisitionDecision.tone;
@@ -4205,158 +3335,22 @@ function buildPortfolioSimulator(collectionsView) {
 
     renderSimulatorContent();
 }
-
-function initPortfolioAiDiagnostic() {
-    if (!nodes.portfolioAiTrigger) return;
-
-    function refreshLastDiagnosticLabel() {
-        if (!nodes.portfolioAiLastDate) return;
-        const meta = loadAssetMeta();
-        const lastDiag = Object.values(meta)
-            .map(m => m.lastDiagnostic)
-            .filter(Boolean)
-            .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-            .shift();
-        if (lastDiag?.date) {
-            const d = new Date(lastDiag.date);
-            nodes.portfolioAiLastDate.textContent = `Dernier : ${d.toLocaleDateString('fr-FR')}`;
-            nodes.portfolioAiLastDate.hidden = false;
-        } else {
-            nodes.portfolioAiLastDate.hidden = true;
-        }
+function initOwnedPortfolioEvents() {
+    const exportBtn = document.getElementById('owned-export-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            const data = loadOwnedAssets();
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `portefeuille-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
     }
 
-    refreshLastDiagnosticLabel();
-
-    nodes.portfolioAiTrigger.addEventListener('click', async () => {
-        if (nodes.portfolioAiTrigger.disabled) return;
-
-        const collectionsView = computePortfolioViewModel(
-            state.assetRecords,
-            state.profileData,
-            state.activeAssetId,
-            state.variablesData
-        );
-        const { portfolioItems, dashboard, capacity } = collectionsView;
-
-        if (!portfolioItems.length) {
-            showToast('Aucun bien détenu à analyser.', 'info');
-            return;
-        }
-
-        const assetMetaAll = loadAssetMeta();
-        const currentYear = new Date().getFullYear();
-
-        const payloadBiens = portfolioItems.map(item => {
-            const meta = assetMetaAll[item.id] || { travaux: [], notes: [] };
-            const anneeAchat = item.variablesData?.['annee-achat'];
-            const entry = {
-                nom: item.name,
-                ville: item.city,
-                statut: 'owned',
-                regime: item.variablesData?.['regime'] || '',
-                prix: item.variablesData?.['prix'] || 0,
-                loyer: item.variablesData?.['loyer'] || 0,
-                charges_mensuelles: (item.model.chargesExploitationAnnuelles || 0) / 12,
-                cf_net_net: item.metrics.cfNetNet || 0,
-                dscr: item.metrics.dscr || 0,
-                rendement_brut: item.metrics.rentaBrute || 0,
-                travaux: meta.travaux,
-                ...(meta.notes.length ? { notes: meta.notes.map(n => n.text) } : {})
-            };
-            if (anneeAchat) {
-                entry.duree_detention_mois = (currentYear - anneeAchat) * 12;
-                entry.interets_annuels = Math.round(item.model.interetsAnnee1 || 0);
-            }
-            return entry;
-        });
-
-        const tmi = calculateTMI(
-            state.profileData.income || 0,
-            { adults: state.profileData.adults || 2, children: state.profileData.children || 0 }
-        );
-
-        const payload = {
-            profile: {
-                income: state.profileData.income || 0,
-                tmi,
-                adults: state.profileData.adults || 2,
-                children: state.profileData.children || 0
-            },
-            biens: payloadBiens,
-            dashboard: {
-                total_cf: dashboard.totalCashflow || 0,
-                taux_endettement: (state.profileData.income || 0) > 0
-                    ? ((dashboard.totalDebtMonthly || 0) / ((state.profileData.income || 1) / 12)) * 100
-                    : 0,
-                capacite_emprunt: capacity?.acquisitionBudget || 0,
-                dscr_moyen: dashboard.dscr || 0
-            }
-        };
-
-        nodes.portfolioAiTrigger.disabled = true;
-        nodes.portfolioAiTrigger.textContent = '✦ Analyse en cours…';
-        if (nodes.portfolioAiDrawerContent) {
-            nodes.portfolioAiDrawerContent.innerHTML = '<div class="ai-drawer-loading">Analyse en cours…</div>';
-        }
-
-        try {
-            const resp = await fetch('/api/portfolio-diagnostic', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await resp.json();
-
-            if (!resp.ok || data.error) {
-                throw new Error(data.error || 'Erreur serveur');
-            }
-
-            const recs = data.recommendations || [];
-            const now = new Date().toISOString();
-
-            const metaAll = loadAssetMeta();
-            metaAll['__portfolio__'] = { lastDiagnostic: { date: now, recommendations: recs } };
-            saveAssetMeta(metaAll);
-
-            if (nodes.portfolioAiDrawerContent) {
-                nodes.portfolioAiDrawerContent.innerHTML = `
-                    <div class="ai-drawer-date">Analyse du ${new Date(now).toLocaleDateString('fr-FR')} à ${new Date(now).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
-                    ${recs.map((r, i) => `
-                        <div class="ai-rec">
-                            <div class="ai-rec__num">${i + 1}</div>
-                            <div class="ai-rec__body">
-                                <div class="ai-rec__title">${escapeHtml(r.title || '')}</div>
-                                <p class="ai-rec__text">${escapeHtml(r.explanation || '')}</p>
-                                ${r.action ? `<div class="ai-rec__action">→ ${escapeHtml(r.action)}</div>` : ''}
-                            </div>
-                        </div>`).join('')}`;
-            }
-
-            if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.classList.add('is-open');
-            if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.classList.add('is-open');
-            refreshLastDiagnosticLabel();
-
-        } catch (err) {
-            showToast(`Diagnostic non généré : ${err.message}`, 'error', 6000);
-        } finally {
-            nodes.portfolioAiTrigger.disabled = false;
-            nodes.portfolioAiTrigger.textContent = '✦ Diagnostic IA';
-        }
-    });
-
-    document.getElementById('portfolio-ai-drawer-close')?.addEventListener('click', () => {
-        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.classList.remove('is-open');
-        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.classList.remove('is-open');
-    });
-
-    nodes.portfolioAiOverlay?.addEventListener('click', () => {
-        if (nodes.portfolioAiDrawer) nodes.portfolioAiDrawer.classList.remove('is-open');
-        if (nodes.portfolioAiOverlay) nodes.portfolioAiOverlay.classList.remove('is-open');
-    });
-}
-
-function initOwnedPortfolioEvents() {
     if (nodes.ownedAddBtn) {
         nodes.ownedAddBtn.addEventListener('click', openOwnedAddModal);
     }
@@ -4395,6 +3389,28 @@ function initOwnedPortfolioEvents() {
             nodes.ownedAiOverlay.hidden = true;
         });
     }
+    if (nodes.ownedDeleteModalInput) {
+        nodes.ownedDeleteModalInput.addEventListener('input', () => {
+            if (nodes.ownedDeleteModalConfirm) {
+                nodes.ownedDeleteModalConfirm.disabled = nodes.ownedDeleteModalInput.value.trim().toLowerCase() !== 'supprimer';
+            }
+        });
+    }
+    if (nodes.ownedDeleteModalCancel) {
+        nodes.ownedDeleteModalCancel.addEventListener('click', closeOwnedDeleteModal);
+    }
+    if (nodes.ownedDeleteModalConfirm) {
+        nodes.ownedDeleteModalConfirm.addEventListener('click', () => {
+            const id = nodes.ownedDeleteModal._pendingId;
+            if (!id) return;
+            deleteOwnedAsset(id);
+            closeOwnedDeleteModal();
+            renderOwnedPortfolioList();
+        });
+    }
+    nodes.ownedDeleteModal?.addEventListener('click', e => {
+        if (e.target === nodes.ownedDeleteModal) closeOwnedDeleteModal();
+    });
 }
 
 function getOwnedTmi() {
@@ -4404,8 +3420,43 @@ function getOwnedTmi() {
     });
 }
 
+function getOwnedRegime() {
+    return state.ownedRegime || 'micro-foncier';
+}
+
+function setOwnedRegime(regime) {
+    state.ownedRegime = regime;
+    localStorage.setItem('investissementWebOwnedRegime', regime);
+}
+
 function getOwnedDefaultScenario(asset) {
     return asset.scenarios.find(s => s.id === 'realiste') || asset.scenarios[0] || { variables: {} };
+}
+
+function renderOwnedRegimeSelector() {
+    const current = getOwnedRegime();
+    const options = [
+        { value: 'micro-foncier', label: 'Micro-foncier' },
+        { value: 'reel', label: 'Réel' },
+        { value: 'sci-is', label: 'SCI-IS' },
+    ];
+    const sliderHtml = `<div class="owned-regime-slider" id="owned-regime-slider">${options.map(o => `<button class="owned-regime-slider__btn${o.value === current ? ' owned-regime-slider__btn--active' : ''}" data-regime="${o.value}" type="button">${o.label}</button>`).join('')}</div>`;
+    const existing = document.getElementById('owned-regime-slider');
+    if (existing) {
+        existing.outerHTML = sliderHtml;
+    } else {
+        nodes.ownedKpiBanner?.insertAdjacentHTML('beforebegin', sliderHtml);
+    }
+    document.getElementById('owned-regime-slider')?.querySelectorAll('[data-regime]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setOwnedRegime(btn.dataset.regime);
+            renderOwnedPortfolioList();
+            if (state.activeOwnedAssetId) {
+                const fresh = getOwnedAsset(state.activeOwnedAssetId);
+                if (fresh) { renderOwnedSynthese(fresh); renderOwnedCharts(fresh); }
+            }
+        });
+    });
 }
 
 function renderOwnedPortfolioList() {
@@ -4414,6 +3465,8 @@ function renderOwnedPortfolioList() {
     const assets = loadOwnedAssets();
     const list = Object.values(assets);
     const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    renderOwnedRegimeSelector();
 
     if (nodes.ownedKpiBanner) {
         if (!list.length) {
@@ -4421,10 +3474,17 @@ function renderOwnedPortfolioList() {
         } else {
             const results = list.map(a => {
                 const sc = getOwnedDefaultScenario(a);
-                return computeOwnedAssetCF(a, sc.variables, tmi);
+                return computeOwnedAssetCF(a, sc.variables, tmi, regime);
             });
             const totalCF = results.reduce((s, r) => s + r.cfNetNet, 0);
-            const avgRdt = results.reduce((s, r) => s + r.rentaBrute, 0) / results.length;
+            const totalInvest = list.reduce((s, a) =>
+                s + (a.acquisition?.prix || 0) + (a.acquisition?.fraisAgence || 0) + (a.acquisition?.fraisNotaire || 0), 0);
+            const avgRdt = totalInvest > 0
+                ? results.reduce((s, r, i) => {
+                    const invest = (list[i].acquisition?.prix || 0) + (list[i].acquisition?.fraisAgence || 0) + (list[i].acquisition?.fraisNotaire || 0);
+                    return s + r.rentaBrute * invest;
+                }, 0) / totalInvest
+                : 0;
             const cfTone = totalCF >= 0 ? 'positive' : 'negative';
             nodes.ownedKpiBanner.innerHTML = `
                 <div class="owned-kpi-card">
@@ -4472,9 +3532,21 @@ function renderOwnedPortfolioList() {
                     <tbody>
                         ${list.map(asset => {
                             const sc = getOwnedDefaultScenario(asset);
-                            const r = computeOwnedAssetCF(asset, sc.variables, tmi);
+                            const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
                             const cfTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
                             const hasUnclassified = (asset.postAchat?.travaux || []).some(t => t.tag === 'a-classifier');
+                            let statusTone, statusLabel;
+                            if (r.cfNetNet < -50) {
+                                statusTone = 'negative'; statusLabel = `CF ${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €`;
+                            } else if (r.dscr > 0 && r.dscr < 1) {
+                                statusTone = 'negative'; statusLabel = `DSCR ${r.dscr.toFixed(2).replace('.', ',')}`;
+                            } else if (r.dscr >= 1 && r.dscr < 1.1) {
+                                statusTone = 'watch'; statusLabel = 'DSCR tendu';
+                            } else if (hasUnclassified) {
+                                statusTone = 'watch'; statusLabel = '⚠ Travaux';
+                            } else {
+                                statusTone = 'ras'; statusLabel = 'RAS';
+                            }
                             return `
                             <tr data-asset-id="${escapeHtml(asset.id)}">
                                 <td>
@@ -4487,8 +3559,8 @@ function renderOwnedPortfolioList() {
                                 <td class="owned-table-num">${r.rentaBrute.toFixed(1).replace('.', ',')} %</td>
                                 <td class="owned-table-num">${r.dscr.toFixed(2).replace('.', ',')}</td>
                                 <td>
-                                    <span class="owned-status-badge owned-status-badge--${hasUnclassified ? 'watch' : 'ras'}">
-                                        ${hasUnclassified ? '⚠ Travaux' : 'RAS'}
+                                    <span class="owned-status-badge owned-status-badge--${statusTone}">
+                                        ${statusLabel}
                                     </span>
                                 </td>
                                 <td>
@@ -4511,13 +3583,12 @@ function renderOwnedPortfolioList() {
             nodes.ownedListTable.querySelectorAll('[data-action="delete-owned"]').forEach(btn => {
                 btn.addEventListener('click', e => {
                     e.stopPropagation();
-                    if (!confirm(`Supprimer "${getOwnedAsset(btn.dataset.id)?.nom || btn.dataset.id}" ?`)) return;
-                    deleteOwnedAsset(btn.dataset.id);
-                    renderOwnedPortfolioList();
+                    openOwnedDeleteModal(btn.dataset.id);
                 });
             });
         }
     }
+    renderOwnedPortfolioCharts(list, tmi, regime);
 }
 
 function openOwnedAddModal() {
@@ -4532,8 +3603,42 @@ function closeOwnedAddModal() {
     nodes.ownedAddForm?.reset();
 }
 
+function openOwnedDeleteModal(assetId) {
+    const asset = getOwnedAsset(assetId);
+    if (!asset || !nodes.ownedDeleteModal) return;
+    nodes.ownedDeleteModal._pendingId = assetId;
+    if (nodes.ownedDeleteModalName) nodes.ownedDeleteModalName.textContent = asset.nom || assetId;
+    if (nodes.ownedDeleteModalInput) nodes.ownedDeleteModalInput.value = '';
+    if (nodes.ownedDeleteModalConfirm) nodes.ownedDeleteModalConfirm.disabled = true;
+    nodes.ownedDeleteModal.hidden = false;
+    nodes.ownedDeleteModalInput?.focus();
+}
+
+function closeOwnedDeleteModal() {
+    if (!nodes.ownedDeleteModal) return;
+    nodes.ownedDeleteModal.hidden = true;
+    nodes.ownedDeleteModal._pendingId = null;
+    if (nodes.ownedDeleteModalInput) nodes.ownedDeleteModalInput.value = '';
+}
+
 function openOwnedDetail(assetId) {
     state.activeOwnedAssetId = assetId;
+    // Initialiser chargesAnnuelles si vide à partir des valeurs plates existantes
+    const _a = getOwnedAsset(assetId);
+    if (_a) {
+        const post = _a.postAchat || {};
+        if (!post.chargesAnnuelles || post.chargesAnnuelles.length === 0) {
+            const annee = _a.anneeAchat || new Date().getFullYear();
+            if ((post.taxeFonciere ?? 0) > 0 || (post.gestionLocative ?? 0) > 0 || (post.assurancePNO ?? 0) > 0) {
+                addOwnedChargesAnnuelles(assetId, {
+                    annee,
+                    taxeFonciere: post.taxeFonciere ?? 0,
+                    gestionLocative: post.gestionLocative ?? 0,
+                    assurancePNO: post.assurancePNO ?? 0,
+                });
+            }
+        }
+    }
     nodes.ownedListView.hidden = true;
     nodes.ownedDetailView.hidden = false;
     renderOwnedDetail();
@@ -4564,6 +3669,8 @@ function renderOwnedDetail() {
         nodes.ownedDiagnosticBtn.disabled = !hasData;
     }
 
+    renderOwnedSynthese(asset);
+    renderOwnedCharts(asset);
     renderAccordionAcquisition(asset);
     renderAccordionPostAchat(asset);
     renderAccordionSimulateur(asset);
@@ -4583,6 +3690,258 @@ function renderOwnedDetail() {
             body.hidden = isOpen;
         });
     }
+}
+
+let _ownedCfCumChart = null;
+let _ownedEcartChart = null;
+let _ownedPortfolioCfChart = null;
+let _ownedPortfolioEcartChart = null;
+
+function renderOwnedCharts(asset) {
+    const wrap = document.getElementById('owned-charts-detail');
+    if (!wrap) return;
+
+    if (!((asset.acquisition?.prix || 0) > 0)) {
+        wrap.hidden = true;
+        if (_ownedCfCumChart) { _ownedCfCumChart.destroy(); _ownedCfCumChart = null; }
+        if (_ownedEcartChart) { _ownedEcartChart.destroy(); _ownedEcartChart = null; }
+        return;
+    }
+
+    wrap.hidden = false;
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+
+    const labels = years.map(y => String(y.year));
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const gold = '#C5A059';
+    const green = '#22c55e';
+    const red = '#ef4444';
+    const textClr = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+    const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const scaleOpts = {
+        x: { ticks: { color: textClr, maxRotation: 45, minRotation: 45, font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } },
+        y: { ticks: { color: textClr, callback: v => (Math.abs(v) >= 1000 ? (v/1000).toFixed(0) + 'k' : v) + '€', font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } }
+    };
+
+    if (_ownedCfCumChart) { _ownedCfCumChart.destroy(); _ownedCfCumChart = null; }
+    const canvasCF = document.getElementById('owned-cfcum-chart');
+    if (canvasCF) {
+        _ownedCfCumChart = new Chart(canvasCF, {
+            type: 'line',
+            data: { labels, datasets: [{ data: years.map(y => Math.round(y.cumulCF)), borderColor: gold, backgroundColor: isDark ? 'rgba(197,160,89,0.08)' : 'rgba(197,160,89,0.13)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: gold, tension: 0.25, fill: true }] },
+            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
+        });
+    }
+
+    if (_ownedEcartChart) { _ownedEcartChart.destroy(); _ownedEcartChart = null; }
+    const canvasEcart = document.getElementById('owned-ecart-chart');
+    if (canvasEcart) {
+        _ownedEcartChart = new Chart(canvasEcart, {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'Recettes', data: years.map(y => Math.round(y.recettesCum)), borderColor: green, backgroundColor: 'rgba(34,197,94,0.06)', borderWidth: 2, pointRadius: 2, tension: 0.25, fill: false },
+                { label: 'Dépenses', data: years.map(y => Math.round(y.depensesCum)), borderColor: red, backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 2, pointRadius: 2, tension: 0.25, fill: false }
+            ]},
+            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ' : ' + ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
+        });
+    }
+}
+
+function renderOwnedPortfolioCharts(list, tmi, regime) {
+    const container = document.getElementById('owned-portfolio-charts');
+    if (!container) return;
+
+    if (!list.length) {
+        container.hidden = true;
+        if (_ownedPortfolioCfChart) { _ownedPortfolioCfChart.destroy(); _ownedPortfolioCfChart = null; }
+        if (_ownedPortfolioEcartChart) { _ownedPortfolioEcartChart.destroy(); _ownedPortfolioEcartChart = null; }
+        return;
+    }
+
+    const currentYear = new Date().getFullYear();
+    const allRanges = list.map(a => {
+        const anneeAchat = a.anneeAchat || currentYear;
+        const duree = a.acquisition?.credit?.duree || 0;
+        return { start: anneeAchat, end: Math.max(currentYear + 2, anneeAchat + duree) };
+    });
+    const globalStart = Math.min(...allRanges.map(r => r.start));
+    const globalEnd = Math.max(...allRanges.map(r => r.end));
+
+    const aggCF = {}, aggRec = {}, aggDep = {};
+    for (let y = globalStart; y <= globalEnd; y++) { aggCF[y] = 0; aggRec[y] = 0; aggDep[y] = 0; }
+
+    for (const asset of list) {
+        const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+        for (const row of years) {
+            if (row.year >= globalStart && row.year <= globalEnd) {
+                aggCF[row.year] += row.cfAnnuel;
+                aggRec[row.year] += row.recettesAnnee;
+                aggDep[row.year] += row.depensesAnnee;
+            }
+        }
+    }
+
+    const labels = [], dataCF = [], dataRec = [], dataDep = [];
+    let cumCF = 0, cumRec = 0, cumDep = 0;
+    for (let y = globalStart; y <= globalEnd; y++) {
+        labels.push(String(y));
+        cumCF += aggCF[y] || 0; cumRec += aggRec[y] || 0; cumDep += aggDep[y] || 0;
+        dataCF.push(Math.round(cumCF)); dataRec.push(Math.round(cumRec)); dataDep.push(Math.round(cumDep));
+    }
+
+    container.hidden = false;
+    if (!document.getElementById('owned-portfolio-cf-chart')) {
+        container.innerHTML = `
+            <div class="owned-chart-block">
+                <div class="owned-chart-title">CF net cumulé — portefeuille</div>
+                <canvas id="owned-portfolio-cf-chart" height="200"></canvas>
+            </div>
+            <div class="owned-chart-block">
+                <div class="owned-chart-title">Recettes vs Dépenses — portefeuille</div>
+                <canvas id="owned-portfolio-ecart-chart" height="200"></canvas>
+                <div class="owned-chart-legend">
+                    <span class="owned-chart-legend__item owned-chart-legend__item--recettes">Recettes</span>
+                    <span class="owned-chart-legend__item owned-chart-legend__item--depenses">Dépenses</span>
+                    <span class="owned-chart-legend__hint">Consolidé sur tous les biens détenus</span>
+                </div>
+            </div>`;
+    }
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const gold = '#C5A059', green = '#22c55e', red = '#ef4444';
+    const textClr = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+    const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const scaleOpts = {
+        x: { ticks: { color: textClr, maxRotation: 45, minRotation: 45, font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } },
+        y: { ticks: { color: textClr, callback: v => (Math.abs(v) >= 1000 ? (v/1000).toFixed(0) + 'k' : v) + '€', font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } }
+    };
+
+    if (_ownedPortfolioCfChart) { _ownedPortfolioCfChart.destroy(); _ownedPortfolioCfChart = null; }
+    const cvCF = document.getElementById('owned-portfolio-cf-chart');
+    if (cvCF) {
+        _ownedPortfolioCfChart = new Chart(cvCF, {
+            type: 'line',
+            data: { labels, datasets: [{ data: dataCF, borderColor: gold, backgroundColor: isDark ? 'rgba(197,160,89,0.08)' : 'rgba(197,160,89,0.13)', borderWidth: 2, pointRadius: 2, tension: 0.25, fill: true }] },
+            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
+        });
+    }
+
+    if (_ownedPortfolioEcartChart) { _ownedPortfolioEcartChart.destroy(); _ownedPortfolioEcartChart = null; }
+    const cvEcart = document.getElementById('owned-portfolio-ecart-chart');
+    if (cvEcart) {
+        _ownedPortfolioEcartChart = new Chart(cvEcart, {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'Recettes', data: dataRec, borderColor: green, borderWidth: 2, pointRadius: 2, tension: 0.25, fill: false },
+                { label: 'Dépenses', data: dataDep, borderColor: red, borderWidth: 2, pointRadius: 2, tension: 0.25, fill: false }
+            ]},
+            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ' : ' + ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
+        });
+    }
+}
+
+function renderOwnedSynthese(asset) {
+    if (!nodes.ownedSynthese) return;
+    const acq = asset.acquisition || {};
+    const credit = acq.credit || {};
+    const hasData = (acq.prix || 0) > 0;
+
+    if (!hasData) {
+        nodes.ownedSynthese.innerHTML = '';
+        return;
+    }
+
+    const tmi = getOwnedTmi();
+    const sc = getOwnedDefaultScenario(asset);
+
+    // Mensualité crédit calculée
+    const montant = credit.montant || 0;
+    const nMois = (credit.duree || 0) * 12;
+    const tauxM = ((credit.taux || 0) / 100) / 12;
+    let mensualiteCredit = 0;
+    if (tauxM > 0 && nMois > 0) mensualiteCredit = (montant * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
+    else if (nMois > 0) mensualiteCredit = montant / nMois;
+    const assuranceMens = (montant * ((credit.assurance || 0) / 100)) / 12;
+    const mensualiteTotale = mensualiteCredit + assuranceMens;
+    const investTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
+    const apport = Math.max(0, investTotal - montant);
+
+    // Métriques scénario réaliste — régime global
+    const r = computeOwnedAssetCF(asset, sc.variables, tmi, getOwnedRegime());
+    const cfAvantTone = r.cfNet >= 0 ? 'positive' : 'negative';
+    const cfApresTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
+    const dscrTone = r.dscr > 0 && r.dscr < 1 ? 'negative' : r.dscr >= 1.1 ? 'positive' : '';
+
+    // Comparaison défiscalisation : 3 régimes avec les variables du scénario réaliste
+    const REGIMES = [
+        { key: 'micro-foncier', label: 'Micro-foncier' },
+        { key: 'reel', label: 'Réel' },
+        { key: 'sci-is', label: 'SCI-IS' },
+    ];
+    const currentRegime = getOwnedRegime();
+    const defisca = REGIMES.map(({ key, label }) => {
+        const rd = computeOwnedAssetCF(asset, { ...sc.variables, regime: key }, tmi);
+        return { key, label, impots: rd.impotsAnnee, cfNetNet: rd.cfNetNet };
+    });
+
+    nodes.ownedSynthese.innerHTML = `
+        <div class="owned-synthese__title">Synthèse · scénario réaliste</div>
+        <div class="owned-synthese__cards">
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">Mensualité crédit</span>
+                <span class="owned-synthese__card-value">${Math.round(mensualiteTotale).toLocaleString('fr-FR')} €/mois</span>
+                ${assuranceMens > 0 ? `<span class="owned-synthese__card-sub">dont ${Math.round(assuranceMens).toLocaleString('fr-FR')} € assurance</span>` : ''}
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">Investissement total</span>
+                <span class="owned-synthese__card-value">${Math.round(investTotal).toLocaleString('fr-FR')} €</span>
+                <span class="owned-synthese__card-sub">Apport : ${Math.round(apport).toLocaleString('fr-FR')} €</span>
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">CF avant impôt</span>
+                <span class="owned-synthese__card-value owned-synthese__card-value--${cfAvantTone}">
+                    ${r.cfNet >= 0 ? '+' : ''}${Math.round(r.cfNet).toLocaleString('fr-FR')} €/mois
+                </span>
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">CF après impôt</span>
+                <span class="owned-synthese__card-value owned-synthese__card-value--${cfApresTone}">
+                    ${r.cfNetNet >= 0 ? '+' : ''}${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €/mois
+                </span>
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">Renta brute</span>
+                <span class="owned-synthese__card-value">${r.rentaBrute.toFixed(1).replace('.', ',')} %</span>
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">DSCR</span>
+                <span class="owned-synthese__card-value ${dscrTone ? `owned-synthese__card-value--${dscrTone}` : ''}">
+                    ${r.dscr.toFixed(2).replace('.', ',')}
+                </span>
+            </div>
+        </div>
+        <div class="owned-synthese__title" style="margin-top:16px">Défiscalisation — comparaison des régimes</div>
+        <div class="owned-synthese__defisca">
+            ${defisca.map(d => {
+                const isActive = d.key === currentRegime;
+                const cfTone = d.cfNetNet >= 0 ? 'positive' : 'negative';
+                return `
+                <div class="owned-synthese__defisca-card${isActive ? ' owned-synthese__defisca-card--active' : ''}">
+                    <span class="owned-synthese__defisca-name">${d.label}${isActive ? ' ✓' : ''}</span>
+                    <div class="owned-synthese__defisca-row">
+                        <span>Impôts/an</span>
+                        <span>${Math.round(d.impots).toLocaleString('fr-FR')} €</span>
+                    </div>
+                    <div class="owned-synthese__defisca-row">
+                        <span>CF net-net</span>
+                        <span class="owned-synthese__defisca-cf--${cfTone}">${d.cfNetNet >= 0 ? '+' : ''}${Math.round(d.cfNetNet).toLocaleString('fr-FR')} €/mois</span>
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>
+    `;
 }
 
 function renderAccordionAcquisition(asset) {
@@ -4645,32 +4004,37 @@ function renderAccordionAcquisition(asset) {
         </div>
     `;
 
-    nodes.accAcquisitionContent.addEventListener('change', e => {
-        const input = e.target.closest('input');
-        if (!input) return;
-        const id = state.activeOwnedAssetId;
-        if (!id) return;
-        const val = input.type === 'number' ? Number(input.value) : input.value;
-        if (input.dataset.acqField) {
-            updateOwnedAcquisition(id, { [input.dataset.acqField]: val });
-        } else if (input.dataset.creditField) {
-            updateOwnedCredit(id, { [input.dataset.creditField]: val });
-        } else if (input.dataset.ownedField) {
-            updateOwnedAsset(id, { [input.dataset.ownedField]: val });
-        }
-        const freshAsset = getOwnedAsset(id);
-        if (!freshAsset) return;
-        const acq2 = freshAsset.acquisition || {};
-        const total2 = (acq2.prix || 0) + (acq2.fraisAgence || 0) + (acq2.fraisNotaire || 0);
-        if (nodes.accAcquisitionSummary) {
-            nodes.accAcquisitionSummary.textContent = total2 > 0 ? `${Math.round(total2).toLocaleString('fr-FR')} € investis` : '';
-        }
-        if (nodes.ownedDetailTitle) {
-            const metaEl = nodes.ownedDetailTitle.querySelector('.owned-detail-title__meta');
-            if (metaEl) metaEl.textContent = `${freshAsset.ville}${freshAsset.anneeAchat ? ` · Acquis ${freshAsset.anneeAchat}` : ''}`;
-        }
-        renderAccordionSimulateur(freshAsset);
-    });
+    if (!nodes.accAcquisitionContent.dataset.acqWired) {
+        nodes.accAcquisitionContent.dataset.acqWired = '1';
+        nodes.accAcquisitionContent.addEventListener('change', e => {
+            const input = e.target.closest('input');
+            if (!input) return;
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            const val = input.type === 'number' ? Number(input.value) : input.value;
+            if (input.dataset.acqField) {
+                updateOwnedAcquisition(id, { [input.dataset.acqField]: val });
+            } else if (input.dataset.creditField) {
+                updateOwnedCredit(id, { [input.dataset.creditField]: val });
+            } else if (input.dataset.ownedField) {
+                updateOwnedAsset(id, { [input.dataset.ownedField]: val });
+            }
+            const freshAsset = getOwnedAsset(id);
+            if (!freshAsset) return;
+            const acq2 = freshAsset.acquisition || {};
+            const total2 = (acq2.prix || 0) + (acq2.fraisAgence || 0) + (acq2.fraisNotaire || 0);
+            if (nodes.accAcquisitionSummary) {
+                nodes.accAcquisitionSummary.textContent = total2 > 0 ? `${Math.round(total2).toLocaleString('fr-FR')} € investis` : '';
+            }
+            if (nodes.ownedDetailTitle) {
+                const metaEl = nodes.ownedDetailTitle.querySelector('.owned-detail-title__meta');
+                if (metaEl) metaEl.textContent = `${freshAsset.ville}${freshAsset.anneeAchat ? ` · Acquis ${freshAsset.anneeAchat}` : ''}`;
+            }
+            renderOwnedSynthese(freshAsset);
+            renderOwnedCharts(freshAsset);
+            renderAccordionSimulateur(freshAsset);
+        });
+    }
 }
 
 function renderAccordionPostAchat(asset) {
@@ -4741,6 +4105,24 @@ function renderAccordionPostAchat(asset) {
             <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
         </form>
 
+        <div class="owned-section-title" style="margin-top:20px">Évolution des charges</div>
+        <div class="owned-charges-annuelles-list">
+            ${(post.chargesAnnuelles || []).length ? (post.chargesAnnuelles || []).map(e => `
+                <div class="owned-charges-annuelles-row">
+                    <span class="owned-charges-annuelles-row__year">${e.annee}</span>
+                    <span class="owned-charges-annuelles-row__vals">TF : ${(e.taxeFonciere ?? 0).toLocaleString('fr-FR')} €/an · Gest. : ${e.gestionLocative ?? 0} % · PNO : ${(e.assurancePNO ?? 0).toLocaleString('fr-FR')} €/an</span>
+                    <button class="owned-travaux-delete" data-delete-charges="${e.annee}" title="Supprimer">✕</button>
+                </div>
+            `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Ajoutez une année pour suivre l\'évolution des charges.</p>'}
+        </div>
+        <form class="owned-charges-form" data-form="add-charges" novalidate>
+            <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.anneeAchat || 2020}" step="1" required style="min-width:0">
+            <input type="number" name="taxeFonciere" class="variables-input" placeholder="TF (€/an)" min="0" step="10" style="min-width:0">
+            <input type="number" name="gestionLocative" class="variables-input" placeholder="Gestion (%)" min="0" max="20" step="0.5" style="min-width:0">
+            <input type="number" name="assurancePNO" class="variables-input" placeholder="PNO (€/an)" min="0" step="10" style="min-width:0">
+            <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
+        </form>
+
         <div class="owned-section-title" style="margin-top:20px">Notes</div>
         <div class="owned-notes-list">
             ${[...(post.notes || [])].reverse().map(n => `
@@ -4761,7 +4143,10 @@ function renderAccordionPostAchat(asset) {
             const id = state.activeOwnedAssetId;
             if (!id) return;
             updateOwnedPostAchat(id, { [input.dataset.postField]: Number(input.value) });
-            renderAccordionSimulateur(getOwnedAsset(id));
+            const fresh = getOwnedAsset(id);
+            renderOwnedSynthese(fresh);
+            renderOwnedCharts(fresh);
+            renderAccordionSimulateur(fresh);
         });
     });
 
@@ -4770,8 +4155,11 @@ function renderAccordionPostAchat(asset) {
             const id = state.activeOwnedAssetId;
             if (!id) return;
             deleteOwnedTravail(id, btn.dataset.deleteTravail);
-            renderAccordionPostAchat(getOwnedAsset(id));
-            renderAccordionSimulateur(getOwnedAsset(id));
+            const fresh = getOwnedAsset(id);
+            renderAccordionPostAchat(fresh);
+            renderOwnedSynthese(fresh);
+            renderOwnedCharts(fresh);
+            renderAccordionSimulateur(fresh);
         });
     });
 
@@ -4787,8 +4175,45 @@ function renderAccordionPostAchat(asset) {
             tag: fd.get('tag')
         });
         e.target.reset();
-        renderAccordionPostAchat(getOwnedAsset(id));
-        renderAccordionSimulateur(getOwnedAsset(id));
+        const fresh = getOwnedAsset(id);
+        renderAccordionPostAchat(fresh);
+        renderOwnedSynthese(fresh);
+        renderOwnedCharts(fresh);
+        renderAccordionSimulateur(fresh);
+    });
+
+    nodes.accPostAchatContent.querySelectorAll('[data-delete-charges]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedChargesAnnuelles(id, Number(btn.dataset.deleteCharges));
+            const fresh = getOwnedAsset(id);
+            renderAccordionPostAchat(fresh);
+            renderOwnedSynthese(fresh);
+            renderOwnedCharts(fresh);
+            renderAccordionSimulateur(fresh);
+        });
+    });
+
+    nodes.accPostAchatContent.querySelector('[data-form="add-charges"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        const annee = Number(fd.get('annee'));
+        if (!annee) return;
+        addOwnedChargesAnnuelles(id, {
+            annee,
+            taxeFonciere: Number(fd.get('taxeFonciere')) || 0,
+            gestionLocative: Number(fd.get('gestionLocative')) || 0,
+            assurancePNO: Number(fd.get('assurancePNO')) || 0,
+        });
+        e.target.reset();
+        const fresh = getOwnedAsset(id);
+        renderAccordionPostAchat(fresh);
+        renderOwnedSynthese(fresh);
+        renderOwnedCharts(fresh);
+        renderAccordionSimulateur(fresh);
     });
 
     nodes.accPostAchatContent.querySelector('[data-action="save-note"]')?.addEventListener('click', () => {
@@ -4869,13 +4294,66 @@ function renderAccordionSimulateur(asset) {
                         <td></td>
                     </tr>
                     `).join('')}
+                    <tr class="row-result row-result--sub">
+                        <td class="col-var">Loyer effectif / mois</td>
+                        ${scenarios.map((sc, i) => {
+                            const r = results[i];
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}">
+                                ${Math.round(r.loyerEffectif).toLocaleString('fr-FR')} €
+                            </td>`;
+                        }).join('')}
+                        <td></td>
+                    </tr>
+                    <tr class="row-result row-result--sub">
+                        <td class="col-var">Mensualité totale</td>
+                        ${scenarios.map((sc, i) => {
+                            const r = results[i];
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}">
+                                −${Math.round(r.mensualiteTotale).toLocaleString('fr-FR')} €
+                            </td>`;
+                        }).join('')}
+                        <td></td>
+                    </tr>
+                    <tr class="row-result row-result--sub">
+                        <td class="col-var">Charges / mois</td>
+                        ${scenarios.map((sc, i) => {
+                            const r = results[i];
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}">
+                                −${Math.round(r.chargesMensuelles).toLocaleString('fr-FR')} €
+                            </td>`;
+                        }).join('')}
+                        <td></td>
+                    </tr>
                     <tr class="row-result">
-                        <td class="col-var">CF net-net / mois</td>
+                        <td class="col-var">CF avant impôt / mois</td>
+                        ${scenarios.map((sc, i) => {
+                            const r = results[i];
+                            const cf = r.cfNet;
+                            const color = cf >= 0 ? '#3FB950' : '#F85149';
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}" style="color:${color}">
+                                ${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €
+                            </td>`;
+                        }).join('')}
+                        <td></td>
+                    </tr>
+                    <tr class="row-result row-result--sub">
+                        <td class="col-var">Impôts / mois</td>
+                        ${scenarios.map((sc, i) => {
+                            const r = results[i];
+                            const imp = r.impotsAnnee / 12;
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}">
+                                ${imp > 0 ? '−' : ''}${Math.round(imp).toLocaleString('fr-FR')} €
+                            </td>`;
+                        }).join('')}
+                        <td></td>
+                    </tr>
+                    <tr class="row-result row-result--strong">
+                        <td class="col-var">CF après impôt / mois</td>
                         ${scenarios.map((sc, i) => {
                             const r = results[i];
                             const cf = r.cfNetNet;
                             const color = cf >= 0 ? '#3FB950' : '#F85149';
-                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}" style="color:${color}">
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}" style="color:${color};font-weight:700">
                                 ${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €
                             </td>`;
                         }).join('')}
@@ -4893,7 +4371,9 @@ function renderAccordionSimulateur(asset) {
             if (!id) return;
             const val = input.tagName === 'SELECT' ? input.value : Number(input.value);
             updateOwnedScenarioVar(id, input.dataset.scId, input.dataset.varKey, val);
-            renderAccordionSimulateur(getOwnedAsset(id));
+            const fresh = getOwnedAsset(id);
+            renderOwnedSynthese(fresh);
+            renderAccordionSimulateur(fresh);
         });
     });
 
@@ -5601,7 +5081,6 @@ applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 _initAnalysisViewToggle();
 initScanner({ saveCurrentStudy });
-initPortfolioAiDiagnostic();
 initOwnedPortfolioEvents();
 if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
     setTimeout(() => openProfileModal(), 400);

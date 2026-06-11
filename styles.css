@@ -9471,6 +9471,128 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .owned-kpi-card__value--positive { color: #3FB950; }
 .owned-kpi-card__value--negative { color: #F85149; }
 
+/* ── Graphique dépenses cumulées ─────────────────────────── */
+.owned-cashflow-chart-wrap {
+    margin: 0 0 20px;
+    padding: 16px 20px 12px;
+    background: var(--surface-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+}
+
+.owned-cashflow-chart-title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-tertiary);
+    margin-bottom: 12px;
+}
+
+/* ── Synthèse financière fiche bien ──────────────────────── */
+.owned-synthese {
+    margin: 0 0 20px;
+    padding: 16px 20px;
+    background: var(--surface-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+}
+.owned-synthese:empty { display: none; }
+
+.owned-synthese__title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-tertiary);
+    margin-bottom: 12px;
+}
+
+.owned-synthese__cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.owned-synthese__card {
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.owned-synthese__card-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.owned-synthese__card-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.owned-synthese__card-value--positive { color: #3FB950; }
+.owned-synthese__card-value--negative { color: #F85149; }
+
+.owned-synthese__card-sub {
+    font-size: 0.68rem;
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+/* Défiscalisation */
+.owned-synthese__defisca {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.owned-synthese__defisca-card {
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.owned-synthese__defisca-card--active {
+    border-color: var(--accent-gold, #C5A059);
+    background: color-mix(in srgb, var(--accent-gold, #C5A059) 8%, var(--surface));
+}
+
+.owned-synthese__defisca-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-secondary);
+}
+.owned-synthese__defisca-card--active .owned-synthese__defisca-name {
+    color: var(--accent-gold, #C5A059);
+}
+
+.owned-synthese__defisca-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.owned-synthese__defisca-cf--positive { color: #3FB950; font-weight: 700; }
+.owned-synthese__defisca-cf--negative { color: #F85149; font-weight: 700; }
+
 .owned-list-table { width: 100%; }
 
 .owned-list-table table {
@@ -9516,8 +9638,9 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     border-radius: 20px;
     white-space: nowrap;
 }
-.owned-status-badge--ras    { background: color-mix(in srgb, #3FB950 15%, transparent); color: #3FB950; }
-.owned-status-badge--watch  { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+.owned-status-badge--ras      { background: color-mix(in srgb, #3FB950 15%, transparent); color: #3FB950; }
+.owned-status-badge--watch    { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+.owned-status-badge--negative { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 
 .owned-empty-state {
     text-align: center;
@@ -9778,6 +9901,31 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     color: var(--text-secondary);
 }
 
+.owned-simulator-table tr.row-result--sub td {
+    background: transparent;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 400;
+    font-size: 0.78rem;
+    border-top: none;
+    color: var(--text-secondary);
+}
+.owned-simulator-table tr.row-result--sub td.col-realiste { background: var(--surface-low); }
+.owned-simulator-table tr.row-result--sub td.col-var {
+    font-size: 0.75rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-tertiary);
+}
+
+.owned-simulator-table tr.row-result--strong td {
+    background: color-mix(in srgb, var(--accent-gold, #C5A059) 8%, var(--surface-mid));
+    border-top: 2px solid var(--accent-gold, #C5A059);
+    border-bottom: 2px solid var(--border-subtle);
+}
+.owned-simulator-table tr.row-result--strong td.col-realiste {
+    background: color-mix(in srgb, var(--accent-gold, #C5A059) 18%, var(--surface-mid));
+}
+
 .owned-simulator-table input[type="number"],
 .owned-simulator-table select {
     background: transparent;
@@ -9815,4 +9963,177 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     color: var(--text-tertiary);
     text-align: right;
     margin-top: 4px;
+}
+
+/* ── Régime slider ─────────────────────────────────────────── */
+.owned-regime-slider {
+    display: flex;
+    align-items: center;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    width: fit-content;
+    margin: 0 0 16px;
+}
+.owned-regime-slider__btn {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: .75rem;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 150ms, color 150ms;
+    white-space: nowrap;
+}
+.owned-regime-slider__btn--active {
+    background: var(--accent);
+    color: #fff;
+}
+[data-theme="dark"] .owned-regime-slider__btn--active {
+    color: #1a1a1a;
+}
+
+/* ── Charts row ────────────────────────────────────────────── */
+.owned-charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.owned-chart-block {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    min-width: 0;
+}
+.owned-chart-title {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-tertiary);
+    margin-bottom: 12px;
+}
+.owned-chart-legend {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.owned-chart-legend__item {
+    font-size: .71rem;
+    font-family: 'IBM Plex Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.owned-chart-legend__item::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 3px;
+    border-radius: 2px;
+}
+.owned-chart-legend__item--recettes::before { background: #22c55e; }
+.owned-chart-legend__item--depenses::before { background: #ef4444; }
+.owned-chart-legend__hint {
+    font-size: .68rem;
+    color: var(--text-tertiary);
+    font-style: italic;
+    width: 100%;
+}
+.owned-portfolio-charts {
+    margin-top: 0;
+    margin-bottom: 24px;
+}
+
+/* ── Modale suppression ────────────────────────────────────── */
+.owned-delete-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+.owned-delete-modal[hidden] { display: none; }
+.owned-delete-modal__box {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    max-width: 420px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.owned-delete-modal__box h3 { margin: 0; font-size: 1rem; }
+.owned-delete-modal__box p { margin: 0; font-size: .85rem; color: var(--text-secondary); }
+.owned-delete-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+.btn--negative {
+    background: #ef4444;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn--negative:disabled {
+    background: var(--surface-3, #e5e7eb);
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+}
+
+/* ── Charges évolutives ────────────────────────────────────── */
+.owned-charges-annuelles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.owned-charges-annuelles-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .8rem;
+    color: var(--text-secondary);
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+.owned-charges-annuelles-row__year {
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--accent);
+    min-width: 40px;
+}
+.owned-charges-annuelles-row__vals {
+    flex: 1;
+}
+.owned-charges-form {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr 1fr auto;
+    gap: 6px;
+    align-items: end;
+    margin-top: 6px;
+}
+@media (max-width: 640px) {
+    .owned-charts-row { grid-template-columns: 1fr; }
+    .owned-charges-form { grid-template-columns: 1fr 1fr; }
 }

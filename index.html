@@ -643,9 +643,13 @@
                 <p class="brand-kicker">Portefeuille</p>
                 <h2>Mes biens détenus</h2>
             </div>
-            <button id="owned-add-btn" class="btn btn--primary" type="button">+ Ajouter un bien</button>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button id="owned-export-btn" class="btn btn--ghost btn--sm" type="button" title="Exporter le portefeuille en JSON">↓ Export</button>
+                <button id="owned-add-btn" class="btn btn--primary" type="button">+ Ajouter un bien</button>
+            </div>
         </div>
         <div id="owned-kpi-banner" class="owned-kpi-banner"></div>
+        <div id="owned-portfolio-charts" class="owned-charts-row owned-portfolio-charts" hidden></div>
         <div id="owned-list-table" class="owned-list-table"></div>
     </div>
 
@@ -670,12 +674,46 @@
         </div>
     </div>
 
+    <!-- Modale suppression sécurisée -->
+    <div id="owned-delete-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
+        <div class="owned-delete-modal__box">
+            <h3>Supprimer un bien</h3>
+            <p>Vous êtes sur le point de supprimer <strong id="owned-delete-modal-name"></strong>. Cette action est irréversible.</p>
+            <p>Pour confirmer, saisissez <strong>Supprimer</strong> ci-dessous.</p>
+            <input id="owned-delete-modal-input" class="variables-input" type="text" placeholder="Supprimer" autocomplete="off">
+            <div class="owned-delete-modal__actions">
+                <button id="owned-delete-modal-cancel" class="btn btn--ghost" type="button">Annuler</button>
+                <button id="owned-delete-modal-confirm" class="btn btn--negative" type="button" disabled>Supprimer</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Vue détaillée -->
     <div id="owned-detail-view" hidden>
         <div class="owned-detail-header">
             <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button">← Retour</button>
             <div id="owned-detail-title" class="owned-detail-title"></div>
             <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>✦ Diagnostic IA</button>
+        </div>
+
+        <!-- Synthèse financière calculée -->
+        <div id="owned-synthese" class="owned-synthese"></div>
+
+        <!-- Graphiques côte à côte — vue détail -->
+        <div id="owned-charts-detail" class="owned-charts-row" hidden>
+            <div class="owned-chart-block">
+                <div class="owned-chart-title">CF net après impôt cumulé</div>
+                <canvas id="owned-cfcum-chart" height="200"></canvas>
+            </div>
+            <div class="owned-chart-block">
+                <div class="owned-chart-title">Recettes vs Dépenses</div>
+                <canvas id="owned-ecart-chart" height="200"></canvas>
+                <div class="owned-chart-legend">
+                    <span class="owned-chart-legend__item owned-chart-legend__item--recettes">Recettes</span>
+                    <span class="owned-chart-legend__item owned-chart-legend__item--depenses">Dépenses</span>
+                    <span class="owned-chart-legend__hint">Recettes = loyers après vacance · Dépenses = apport + crédit + charges + impôts + travaux</span>
+                </div>
+            </div>
         </div>
 
         <!-- Accordéon 1 : Acquisition -->

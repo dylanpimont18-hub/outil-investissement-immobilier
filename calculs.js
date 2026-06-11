@@ -1811,7 +1811,7 @@ export function computeResaleTimeline(prixNet, capitalRestantSeries, cfCumuleSer
     return { rows, firstInterestingYear, bestYear, bestGain };
 }
 
-export function computeOwnedAssetCF(asset, scenario, tmi) {
+export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
@@ -1826,11 +1826,14 @@ export function computeOwnedAssetCF(asset, scenario, tmi) {
         return sum + m;
     }, 0);
 
+    const prixAcquisition = acq.prix || 0;
+    const montantCredit = credit.montant || 0;
     const inputs = {
         'taux-input': credit.taux || 0,
         'duree': credit.duree || 0,
         'assurance': credit.assurance || 0,
-        'apport': 0,
+        // apport = prix - crédit : montantFinance recalculé = montantCredit, base fiscale SCI-IS = prixAcquisition
+        'apport': Math.max(0, prixAcquisition - montantCredit),
         'notaire': 0,
         'agence': 0,
         'travaux': 0,
@@ -1841,12 +1844,11 @@ export function computeOwnedAssetCF(asset, scenario, tmi) {
         'fonciere': scenario.taxeFonciere ?? post.taxeFonciere ?? 0,
         'pno': post.assurancePNO ?? 0,
         'gestion': post.gestionLocative ?? 0,
-        'regime': scenario.regime || 'micro-foncier',
+        'regime': regimeOverride || scenario.regime || 'micro-foncier',
     };
 
     const loyer = scenario.loyer ?? acq.loyerInitial ?? 0;
-    const montantCredit = credit.montant || 0;
-    const model = buildFinancialModel(montantCredit, loyer, inputs, tmi);
+    const model = buildFinancialModel(prixAcquisition, loyer, inputs, tmi);
 
     const investissementTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
     const rentaBrute = investissementTotal > 0 ? ((loyer * 12) / investissementTotal) * 100 : 0;
@@ -1854,6 +1856,7 @@ export function computeOwnedAssetCF(asset, scenario, tmi) {
 
     return {
         cfNetNet: model.cfNetNet - travauxMensualites,
+        cfNet: model.cfNet - travauxMensualites,
         mensualiteTotale: model.mensualiteTotale + travauxMensualites,
         chargesMensuelles: (model.chargesExploitationAnnuelles / 12) + travauxMensualites,
         impotsAnnee: model.impotsAnnee,
@@ -1861,4 +1864,113 @@ export function computeOwnedAssetCF(asset, scenario, tmi) {
         rentaBrute,
         dscr,
     };
+}
+
+export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
+    const acq = asset.acquisition || {};
+    const post = asset.postAchat || {};
+    const credit = acq.credit || {};
+
+    const prixAcquisition = acq.prix || 0;
+    const montantCredit = credit.montant || 0;
+    const dureeCredit = credit.duree || 0;
+    const nMois = dureeCredit * 12;
+    const tauxM = ((credit.taux || 0) / 100) / 12;
+    let mensCredit = 0;
+    if (tauxM > 0 && nMois > 0) mensCredit = (montantCredit * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
+    else if (nMois > 0) mensCredit = montantCredit / nMois;
+    const assurMens = (montantCredit * ((credit.assurance || 0) / 100)) / 12;
+    const mensualiteTotale = mensCredit + assurMens;
+
+    const currentYear = new Date().getFullYear();
+    const anneeAchat = asset.anneeAchat || currentYear;
+    const anneeFinCredit = anneeAchat + dureeCredit;
+    const endYear = Math.max(currentYear + 2, anneeFinCredit);
+
+    const loyer = acq.loyerInitial || 0;
+    const vacancePct = post.vacance ?? 5;
+    const loyersAnnuels = loyer * 12 * (1 - vacancePct / 100);
+
+    const investBrut = prixAcquisition + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
+    const apportInitial = Math.max(0, investBrut - montantCredit);
+
+    const travauxParAnnee = {};
+    for (const t of (post.travaux || [])) {
+        if (!t.date || !t.montant) continue;
+        const y = new Date(t.date).getFullYear();
+        travauxParAnnee[y] = (travauxParAnnee[y] || 0) + t.montant;
+    }
+
+    let capitalRestant = montantCredit;
+    let carryForwardDeficit = 0;
+    const years = [];
+    let cumulCF = 0;
+    let recettesCum = 0;
+    let depensesCum = 0;
+
+    for (let y = anneeAchat; y <= endYear; y++) {
+        const yearsElapsed = y - anneeAchat;
+        const creditActif = dureeCredit > 0 && y < anneeFinCredit;
+
+        const annualEntries = (post.chargesAnnuelles || []).filter(e => e.annee <= y).sort((a, b) => b.annee - a.annee);
+        const chargesEntry = annualEntries[0] || null;
+        const taxeFonciere = chargesEntry ? (chargesEntry.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0);
+        const gestionPct = chargesEntry ? (chargesEntry.gestionLocative ?? post.gestionLocative ?? 0) : (post.gestionLocative ?? 0);
+        const assurancePNO = chargesEntry ? (chargesEntry.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
+        const chargesCopro = post.chargesCopro ?? 0;
+        const chargesAnnee = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersAnnuels * (gestionPct / 100));
+
+        let interetsAnnee = 0;
+        let debtService = 0;
+        if (creditActif) {
+            let cap = capitalRestant;
+            for (let m = 0; m < 12; m++) {
+                if (yearsElapsed * 12 + m >= nMois || cap <= 0) break;
+                const intM = tauxM > 0 ? cap * tauxM : 0;
+                interetsAnnee += intM;
+                cap -= Math.max(0, Math.min(cap, mensCredit - intM));
+            }
+            let capTmp = capitalRestant;
+            for (let m = 0; m < 12; m++) {
+                if (yearsElapsed * 12 + m >= nMois || capTmp <= 0) break;
+                const intM = tauxM > 0 ? capTmp * tauxM : 0;
+                capTmp -= Math.max(0, Math.min(capTmp, mensCredit - intM));
+            }
+            capitalRestant = capTmp;
+            debtService = mensualiteTotale * 12;
+        }
+
+        const inputs = {
+            'taux-input': credit.taux || 0,
+            'duree': credit.duree || 0,
+            'assurance': credit.assurance || 0,
+            'apport': Math.max(0, prixAcquisition - montantCredit),
+            'notaire': 0, 'agence': 0, 'travaux': 0, 'meubles': 0, 'frais-bancaires': 0,
+            'vacance': vacancePct,
+            'copro': chargesCopro,
+            'fonciere': taxeFonciere,
+            'pno': assurancePNO,
+            'gestion': gestionPct,
+            'regime': regimeOverride || 'micro-foncier',
+        };
+        const taxResult = computeAnnualTaxEstimate(
+            prixAcquisition, loyersAnnuels, chargesAnnee, inputs, tmi,
+            interetsAnnee, assurMens * 12, yearsElapsed + 1, carryForwardDeficit
+        );
+        carryForwardDeficit = taxResult.newCarryForward;
+        const impotsAnnee = taxResult.tax;
+
+        const travauxAnnee = travauxParAnnee[y] || 0;
+        const cfAnnuel = loyersAnnuels - debtService - chargesAnnee - impotsAnnee;
+        const recettesAnnee = loyersAnnuels;
+        const depensesAnnee = debtService + chargesAnnee + impotsAnnee + travauxAnnee + (y === anneeAchat ? apportInitial : 0);
+
+        cumulCF += cfAnnuel;
+        recettesCum += recettesAnnee;
+        depensesCum += depensesAnnee;
+
+        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum });
+    }
+
+    return { years, anneeAchat, endYear };
 }
