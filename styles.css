@@ -9424,3 +9424,395 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     accent-color: var(--primary);
     cursor: pointer;
 }
+
+/* ===== PORTEFEUILLE BIENS DÉTENUS ===== */
+
+.owned-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.owned-kpi-banner {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.owned-kpi-card {
+    background: var(--surface-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px 16px;
+    min-width: 140px;
+}
+
+.owned-kpi-card__label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.owned-kpi-card__value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.owned-kpi-card__value--positive { color: #3FB950; }
+.owned-kpi-card__value--negative { color: #F85149; }
+
+.owned-list-table { width: 100%; }
+
+.owned-list-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.owned-list-table th {
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.owned-list-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+}
+
+.owned-list-table tr:last-child td { border-bottom: none; }
+
+.owned-list-table tr[data-asset-id] { cursor: pointer; transition: background .12s; }
+.owned-list-table tr[data-asset-id]:hover { background: var(--surface-low); }
+
+.owned-table-name { font-weight: 600; color: var(--text-primary); }
+.owned-table-meta { font-size: 0.75rem; color: var(--text-secondary); }
+.owned-table-num { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; text-align: right; }
+.owned-table-num--positive { color: #3FB950; }
+.owned-table-num--negative { color: #F85149; }
+
+.owned-status-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+.owned-status-badge--ras    { background: color-mix(in srgb, #3FB950 15%, transparent); color: #3FB950; }
+.owned-status-badge--watch  { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
+
+.owned-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-secondary);
+}
+.owned-empty-state p { margin-bottom: 16px; font-size: 0.9rem; }
+
+.owned-add-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.owned-add-modal[hidden] { display: none; }
+
+.owned-add-modal__box {
+    background: var(--surface-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 24px;
+    width: 380px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.owned-add-modal__box h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.owned-add-modal__actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.owned-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.owned-detail-title { flex: 1; }
+
+.owned-detail-title__name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.owned-detail-title__meta {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.owned-accordion {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.owned-accordion__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--surface-low);
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: background .12s;
+}
+
+.owned-accordion__header:hover { background: var(--surface-mid); }
+
+.owned-accordion__label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-primary);
+}
+
+.owned-accordion__summary {
+    flex: 1;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.owned-accordion__chevron {
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    transition: transform .2s;
+}
+
+.owned-accordion__header[aria-expanded="true"] .owned-accordion__chevron {
+    transform: rotate(0deg);
+}
+
+.owned-accordion__header[aria-expanded="false"] .owned-accordion__chevron {
+    transform: rotate(-90deg);
+}
+
+.owned-accordion__body {
+    padding: 16px;
+    background: var(--bg);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.owned-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.owned-form-grid .variables-field { margin: 0; }
+
+.owned-section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-secondary);
+    margin: 16px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.owned-travaux-list { margin-bottom: 10px; }
+
+.owned-travaux-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 90px 120px 24px;
+    gap: 8px;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.82rem;
+}
+
+.owned-travaux-row:last-child { border-bottom: none; }
+
+.owned-travaux-date { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-secondary); }
+.owned-travaux-desc { color: var(--text-primary); }
+.owned-travaux-montant { font-family: 'IBM Plex Mono', monospace; font-weight: 600; text-align: right; }
+.owned-travaux-delete { color: var(--text-tertiary); font-size: 0.75rem; cursor: pointer; background: none; border: none; padding: 0 4px; }
+.owned-travaux-delete:hover { color: #F85149; }
+
+.owned-travaux-totals {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 16px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+}
+
+.owned-travaux-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.owned-travaux-form input, .owned-travaux-form select { flex: 1; min-width: 100px; }
+
+.owned-notes-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+
+.owned-note-entry {
+    background: var(--surface-low);
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.owned-note-text { font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; margin: 0; white-space: pre-wrap; }
+.owned-note-date { font-size: 0.72rem; color: var(--text-tertiary); font-family: 'IBM Plex Mono', monospace; }
+
+.owned-notes-add { display: flex; flex-direction: column; gap: 8px; }
+.owned-notes-add textarea { resize: vertical; min-height: 60px; }
+.owned-notes-add button { align-self: flex-end; }
+
+.owned-simulator-table-wrap { overflow-x: auto; margin-bottom: 12px; }
+
+.owned-simulator-table {
+    border-collapse: collapse;
+    font-size: 0.83rem;
+    min-width: 500px;
+}
+
+.owned-simulator-table th {
+    padding: 8px 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.owned-simulator-table th.col-var {
+    text-align: left;
+    color: var(--text-secondary);
+}
+
+.owned-simulator-table th.col-realiste {
+    color: var(--accent-gold, #C5A059);
+    border-bottom: 2px solid var(--accent-gold, #C5A059);
+}
+
+.owned-simulator-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+}
+
+.owned-simulator-table td.col-var {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.owned-simulator-table td.col-realiste { background: var(--surface-low); }
+
+.owned-simulator-table tr.row-result td {
+    background: var(--surface-mid);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-align: center;
+    border-top: 2px solid var(--border-subtle);
+}
+
+.owned-simulator-table tr.row-result td.col-realiste {
+    background: color-mix(in srgb, var(--accent-gold, #C5A059) 10%, var(--surface-mid));
+}
+
+.owned-simulator-table tr.row-result td.col-var {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--text-secondary);
+}
+
+.owned-simulator-table input[type="number"],
+.owned-simulator-table select {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 3px 6px;
+    width: 80px;
+    font-size: 0.82rem;
+    font-family: 'IBM Plex Mono', monospace;
+    text-align: center;
+}
+
+.owned-simulator-table select { width: 120px; text-align: left; }
+
+.owned-simulator-table td.col-realiste input,
+.owned-simulator-table td.col-realiste select {
+    border-color: var(--accent-gold, #C5A059);
+}
+
+.owned-sim-add-btn {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+    background: none;
+    border: 1px dashed var(--border-subtle);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.owned-sim-add-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+.owned-sim-hint {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    text-align: right;
+    margin-top: 4px;
+}

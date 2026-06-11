@@ -634,70 +634,96 @@
                 </div>
             </section>
 
-            <section id="collection-panel" class="workspace-panel" aria-label="Pilotage multi-biens">
+            <section id="collection-panel" class="workspace-panel" aria-label="Portefeuille">
 
-    <!-- Zone 1 : Tableau de bord global -->
-    <div class="panel-head panel-head--stacked">
-        <div>
-            <p class="brand-kicker">Multi-biens</p>
-            <h2>Piloter le portefeuille</h2>
-            <p class="panel-note">Suivez vos biens, recevez des conseils fiscaux et actionnables, et analysez votre cash-flow global.</p>
-        </div>
-        <div class="portfolio-ai-trigger-row">
-            <button id="portfolio-ai-trigger" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>
-                ✦ Diagnostic IA
-            </button>
-            <span id="portfolio-ai-last-date" class="portfolio-ai-last-date" hidden></span>
-        </div>
-    </div>
-
-    <div class="portfolio-zone portfolio-zone--dashboard">
-        <div id="portfolio-kpi-banner"></div>
-        <div class="portfolio-dashboard-visuals">
-            <div id="portfolio-donut-consolidated-wrap" class="portfolio-donut-wrap" hidden>
-                <h4 class="portfolio-donut-title">Répartition cash-flow globale</h4>
-                <canvas id="portfolio-donut-consolidated" width="200" height="200"></canvas>
+    <!-- Vue liste (défaut) -->
+    <div id="owned-list-view">
+        <div class="owned-list-header">
+            <div>
+                <p class="brand-kicker">Portefeuille</p>
+                <h2>Mes biens détenus</h2>
             </div>
-            <div id="portfolio-alerts" class="portfolio-alerts"></div>
+            <button id="owned-add-btn" class="btn btn--primary" type="button">+ Ajouter un bien</button>
+        </div>
+        <div id="owned-kpi-banner" class="owned-kpi-banner"></div>
+        <div id="owned-list-table" class="owned-list-table"></div>
+    </div>
+
+    <!-- Modal ajout bien -->
+    <div id="owned-add-modal" class="owned-add-modal" hidden aria-modal="true" role="dialog">
+        <div class="owned-add-modal__box">
+            <h3>Ajouter un bien</h3>
+            <form id="owned-add-form" novalidate>
+                <label class="variables-field">
+                    <span class="variables-label">Nom du bien</span>
+                    <input id="owned-add-nom" name="nom" type="text" class="variables-input" placeholder="ex : Appartement Lyon 3e" required>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Ville</span>
+                    <input id="owned-add-ville" name="ville" type="text" class="variables-input" placeholder="ex : Lyon">
+                </label>
+                <div class="owned-add-modal__actions">
+                    <button type="button" id="owned-add-cancel" class="btn btn--ghost">Annuler</button>
+                    <button type="submit" class="btn btn--primary">Créer</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- Zone 2 : Conseils intelligents -->
-    <div id="portfolio-advice" class="portfolio-zone portfolio-zone--advice" hidden>
-        <button class="portfolio-zone-title portfolio-zone-title--toggle" id="portfolio-advice-toggle" aria-expanded="true" type="button">
-            Ce que tu devrais regarder
-            <span class="portfolio-zone-title__chevron" aria-hidden="true">▼</span>
-        </button>
-        <div id="portfolio-advice-cards" class="portfolio-advice-cards"></div>
-    </div>
-
-    <!-- Zone 3 : Fiches de biens détenus -->
-    <div id="portfolio-owned-zone" class="portfolio-zone portfolio-zone--owned" hidden>
-        <h3 class="portfolio-zone-title">Biens détenus</h3>
-        <div id="portfolio-fiches" class="portfolio-fiches-grid"></div>
-    </div>
-
-    <!-- Zone 4 : Pipeline -->
-    <div id="portfolio-pipeline-zone" class="portfolio-zone portfolio-zone--pipeline" hidden>
-        <h3 class="portfolio-zone-title">Biens à l'étude</h3>
-        <div id="portfolio-asset-grid-pipeline" class="portfolio-asset-section"></div>
-    </div>
-
-    <!-- Zone 5 : Diagnostic IA drawer -->
-    <div id="portfolio-ai-drawer" class="portfolio-ai-drawer" aria-modal="true" role="dialog" aria-label="Diagnostic IA">
-        <div class="portfolio-ai-drawer__header">
-            <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
-            <button id="portfolio-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer">✕</button>
+    <!-- Vue détaillée -->
+    <div id="owned-detail-view" hidden>
+        <div class="owned-detail-header">
+            <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button">← Retour</button>
+            <div id="owned-detail-title" class="owned-detail-title"></div>
+            <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>✦ Diagnostic IA</button>
         </div>
-        <div id="portfolio-ai-drawer-content" class="portfolio-ai-drawer__content"></div>
-    </div>
-    <div id="portfolio-ai-overlay" class="portfolio-ai-overlay"></div>
 
-    <!-- Conservés pour compatibilité -->
-    <div id="portfolio-simulator"></div>
-    <div id="portfolio-hero" class="workspace-hero" aria-label="Synthèse portefeuille" hidden></div>
-    <div id="portfolio-summary" class="analysis-grid" hidden></div>
-    <div id="portfolio-asset-grid-owned" hidden></div>
+        <!-- Accordéon 1 : Acquisition -->
+        <div class="owned-accordion" id="acc-acquisition">
+            <button class="owned-accordion__header" type="button" aria-expanded="true" data-acc="acquisition">
+                <span class="owned-accordion__label">Acquisition</span>
+                <span class="owned-accordion__summary" id="acc-acquisition-summary"></span>
+                <span class="owned-accordion__chevron" aria-hidden="true">▼</span>
+            </button>
+            <div class="owned-accordion__body" id="acc-acquisition-body">
+                <div id="acc-acquisition-content"></div>
+            </div>
+        </div>
+
+        <!-- Accordéon 2 : Post-achat -->
+        <div class="owned-accordion" id="acc-postachat">
+            <button class="owned-accordion__header" type="button" aria-expanded="false" data-acc="postachat">
+                <span class="owned-accordion__label">Post-achat</span>
+                <span class="owned-accordion__summary" id="acc-postachat-summary"></span>
+                <span class="owned-accordion__chevron" aria-hidden="true">▶</span>
+            </button>
+            <div class="owned-accordion__body" id="acc-postachat-body" hidden>
+                <div id="acc-postachat-content"></div>
+            </div>
+        </div>
+
+        <!-- Accordéon 3 : Simulateur -->
+        <div class="owned-accordion" id="acc-simulateur">
+            <button class="owned-accordion__header" type="button" aria-expanded="false" data-acc="simulateur">
+                <span class="owned-accordion__label">Simulateur</span>
+                <span class="owned-accordion__summary" id="acc-simulateur-summary"></span>
+                <span class="owned-accordion__chevron" aria-hidden="true">▶</span>
+            </button>
+            <div class="owned-accordion__body" id="acc-simulateur-body" hidden>
+                <div id="acc-simulateur-content"></div>
+            </div>
+        </div>
+
+        <!-- Drawer Diagnostic IA -->
+        <div id="owned-ai-drawer" class="portfolio-ai-drawer" hidden role="dialog" aria-modal="true" aria-label="Diagnostic IA">
+            <div class="portfolio-ai-drawer__header">
+                <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
+                <button id="owned-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer">✕</button>
+            </div>
+            <div id="owned-ai-drawer-content" class="portfolio-ai-drawer__content"></div>
+        </div>
+        <div id="owned-ai-overlay" class="portfolio-ai-overlay" hidden></div>
+    </div>
 
             </section>
 

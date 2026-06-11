@@ -607,12 +607,13 @@ def api_portfolio_diagnostic():
         return jsonify({'error': 'Payload JSON manquant'}), 400
 
     prompt_user = (
-        "Voici les données du portefeuille immobilier de l'investisseur :\n\n"
+        "Voici les données d'un bien immobilier locatif détenu :\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
         + "\n\nProduis entre 3 et 5 recommandations priorisées, actionnables, en français naturel. "
         "Chaque recommandation doit avoir : un titre court, une explication de 2 à 4 phrases qui justifie "
         "le conseil avec des chiffres précis issus des données, et une action concrète à mener. "
-        "Priorise les sujets fiscaux, les risques de cash-flow, et les opportunités d'optimisation. "
+        "Priorise les sujets fiscaux (régime, travaux déductibles), les risques de cash-flow (CF négatif, DSCR bas), "
+        "et les optimisations. "
         "Réponds uniquement avec du JSON valide, sans texte avant ou après, au format : "
         '{"recommendations": [{"title": "...", "explanation": "...", "action": "..."}]}'
     )
