@@ -1,4 +1,4 @@
-import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu } from './calculs.js';
+import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu, computeOwnedAssetCF } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
 import { initScanner, onScannerTabActivated } from './scanner.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
@@ -42,8 +42,160 @@ const STORAGE_KEYS = {
     activeAssetId: 'investissementWebActiveAssetId',
     syncTick: 'investissementWebSyncTick',
     guidedMode: 'investissementWebGuidedMode',
-    sparkMode: 'investissementWebSparkMode'
+    sparkMode: 'investissementWebSparkMode',
+    ownedAssets: 'investissementWebOwnedAssets'
 };
+
+// --- Portfolio biens détenus ---
+
+function loadOwnedAssets() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedAssets)) || {}; }
+    catch { return {}; }
+}
+
+function saveOwnedAssets(assets) {
+    localStorage.setItem(STORAGE_KEYS.ownedAssets, JSON.stringify(assets));
+}
+
+function createOwnedAssetId() {
+    return `oa-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function createOwnedAsset(nom, ville) {
+    const id = createOwnedAssetId();
+    const asset = {
+        id,
+        nom: String(nom || '').trim(),
+        ville: String(ville || '').trim(),
+        anneeAchat: null,
+        acquisition: {
+            prix: 0, fraisAgence: 0, fraisNotaire: 0, loyerInitial: 0,
+            credit: { montant: 0, duree: 0, taux: 0, assurance: 0 }
+        },
+        postAchat: {
+            taxeFonciere: 0, chargesCopro: 0, gestionLocative: 0, assurancePNO: 0,
+            travaux: [], notes: []
+        },
+        scenarios: [
+            { id: 'pessimiste', nom: 'Pessimiste', variables: { loyer: 0, taxeFonciere: 0, vacance: 8, regime: 'micro-foncier' } },
+            { id: 'realiste', nom: 'Réaliste', variables: { loyer: 0, taxeFonciere: 0, vacance: 5, regime: 'micro-foncier' } },
+            { id: 'optimiste', nom: 'Optimiste', variables: { loyer: 0, taxeFonciere: 0, vacance: 2, regime: 'micro-foncier' } }
+        ],
+        lastDiagnostic: null
+    };
+    const all = loadOwnedAssets();
+    all[id] = asset;
+    saveOwnedAssets(all);
+    return asset;
+}
+
+function getOwnedAsset(id) {
+    return loadOwnedAssets()[id] || null;
+}
+
+function updateOwnedAsset(id, patch) {
+    const all = loadOwnedAssets();
+    if (!all[id]) return;
+    all[id] = { ...all[id], ...patch };
+    saveOwnedAssets(all);
+}
+
+function deleteOwnedAsset(id) {
+    const all = loadOwnedAssets();
+    delete all[id];
+    saveOwnedAssets(all);
+}
+
+function updateOwnedAcquisition(id, patch) {
+    const all = loadOwnedAssets();
+    if (!all[id]) return;
+    all[id].acquisition = { ...all[id].acquisition, ...patch };
+    saveOwnedAssets(all);
+}
+
+function updateOwnedCredit(id, patch) {
+    const all = loadOwnedAssets();
+    if (!all[id]) return;
+    all[id].acquisition.credit = { ...all[id].acquisition.credit, ...patch };
+    saveOwnedAssets(all);
+}
+
+function updateOwnedPostAchat(id, patch) {
+    const all = loadOwnedAssets();
+    if (!all[id]) return;
+    all[id].postAchat = { ...all[id].postAchat, ...patch };
+    saveOwnedAssets(all);
+}
+
+function addOwnedTravail(assetId, travail) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const entry = {
+        id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        date: travail.date || '',
+        description: travail.description || '',
+        montant: Math.max(0, Number(travail.montant) || 0),
+        tag: ['deductible', 'non-deductible', 'a-classifier'].includes(travail.tag) ? travail.tag : 'a-classifier',
+        credit: travail.credit || null
+    };
+    all[assetId].postAchat.travaux.push(entry);
+    saveOwnedAssets(all);
+}
+
+function deleteOwnedTravail(assetId, travailId) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    all[assetId].postAchat.travaux = all[assetId].postAchat.travaux.filter(t => t.id !== travailId);
+    saveOwnedAssets(all);
+}
+
+function addOwnedNote(assetId, text) {
+    if (!String(text || '').trim()) return;
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    all[assetId].postAchat.notes.push({
+        id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        createdAt: new Date().toISOString(),
+        text: String(text).trim()
+    });
+    saveOwnedAssets(all);
+}
+
+function addOwnedScenario(assetId) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const id = `sc-${Date.now()}`;
+    all[assetId].scenarios.push({
+        id, nom: 'Nouveau', variables: { loyer: 0, taxeFonciere: 0, vacance: 5, regime: 'micro-foncier' }
+    });
+    saveOwnedAssets(all);
+    return id;
+}
+
+function updateOwnedScenarioVar(assetId, scenarioId, key, value) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const sc = all[assetId].scenarios.find(s => s.id === scenarioId);
+    if (!sc) return;
+    sc.variables[key] = value;
+    saveOwnedAssets(all);
+}
+
+function updateOwnedScenarioNom(assetId, scenarioId, nom) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const sc = all[assetId].scenarios.find(s => s.id === scenarioId);
+    if (!sc) return;
+    sc.nom = nom;
+    saveOwnedAssets(all);
+}
+
+function deleteOwnedScenario(assetId, scenarioId) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    all[assetId].scenarios = all[assetId].scenarios.filter(s => s.id !== scenarioId);
+    saveOwnedAssets(all);
+}
 
 const ASSET_META_KEY = 'investissementWebAssetMeta';
 
@@ -299,7 +451,9 @@ const state = {
     activeAssetId: loadActiveAssetId(),
     sparkMode: loadSparkMode(),
     guidedStepIndex: 0,
-    analysisPopupBlocked: false
+    analysisPopupBlocked: false,
+    ownedAssets: loadOwnedAssets(),
+    activeOwnedAssetId: null
 };
 
 let analysisWindowRef = null;
@@ -325,6 +479,32 @@ const nodes = {
     variablesPanel: document.getElementById('variables-panel'),
     analysisPanel: document.getElementById('analysis-panel'),
     collectionPanel: document.getElementById('collection-panel'),
+    ownedListView: document.getElementById('owned-list-view'),
+    ownedDetailView: document.getElementById('owned-detail-view'),
+    ownedAddBtn: document.getElementById('owned-add-btn'),
+    ownedAddModal: document.getElementById('owned-add-modal'),
+    ownedAddForm: document.getElementById('owned-add-form'),
+    ownedAddNom: document.getElementById('owned-add-nom'),
+    ownedAddVille: document.getElementById('owned-add-ville'),
+    ownedAddCancel: document.getElementById('owned-add-cancel'),
+    ownedKpiBanner: document.getElementById('owned-kpi-banner'),
+    ownedListTable: document.getElementById('owned-list-table'),
+    ownedBackBtn: document.getElementById('owned-back-btn'),
+    ownedDetailTitle: document.getElementById('owned-detail-title'),
+    ownedDiagnosticBtn: document.getElementById('owned-diagnostic-btn'),
+    accAcquisitionBody: document.getElementById('acc-acquisition-body'),
+    accAcquisitionContent: document.getElementById('acc-acquisition-content'),
+    accAcquisitionSummary: document.getElementById('acc-acquisition-summary'),
+    accPostAchatBody: document.getElementById('acc-postachat-body'),
+    accPostAchatContent: document.getElementById('acc-postachat-content'),
+    accPostAchatSummary: document.getElementById('acc-postachat-summary'),
+    accSimulateurBody: document.getElementById('acc-simulateur-body'),
+    accSimulateurContent: document.getElementById('acc-simulateur-content'),
+    accSimulateurSummary: document.getElementById('acc-simulateur-summary'),
+    ownedAiDrawer: document.getElementById('owned-ai-drawer'),
+    ownedAiOverlay: document.getElementById('owned-ai-overlay'),
+    ownedAiDrawerContent: document.getElementById('owned-ai-drawer-content'),
+    ownedAiDrawerClose: document.getElementById('owned-ai-drawer-close'),
     variablesKicker: document.getElementById('variables-kicker'),
     variablesSubtitle: document.getElementById('variables-subtitle'),
     variablesContext: document.getElementById('variables-context'),
@@ -3294,21 +3474,31 @@ function openAnalysisWindow(options = {}) {
     }
 }
 
-function openPrintDocument(documentHTML, filename) {
-    const printWindow = window.open('', '_blank', 'noopener=yes,noreferrer=yes');
-
-    if (!printWindow) {
-        window.alert('Le navigateur a bloqué l\'ouverture de la note PDF. Autorisez les fenêtres pop-up pour lancer l\'impression.');
-        return;
+async function openPrintDocument(documentHTML, filename) {
+    const btn = document.getElementById('export-decision-pdf');
+    const originalLabel = btn ? btn.textContent : null;
+    if (btn) { btn.textContent = 'Génération…'; btn.disabled = true; }
+    try {
+        const resp = await fetch('/api/generate-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html: documentHTML, filename }),
+        });
+        const json = await resp.json().catch(() => null);
+        if (!resp.ok) {
+            window.alert('Erreur lors de la génération du PDF : ' + ((json && json.error) || resp.statusText));
+            return;
+        }
+        const savedTo = json && json.saved_to ? json.saved_to : '';
+        window.alert('PDF sauvegardé dans le dossier Téléchargements :\n' + (savedTo || filename));
+    } catch (err) {
+        window.alert('Erreur lors de la génération du PDF : ' + err.message);
+    } finally {
+        if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
     }
-
-    printWindow.document.open();
-    printWindow.document.write(documentHTML);
-    printWindow.document.close();
-    printWindow.document.title = filename.replace(/\.pdf$/i, '');
 }
 
-function handleDecisionSummaryExport() {
+async function handleDecisionSummaryExport() {
     const analysisModel = getCurrentAnalysisModel();
     const { documentHTML, filename } = buildDecisionPrintDocument({
         analysisModel,
@@ -3316,7 +3506,7 @@ function handleDecisionSummaryExport() {
         variablesData: state.variablesData
     });
 
-    openPrintDocument(documentHTML, filename);
+    await openPrintDocument(documentHTML, filename);
 }
 
 function closeAnalysisWindow() {
@@ -4166,31 +4356,656 @@ function initPortfolioAiDiagnostic() {
     });
 }
 
+function initOwnedPortfolioEvents() {
+    if (nodes.ownedAddBtn) {
+        nodes.ownedAddBtn.addEventListener('click', openOwnedAddModal);
+    }
+    if (nodes.ownedAddCancel) {
+        nodes.ownedAddCancel.addEventListener('click', closeOwnedAddModal);
+    }
+    if (nodes.ownedAddForm) {
+        nodes.ownedAddForm.addEventListener('submit', e => {
+            e.preventDefault();
+            const nom = nodes.ownedAddNom?.value.trim();
+            if (!nom) { nodes.ownedAddNom?.focus(); return; }
+            const ville = nodes.ownedAddVille?.value.trim() || '';
+            const asset = createOwnedAsset(nom, ville);
+            closeOwnedAddModal();
+            openOwnedDetail(asset.id);
+        });
+    }
+    if (nodes.ownedBackBtn) {
+        nodes.ownedBackBtn.addEventListener('click', closeOwnedDetail);
+    }
+    if (nodes.ownedDiagnosticBtn) {
+        nodes.ownedDiagnosticBtn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (id) callOwnedDiagnosticIA(id);
+        });
+    }
+    if (nodes.ownedAiDrawerClose) {
+        nodes.ownedAiDrawerClose.addEventListener('click', () => {
+            if (nodes.ownedAiDrawer) nodes.ownedAiDrawer.hidden = true;
+            if (nodes.ownedAiOverlay) nodes.ownedAiOverlay.hidden = true;
+        });
+    }
+    if (nodes.ownedAiOverlay) {
+        nodes.ownedAiOverlay.addEventListener('click', () => {
+            if (nodes.ownedAiDrawer) nodes.ownedAiDrawer.hidden = true;
+            nodes.ownedAiOverlay.hidden = true;
+        });
+    }
+}
+
+function getOwnedTmi() {
+    return calculateTMI(state.profileData.income || 0, {
+        adults: state.profileData.adults || 2,
+        children: state.profileData.children || 0
+    });
+}
+
+function getOwnedDefaultScenario(asset) {
+    return asset.scenarios.find(s => s.id === 'realiste') || asset.scenarios[0] || { variables: {} };
+}
+
+function renderOwnedPortfolioList() {
+    if (!nodes.ownedListView || !nodes.ownedDetailView) return;
+
+    const assets = loadOwnedAssets();
+    const list = Object.values(assets);
+    const tmi = getOwnedTmi();
+
+    if (nodes.ownedKpiBanner) {
+        if (!list.length) {
+            nodes.ownedKpiBanner.innerHTML = '';
+        } else {
+            const results = list.map(a => {
+                const sc = getOwnedDefaultScenario(a);
+                return computeOwnedAssetCF(a, sc.variables, tmi);
+            });
+            const totalCF = results.reduce((s, r) => s + r.cfNetNet, 0);
+            const avgRdt = results.reduce((s, r) => s + r.rentaBrute, 0) / results.length;
+            const cfTone = totalCF >= 0 ? 'positive' : 'negative';
+            nodes.ownedKpiBanner.innerHTML = `
+                <div class="owned-kpi-card">
+                    <span class="owned-kpi-card__label">CF net-net / mois</span>
+                    <span class="owned-kpi-card__value owned-kpi-card__value--${cfTone}">
+                        ${totalCF >= 0 ? '+' : ''}${Math.round(totalCF).toLocaleString('fr-FR')} €
+                    </span>
+                </div>
+                <div class="owned-kpi-card">
+                    <span class="owned-kpi-card__label">Rendement brut moy.</span>
+                    <span class="owned-kpi-card__value">${avgRdt.toFixed(1).replace('.', ',')} %</span>
+                </div>
+                <div class="owned-kpi-card">
+                    <span class="owned-kpi-card__label">Biens détenus</span>
+                    <span class="owned-kpi-card__value">${list.length}</span>
+                </div>
+            `;
+        }
+    }
+
+    if (nodes.ownedListTable) {
+        if (!list.length) {
+            nodes.ownedListTable.innerHTML = `
+                <div class="owned-empty-state">
+                    <p>Aucun bien enregistré dans le portefeuille.</p>
+                    <button class="btn btn--primary" id="owned-empty-add-btn" type="button">+ Ajouter mon premier bien</button>
+                </div>
+            `;
+            nodes.ownedListTable.querySelector('#owned-empty-add-btn')?.addEventListener('click', () => {
+                openOwnedAddModal();
+            });
+        } else {
+            nodes.ownedListTable.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Bien</th>
+                            <th style="text-align:right">CF net-net</th>
+                            <th style="text-align:right">Rdt brut</th>
+                            <th style="text-align:right">DSCR</th>
+                            <th>Statut</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${list.map(asset => {
+                            const sc = getOwnedDefaultScenario(asset);
+                            const r = computeOwnedAssetCF(asset, sc.variables, tmi);
+                            const cfTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
+                            const hasUnclassified = (asset.postAchat?.travaux || []).some(t => t.tag === 'a-classifier');
+                            return `
+                            <tr data-asset-id="${escapeHtml(asset.id)}">
+                                <td>
+                                    <div class="owned-table-name">${escapeHtml(asset.nom)}</div>
+                                    <div class="owned-table-meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · ${asset.anneeAchat}` : ''}</div>
+                                </td>
+                                <td class="owned-table-num owned-table-num--${cfTone}">
+                                    ${r.cfNetNet >= 0 ? '+' : ''}${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €
+                                </td>
+                                <td class="owned-table-num">${r.rentaBrute.toFixed(1).replace('.', ',')} %</td>
+                                <td class="owned-table-num">${r.dscr.toFixed(2).replace('.', ',')}</td>
+                                <td>
+                                    <span class="owned-status-badge owned-status-badge--${hasUnclassified ? 'watch' : 'ras'}">
+                                        ${hasUnclassified ? '⚠ Travaux' : 'RAS'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn--ghost btn--sm" data-action="delete-owned" data-id="${escapeHtml(asset.id)}" title="Supprimer">✕</button>
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            nodes.ownedListTable.querySelectorAll('tr[data-asset-id]').forEach(row => {
+                row.addEventListener('click', e => {
+                    if (e.target.closest('[data-action]')) return;
+                    openOwnedDetail(row.dataset.assetId);
+                });
+            });
+
+            nodes.ownedListTable.querySelectorAll('[data-action="delete-owned"]').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    if (!confirm(`Supprimer "${getOwnedAsset(btn.dataset.id)?.nom || btn.dataset.id}" ?`)) return;
+                    deleteOwnedAsset(btn.dataset.id);
+                    renderOwnedPortfolioList();
+                });
+            });
+        }
+    }
+}
+
+function openOwnedAddModal() {
+    if (!nodes.ownedAddModal) return;
+    nodes.ownedAddModal.hidden = false;
+    nodes.ownedAddNom?.focus();
+}
+
+function closeOwnedAddModal() {
+    if (!nodes.ownedAddModal) return;
+    nodes.ownedAddModal.hidden = true;
+    nodes.ownedAddForm?.reset();
+}
+
+function openOwnedDetail(assetId) {
+    state.activeOwnedAssetId = assetId;
+    nodes.ownedListView.hidden = true;
+    nodes.ownedDetailView.hidden = false;
+    renderOwnedDetail();
+}
+
+function closeOwnedDetail() {
+    state.activeOwnedAssetId = null;
+    nodes.ownedDetailView.hidden = true;
+    nodes.ownedListView.hidden = false;
+    renderOwnedPortfolioList();
+}
+
+function renderOwnedDetail() {
+    const assetId = state.activeOwnedAssetId;
+    if (!assetId) return;
+    const asset = getOwnedAsset(assetId);
+    if (!asset) { closeOwnedDetail(); return; }
+
+    if (nodes.ownedDetailTitle) {
+        nodes.ownedDetailTitle.innerHTML = `
+            <div class="owned-detail-title__name">${escapeHtml(asset.nom)}</div>
+            <div class="owned-detail-title__meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · Acquis ${asset.anneeAchat}` : ''}</div>
+        `;
+    }
+
+    if (nodes.ownedDiagnosticBtn) {
+        const hasData = (asset.acquisition?.prix || 0) > 0;
+        nodes.ownedDiagnosticBtn.disabled = !hasData;
+    }
+
+    renderAccordionAcquisition(asset);
+    renderAccordionPostAchat(asset);
+    renderAccordionSimulateur(asset);
+
+    const detail = nodes.ownedDetailView;
+    if (detail && !detail.dataset.accWired) {
+        detail.dataset.accWired = '1';
+        detail.addEventListener('click', e => {
+            const btn = e.target.closest('.owned-accordion__header');
+            if (!btn) return;
+            const key = btn.dataset.acc;
+            const bodyId = `acc-${key}-body`;
+            const body = document.getElementById(bodyId);
+            if (!body) return;
+            const isOpen = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+            body.hidden = isOpen;
+        });
+    }
+}
+
+function renderAccordionAcquisition(asset) {
+    if (!nodes.accAcquisitionContent) return;
+    const acq = asset.acquisition || {};
+    const credit = acq.credit || {};
+
+    const investTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
+    if (nodes.accAcquisitionSummary) {
+        nodes.accAcquisitionSummary.textContent = investTotal > 0
+            ? `${Math.round(investTotal).toLocaleString('fr-FR')} € investis`
+            : '';
+    }
+
+    nodes.accAcquisitionContent.innerHTML = `
+        <div class="owned-form-grid">
+            <label class="variables-field">
+                <span class="variables-label">Prix d'achat (€)</span>
+                <input class="variables-input" type="number" min="0" step="1000" data-acq-field="prix" value="${acq.prix || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Frais d'agence (€)</span>
+                <input class="variables-input" type="number" min="0" step="100" data-acq-field="fraisAgence" value="${acq.fraisAgence || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Frais de notaire (€)</span>
+                <input class="variables-input" type="number" min="0" step="100" data-acq-field="fraisNotaire" value="${acq.fraisNotaire || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Loyer initial (€/mois)</span>
+                <input class="variables-input" type="number" min="0" step="10" data-acq-field="loyerInitial" value="${acq.loyerInitial || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Année d'achat</span>
+                <input class="variables-input" type="number" min="1900" max="2099" step="1" data-owned-field="anneeAchat" value="${asset.anneeAchat || ''}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Ville</span>
+                <input class="variables-input" type="text" data-owned-field="ville" value="${escapeHtml(asset.ville || '')}">
+            </label>
+        </div>
+        <div class="owned-section-title">Crédit immobilier</div>
+        <div class="owned-form-grid">
+            <label class="variables-field">
+                <span class="variables-label">Montant emprunté (€)</span>
+                <input class="variables-input" type="number" min="0" step="1000" data-credit-field="montant" value="${credit.montant || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Durée (ans)</span>
+                <input class="variables-input" type="number" min="0" max="30" step="1" data-credit-field="duree" value="${credit.duree || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Taux (%)</span>
+                <input class="variables-input" type="number" min="0" max="20" step="0.01" data-credit-field="taux" value="${credit.taux || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Assurance (%/an)</span>
+                <input class="variables-input" type="number" min="0" max="5" step="0.01" data-credit-field="assurance" value="${credit.assurance || 0}">
+            </label>
+        </div>
+    `;
+
+    nodes.accAcquisitionContent.addEventListener('change', e => {
+        const input = e.target.closest('input');
+        if (!input) return;
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        const val = input.type === 'number' ? Number(input.value) : input.value;
+        if (input.dataset.acqField) {
+            updateOwnedAcquisition(id, { [input.dataset.acqField]: val });
+        } else if (input.dataset.creditField) {
+            updateOwnedCredit(id, { [input.dataset.creditField]: val });
+        } else if (input.dataset.ownedField) {
+            updateOwnedAsset(id, { [input.dataset.ownedField]: val });
+        }
+        const freshAsset = getOwnedAsset(id);
+        if (!freshAsset) return;
+        const acq2 = freshAsset.acquisition || {};
+        const total2 = (acq2.prix || 0) + (acq2.fraisAgence || 0) + (acq2.fraisNotaire || 0);
+        if (nodes.accAcquisitionSummary) {
+            nodes.accAcquisitionSummary.textContent = total2 > 0 ? `${Math.round(total2).toLocaleString('fr-FR')} € investis` : '';
+        }
+        if (nodes.ownedDetailTitle) {
+            const metaEl = nodes.ownedDetailTitle.querySelector('.owned-detail-title__meta');
+            if (metaEl) metaEl.textContent = `${freshAsset.ville}${freshAsset.anneeAchat ? ` · Acquis ${freshAsset.anneeAchat}` : ''}`;
+        }
+        renderAccordionSimulateur(freshAsset);
+    });
+}
+
+function renderAccordionPostAchat(asset) {
+    if (!nodes.accPostAchatContent) return;
+    const post = asset.postAchat || {};
+
+    const hasUnclassified = (post.travaux || []).some(t => t.tag === 'a-classifier');
+    if (nodes.accPostAchatSummary) {
+        nodes.accPostAchatSummary.textContent = hasUnclassified
+            ? `⚠ ${(post.travaux || []).filter(t => t.tag === 'a-classifier').length} travail(x) à classifier`
+            : post.travaux?.length ? `${post.travaux.length} travail(x)` : '';
+    }
+
+    const TAG_LABELS = { 'deductible': 'Déductible', 'non-deductible': 'Non déductible', 'a-classifier': 'À classifier' };
+    const TAG_CSS = { 'deductible': 'tag--green', 'non-deductible': 'tag--grey', 'a-classifier': 'tag--orange' };
+
+    const currentYear = new Date().getFullYear();
+    const totalDed = (post.travaux || [])
+        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
+        .reduce((s, t) => s + t.montant, 0);
+
+    const sorted = [...(post.travaux || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    nodes.accPostAchatContent.innerHTML = `
+        <div class="owned-section-title">Charges récurrentes</div>
+        <div class="owned-form-grid">
+            <label class="variables-field">
+                <span class="variables-label">Taxe foncière (€/an)</span>
+                <input class="variables-input" type="number" min="0" step="10" data-post-field="taxeFonciere" value="${post.taxeFonciere || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Charges copro (€/mois)</span>
+                <input class="variables-input" type="number" min="0" step="5" data-post-field="chargesCopro" value="${post.chargesCopro || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Gestion locative (% loyer)</span>
+                <input class="variables-input" type="number" min="0" max="20" step="0.5" data-post-field="gestionLocative" value="${post.gestionLocative || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Assurance PNO (€/an)</span>
+                <input class="variables-input" type="number" min="0" step="10" data-post-field="assurancePNO" value="${post.assurancePNO || 0}">
+            </label>
+        </div>
+
+        <div class="owned-section-title">Travaux</div>
+        <div class="owned-travaux-list">
+            ${sorted.length ? sorted.map(t => `
+                <div class="owned-travaux-row">
+                    <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
+                    <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}</span>
+                    <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
+                    <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
+                    <button class="owned-travaux-delete" data-delete-travail="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
+                </div>
+            `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun travail enregistré.</p>'}
+        </div>
+        ${totalDed > 0 ? `<div class="owned-travaux-totals"><span>Déductible ${currentYear} : <strong>${Math.round(totalDed).toLocaleString('fr-FR')} €</strong></span></div>` : ''}
+
+        <form class="owned-travaux-form" data-form="add-travail" novalidate>
+            <input type="date" name="date" class="variables-input" required placeholder="Date" style="flex:0 0 140px">
+            <input type="text" name="description" class="variables-input" required placeholder="Description" style="flex:1;min-width:120px">
+            <input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" style="flex:0 0 100px">
+            <select name="tag" class="variables-input" style="flex:0 0 130px">
+                <option value="a-classifier">À classifier</option>
+                <option value="deductible">Déductible</option>
+                <option value="non-deductible">Non déductible</option>
+            </select>
+            <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
+        </form>
+
+        <div class="owned-section-title" style="margin-top:20px">Notes</div>
+        <div class="owned-notes-list">
+            ${[...(post.notes || [])].reverse().map(n => `
+                <div class="owned-note-entry">
+                    <p class="owned-note-text">${escapeHtml(n.text)}</p>
+                    <span class="owned-note-date">${new Date(n.createdAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+                </div>
+            `).join('') || '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune note.</p>'}
+        </div>
+        <div class="owned-notes-add">
+            <textarea class="variables-input owned-notes-textarea" placeholder="Ajouter une note…" rows="3"></textarea>
+            <button class="btn btn--primary btn--sm" data-action="save-note" type="button">Enregistrer</button>
+        </div>
+    `;
+
+    nodes.accPostAchatContent.querySelectorAll('[data-post-field]').forEach(input => {
+        input.addEventListener('change', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            updateOwnedPostAchat(id, { [input.dataset.postField]: Number(input.value) });
+            renderAccordionSimulateur(getOwnedAsset(id));
+        });
+    });
+
+    nodes.accPostAchatContent.querySelectorAll('[data-delete-travail]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedTravail(id, btn.dataset.deleteTravail);
+            renderAccordionPostAchat(getOwnedAsset(id));
+            renderAccordionSimulateur(getOwnedAsset(id));
+        });
+    });
+
+    nodes.accPostAchatContent.querySelector('[data-form="add-travail"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        addOwnedTravail(id, {
+            date: fd.get('date'),
+            description: fd.get('description')?.trim(),
+            montant: Number(fd.get('montant')),
+            tag: fd.get('tag')
+        });
+        e.target.reset();
+        renderAccordionPostAchat(getOwnedAsset(id));
+        renderAccordionSimulateur(getOwnedAsset(id));
+    });
+
+    nodes.accPostAchatContent.querySelector('[data-action="save-note"]')?.addEventListener('click', () => {
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        const textarea = nodes.accPostAchatContent.querySelector('.owned-notes-textarea');
+        const text = textarea?.value.trim();
+        if (!text) return;
+        addOwnedNote(id, text);
+        if (textarea) textarea.value = '';
+        renderAccordionPostAchat(getOwnedAsset(id));
+    });
+}
+
+function renderAccordionSimulateur(asset) {
+    if (!nodes.accSimulateurContent) return;
+    const tmi = getOwnedTmi();
+    const scenarios = asset.scenarios || [];
+
+    if (nodes.accSimulateurSummary) {
+        nodes.accSimulateurSummary.textContent = `${scenarios.length} scénario${scenarios.length > 1 ? 's' : ''}`;
+    }
+
+    const VARS = [
+        { key: 'loyer', label: 'Loyer (€/mois)', type: 'number', step: 10, min: 0 },
+        { key: 'taxeFonciere', label: 'Taxe foncière (€/an)', type: 'number', step: 10, min: 0 },
+        { key: 'vacance', label: 'Vacance (%)', type: 'number', step: 1, min: 0, max: 100 },
+        { key: 'chargesCopro', label: 'Charges copro (€/mois)', type: 'number', step: 5, min: 0 },
+        { key: 'regime', label: 'Régime fiscal', type: 'select', options: [
+            { value: 'micro-foncier', label: 'Micro-foncier' },
+            { value: 'reel', label: 'Réel' },
+            { value: 'sci-is', label: 'SCI-IS' }
+        ]},
+    ];
+
+    const results = scenarios.map(sc => computeOwnedAssetCF(asset, sc.variables, tmi));
+
+    function cellInput(sc, varDef) {
+        const val = sc.variables[varDef.key] ?? '';
+        const isRealiste = sc.id === 'realiste';
+        const cls = isRealiste ? 'col-realiste' : '';
+        if (varDef.type === 'select') {
+            return `<td class="${cls}">
+                <select data-sc-id="${escapeHtml(sc.id)}" data-var-key="${escapeHtml(varDef.key)}">
+                    ${varDef.options.map(o => `<option value="${o.value}" ${val === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+                </select>
+            </td>`;
+        }
+        return `<td class="${cls}">
+            <input type="number" min="${varDef.min ?? ''}" max="${varDef.max ?? ''}" step="${varDef.step}"
+                value="${val}" data-sc-id="${escapeHtml(sc.id)}" data-var-key="${escapeHtml(varDef.key)}">
+        </td>`;
+    }
+
+    nodes.accSimulateurContent.innerHTML = `
+        <div class="owned-simulator-table-wrap">
+            <table class="owned-simulator-table">
+                <thead>
+                    <tr>
+                        <th class="col-var">Variable</th>
+                        ${scenarios.map(sc => `
+                            <th class="${sc.id === 'realiste' ? 'col-realiste' : ''}">
+                                <input type="text" value="${escapeHtml(sc.nom)}"
+                                    data-sc-nom="${escapeHtml(sc.id)}"
+                                    style="background:transparent;border:none;color:inherit;font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;width:90px;text-align:center;cursor:text"
+                                    title="Renommer le scénario">
+                                ${scenarios.length > 1 ? `<button class="owned-sim-delete-sc" data-sc-id="${escapeHtml(sc.id)}" title="Supprimer" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:.7rem;padding:0 2px">✕</button>` : ''}
+                            </th>
+                        `).join('')}
+                        <th><button class="owned-sim-add-btn" type="button">+ Scénario</button></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${VARS.map(v => `
+                    <tr>
+                        <td class="col-var">${escapeHtml(v.label)}</td>
+                        ${scenarios.map(sc => cellInput(sc, v)).join('')}
+                        <td></td>
+                    </tr>
+                    `).join('')}
+                    <tr class="row-result">
+                        <td class="col-var">CF net-net / mois</td>
+                        ${scenarios.map((sc, i) => {
+                            const r = results[i];
+                            const cf = r.cfNetNet;
+                            const color = cf >= 0 ? '#3FB950' : '#F85149';
+                            return `<td class="${sc.id === 'realiste' ? 'col-realiste' : ''}" style="color:${color}">
+                                ${cf >= 0 ? '+' : ''}${Math.round(cf).toLocaleString('fr-FR')} €
+                            </td>`;
+                        }).join('')}
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="owned-sim-hint">Variables non renseignées → valeurs héritées de Acquisition et Post-achat</p>
+    `;
+
+    nodes.accSimulateurContent.querySelectorAll('[data-sc-id][data-var-key]').forEach(input => {
+        input.addEventListener('change', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            const val = input.tagName === 'SELECT' ? input.value : Number(input.value);
+            updateOwnedScenarioVar(id, input.dataset.scId, input.dataset.varKey, val);
+            renderAccordionSimulateur(getOwnedAsset(id));
+        });
+    });
+
+    nodes.accSimulateurContent.querySelectorAll('[data-sc-nom]').forEach(input => {
+        input.addEventListener('change', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            updateOwnedScenarioNom(id, input.dataset.scNom, input.value.trim() || 'Sans nom');
+        });
+    });
+
+    nodes.accSimulateurContent.querySelector('.owned-sim-add-btn')?.addEventListener('click', () => {
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        addOwnedScenario(id);
+        renderAccordionSimulateur(getOwnedAsset(id));
+    });
+
+    nodes.accSimulateurContent.querySelectorAll('.owned-sim-delete-sc').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedScenario(id, btn.dataset.scId);
+            renderAccordionSimulateur(getOwnedAsset(id));
+        });
+    });
+}
+
+async function callOwnedDiagnosticIA(assetId) {
+    const asset = getOwnedAsset(assetId);
+    if (!asset) return;
+    const tmi = getOwnedTmi();
+
+    const scenarios = asset.scenarios.map(sc => {
+        const r = computeOwnedAssetCF(asset, sc.variables, tmi);
+        return { nom: sc.nom, cfNetNet: Math.round(r.cfNetNet) };
+    });
+
+    const payload = {
+        bien: {
+            nom: asset.nom,
+            ville: asset.ville,
+            anneeAchat: asset.anneeAchat,
+            acquisition: asset.acquisition,
+            postAchat: {
+                taxeFonciere: asset.postAchat?.taxeFonciere,
+                chargesCopro: asset.postAchat?.chargesCopro,
+                travaux: (asset.postAchat?.travaux || []).map(t => ({
+                    date: t.date, description: t.description, montant: t.montant, tag: t.tag
+                })),
+                notes: (asset.postAchat?.notes || []).map(n => ({ text: n.text }))
+            },
+            scenarios,
+            profilFiscal: { tmi }
+        }
+    };
+
+    if (!nodes.ownedAiDrawer || !nodes.ownedAiOverlay || !nodes.ownedAiDrawerContent) return;
+
+    nodes.ownedAiDrawerContent.innerHTML = `<p style="color:var(--text-secondary);text-align:center;padding:24px">Analyse en cours…</p>`;
+    nodes.ownedAiDrawer.hidden = false;
+    nodes.ownedAiOverlay.hidden = false;
+
+    try {
+        const resp = await fetch('/api/portfolio-diagnostic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+            nodes.ownedAiDrawerContent.innerHTML = `<p style="color:#F85149;padding:16px">${escapeHtml(data.error || 'Erreur inconnue')}</p>`;
+            return;
+        }
+
+        const recs = data.recommendations || [];
+        const now = new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+        nodes.ownedAiDrawerContent.innerHTML = `
+            <p style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:16px">Analyse du ${now}</p>
+            ${recs.map((r, i) => `
+                <div style="border:1px solid var(--border-subtle);border-radius:8px;padding:14px;margin-bottom:10px">
+                    <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:6px">${i + 1}. ${escapeHtml(r.title)}</div>
+                    <p style="font-size:.83rem;color:var(--text-secondary);line-height:1.5;margin:0 0 8px">${escapeHtml(r.explanation)}</p>
+                    <div style="font-size:.78rem;color:var(--accent-gold,#C5A059)">→ ${escapeHtml(r.action)}</div>
+                </div>
+            `).join('')}
+        `;
+
+        updateOwnedAsset(assetId, { lastDiagnostic: { date: new Date().toISOString(), recommendations: recs } });
+
+    } catch (err) {
+        nodes.ownedAiDrawerContent.innerHTML = `<p style="color:#F85149;padding:16px">Erreur réseau : ${escapeHtml(err.message)}</p>`;
+    }
+}
+
 function renderCollections() {
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
         return;
     }
-
     nodes.collectionPanel.hidden = false;
-    const collectionsView = buildCollectionsView();
-    buildPortfolioSimulator(collectionsView);
-    buildPortfolioKpiBanner(collectionsView);
-    const advice = computePortfolioAdvice(
-        collectionsView.portfolioItems,
-        state.profileData,
-        collectionsView.capacity,
-        loadAssetMeta()
-    );
-    buildPortfolioDashboardZone(collectionsView, advice);
-    buildPortfolioAdviceZone(advice);
-    buildPortfolioFiches(collectionsView, advice, loadAssetMeta());
-    buildPortfolioPipelineZone(collectionsView);
-    buildPortfolioHero(collectionsView);
-    buildCollectionMetricCards(collectionsView.dashboard);
-    buildPortfolioAssetGrid(collectionsView);
-    if (nodes.portfolioAiTrigger) {
-        nodes.portfolioAiTrigger.disabled = collectionsView.portfolioItems.length === 0;
+
+    if (state.activeOwnedAssetId) {
+        if (nodes.ownedListView) nodes.ownedListView.hidden = true;
+        if (nodes.ownedDetailView) nodes.ownedDetailView.hidden = false;
+        renderOwnedDetail();
+    } else {
+        if (nodes.ownedListView) nodes.ownedListView.hidden = false;
+        if (nodes.ownedDetailView) nodes.ownedDetailView.hidden = true;
+        renderOwnedPortfolioList();
     }
 }
 
@@ -4441,7 +5256,6 @@ function render(options = {}) {
 
     renderWorkspaceContent();
     renderModalState();
-    calculateFeasibilityStrategy();
 }
 
 function debounce(callback, delay = 250) {
@@ -4695,11 +5509,8 @@ function initWorkspaceTabs() {
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
     const scannerPanel = document.getElementById('scanner-panel');
-    const feasibilityPanel = document.getElementById('feasibility-panel');
-
     collectionPanel.style.display = 'none';
     if (scannerPanel) scannerPanel.style.display = 'none';
-    if (feasibilityPanel) feasibilityPanel.style.display = 'none';
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -4709,7 +5520,6 @@ function initWorkspaceTabs() {
             workspacePanel.style.display = 'none';
             collectionPanel.style.display = 'none';
             if (scannerPanel) scannerPanel.style.display = 'none';
-            if (feasibilityPanel) feasibilityPanel.style.display = 'none';
 
             if (target === 'collection-panel') {
                 collectionPanel.style.display = '';
@@ -4720,12 +5530,6 @@ function initWorkspaceTabs() {
                     scannerPanel.style.display = '';
                     scannerPanel.style.animation = 'tabFadeIn 200ms ease-out';
                     onScannerTabActivated();
-                }
-            } else if (target === 'feasibility-panel') {
-                if (feasibilityPanel) {
-                    feasibilityPanel.style.display = '';
-                    feasibilityPanel.style.animation = 'tabFadeIn 200ms ease-out';
-                    calculateFeasibilityStrategy();
                 }
             } else {
                 workspacePanel.style.display = '';
@@ -4751,96 +5555,6 @@ function initAccordion() {
             }
         });
     });
-}
-
-function calculateFeasibilityStrategy() {
-    const variablesData = state.variablesData || {};
-    const tmi = state.profileData ? (state.profileData.tmi || 30) : 30;
-
-    const targetCF = parseFloat(document.getElementById('feasibility-target-cf')?.value) || 0;
-    const prixMaxEl = document.getElementById('feasibility-prix-max');
-    const loyerMinEl = document.getElementById('feasibility-loyer-min');
-    if (!prixMaxEl || !loyerMinEl) return;
-
-    const loyerEstime = parseFloat(document.getElementById('feasibility-loyer-estime')?.value) || 0;
-
-    const agence = variablesData.agence || 0;
-    const inputs = { ...variablesData };
-
-    // Recherche dichotomique : prix max pour atteindre targetCF avec loyerEstime
-    let minPrice = 1; let maxPrice = 2000000; let bestPrice = 0;
-    const cfAtMin = computeCFForFeasibility(1, loyerEstime, inputs, tmi);
-    if (cfAtMin < targetCF) {
-        prixMaxEl.textContent = 'Impossible pour ce niveau de loyer';
-        prixMaxEl.className = 'feasibility-result-value feasibility-result-value--impossible';
-    } else {
-        for (let i = 0; i < 50; i++) {
-            const mid = (minPrice + maxPrice) / 2;
-            if (computeCFForFeasibility(mid, loyerEstime, inputs, tmi) >= targetCF) {
-                bestPrice = mid; minPrice = mid;
-            } else { maxPrice = mid; }
-        }
-        const prixFaiMax = bestPrice + agence;
-        prixMaxEl.textContent = Math.round(prixFaiMax).toLocaleString('fr-FR') + ' €';
-        prixMaxEl.className = 'feasibility-result-value feasibility-result-value--positive';
-    }
-
-    // Recherche dichotomique : loyer min pour atteindre targetCF avec prixAnnonce
-    const prixAnnonceFai = parseFloat(document.getElementById('feasibility-prix-annonce')?.value) || 0;
-    const prixNetVendeur = prixAnnonceFai - agence;
-
-    if (computeCFForFeasibility(prixNetVendeur, 10000, inputs, tmi) < targetCF) {
-        loyerMinEl.textContent = 'Impossible avec ce prix';
-        loyerMinEl.className = 'feasibility-result-value feasibility-result-value--impossible';
-    } else {
-        let minRent = 1; let maxRent = 10000; let bestRent = 10000;
-        for (let i = 0; i < 50; i++) {
-            const mid = (minRent + maxRent) / 2;
-            if (computeCFForFeasibility(prixNetVendeur, mid, inputs, tmi) >= targetCF) {
-                bestRent = mid; maxRent = mid;
-            } else { minRent = mid; }
-        }
-        loyerMinEl.textContent = Math.round(bestRent).toLocaleString('fr-FR') + ' €/mois';
-        loyerMinEl.className = 'feasibility-result-value feasibility-result-value--positive';
-    }
-}
-
-function computeCFForFeasibility(prixNet, loyer, inputs, tmi) {
-    const notaire = prixNet * ((inputs.notaire || 7.5) / 100);
-    const fraisFixes = (inputs.agence || 0) + (inputs.travaux || 0) + (inputs.meubles || 0) + (inputs['frais-bancaires'] || 0);
-    const coutTotal = prixNet + notaire + fraisFixes;
-    const montantFinance = Math.max(0, coutTotal - (inputs.apport || 0));
-
-    const nMois = (inputs.duree || 20) * 12;
-    const tauxMensuel = ((inputs['taux-input'] || 3.5) / 100) / 12;
-    let mensualiteCredit = 0;
-    if (tauxMensuel > 0 && nMois > 0) {
-        mensualiteCredit = (montantFinance * tauxMensuel) / (1 - Math.pow(1 + tauxMensuel, -nMois));
-    } else if (nMois > 0) {
-        mensualiteCredit = montantFinance / nMois;
-    }
-    const mensualiteAssurance = (montantFinance * ((inputs.assurance || 0.25) / 100)) / 12;
-    const mensualiteTotale = mensualiteCredit + mensualiteAssurance;
-
-    const vacance = (inputs.vacance || 5) / 100;
-    const loyersEncaisses = loyer * 12 * (1 - vacance);
-    const charges = (inputs.copro || 0) * 12 + (inputs.fonciere || 0) + (inputs.pno || 0) + loyersEncaisses * ((inputs.gestion || 0) / 100);
-
-    const interets1an = montantFinance * tauxMensuel * 12;
-    let impots = 0;
-    const regime = inputs.regime || 'micro-foncier';
-    if (regime === 'micro-foncier') {
-        impots = loyersEncaisses * 0.7 * ((tmi / 100) + 0.172);
-    } else if (regime === 'reel') {
-        const revNets = Math.max(0, loyersEncaisses - charges - mensualiteAssurance * 12 - interets1an - (inputs.travaux || 0) - (inputs['frais-bancaires'] || 0));
-        impots = revNets * ((tmi / 100) + 0.172);
-    } else if (regime === 'sci-is') {
-        const amort = prixNet * 0.80 / 30;
-        const benefice = loyersEncaisses - charges - mensualiteAssurance * 12 - interets1an - amort;
-        if (benefice > 0) impots = Math.min(benefice, 42500) * 0.15 + Math.max(0, benefice - 42500) * 0.25;
-    }
-
-    return (loyersEncaisses / 12) - mensualiteTotale - (charges / 12) - (impots / 12);
 }
 
 // Synchronisation sliders
@@ -4888,18 +5602,13 @@ initWorkspaceTabs();
 _initAnalysisViewToggle();
 initScanner({ saveCurrentStudy });
 initPortfolioAiDiagnostic();
+initOwnedPortfolioEvents();
 if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
     setTimeout(() => openProfileModal(), 400);
 }
 initAccordion();
 initTutoBar();
 initSliders();
-
-// Event listeners faisabilité
-['feasibility-target-cf', 'feasibility-loyer-estime', 'feasibility-prix-annonce'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', calculateFeasibilityStrategy);
-});
 
 // Modal régimes fiscaux
 const btnRegimeModal = document.getElementById('btn-regime-modal');

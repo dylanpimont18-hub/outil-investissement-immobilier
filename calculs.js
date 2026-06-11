@@ -51,14 +51,17 @@ function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationA
 
         const soldeHorsInterets = loyersEncaisses - chargesAnnuelles;
         if (soldeHorsInterets < 0) {
+            // Déficit hors intérêts : imputable sur revenu global (plafond 10 700 €), excès reportable
+            // Déficit dû aux intérêts : non imputable sur revenu global, mais reportable sur revenus fonciers (art. 156 I CGI)
             const deductibleNow = Math.min(10700, Math.abs(soldeHorsInterets));
-            const addedCarry = Math.max(0, Math.abs(soldeHorsInterets) - 10700);
+            const addedCarry = Math.max(0, Math.abs(soldeHorsInterets) - 10700) + interestYear;
             return {
-                tax: -(deductibleNow * (tmi / 100)), // imputation sur l'IR uniquement (art. 156 CGI), pas sur les PS
+                tax: -(deductibleNow * (tmi / 100)),
                 newCarryForward: carryForwardDeficit + addedCarry
             };
         }
-        return { tax: 0, newCarryForward: carryForwardDeficit };
+        // soldeHorsInterets >= 0 mais revenusNets <= 0 : déficit entièrement dû aux intérêts — reportable
+        return { tax: 0, newCarryForward: carryForwardDeficit + Math.abs(revenusNets) };
     }
 
     if (inputs['regime'] === 'sci-is') {
@@ -73,7 +76,7 @@ function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationA
     return { tax: 0, newCarryForward: 0 };
 }
 
-function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
+export function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
     const fraisNotaire = prixNet * (inputs['notaire'] / 100);
     const fraisFixes = inputs['agence'] + inputs['travaux'] + inputs['meubles'] + inputs['frais-bancaires'];
     const coutTotal = prixNet + fraisNotaire + fraisFixes;
@@ -143,6 +146,44 @@ export function computeCF(prixVendeur, loyerMensuel, inputs, tmi) {
     return model.cfNetNet;
 }
 
+// CF mensuel moyen sur 3 ans (durée minimale d'engagement du régime réel)
+// Prend en compte : décroissance des intérêts, one-off charges an 1 seulement, report de déficit foncier
+function computeAvgCF3Y(prixNet, loyerMensuel, inputs, tmi) {
+    const model = buildFinancialModel(prixNet, loyerMensuel, inputs, tmi);
+    const nMois = Math.max(0, Math.round((inputs['duree'] || 0) * 12));
+    const tauxMensuel = (inputs['taux-input'] / 100) / 12;
+    let remainingCapital = model.montantFinance;
+    let totalAnnualCF = 0;
+    let carryForward = 0;
+
+    for (let year = 1; year <= 3; year++) {
+        let interestYear = 0;
+        let insuranceYear = 0;
+        let debtServiceYear = 0;
+
+        for (let month = 0; month < 12; month++) {
+            const monthIndex = ((year - 1) * 12) + month;
+            if (monthIndex >= nMois || remainingCapital <= 0) break;
+            const interestMonth = tauxMensuel > 0 ? remainingCapital * tauxMensuel : 0;
+            let principalMonth = tauxMensuel > 0 ? model.mensualiteCredit - interestMonth : model.mensualiteCredit;
+            principalMonth = Math.max(0, Math.min(remainingCapital, principalMonth));
+            interestYear += interestMonth;
+            insuranceYear += model.coutAssuranceMensuel;
+            debtServiceYear += model.mensualiteCredit + model.coutAssuranceMensuel;
+            remainingCapital = Math.max(0, remainingCapital - principalMonth);
+        }
+
+        const taxResult = computeAnnualTaxEstimate(
+            model.prixNet, model.loyersEncaisses, model.chargesExploitationAnnuelles,
+            inputs, tmi, interestYear, insuranceYear, year, carryForward
+        );
+        totalAnnualCF += model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxResult.tax;
+        carryForward = taxResult.newCarryForward;
+    }
+
+    return (totalAnnualCF / 3) / 12;
+}
+
 // --- MÉTRIQUES PROJET (pour comparateur) ---
 export function computeProjectMetrics(projectData) {
     const inputs = projectData;
@@ -163,11 +204,11 @@ export function computeProjectMetrics(projectData) {
     const grm = loyersAnnuelsTheoriques > 0 ? coutTotal / loyersAnnuelsTheoriques : Infinity;
     const dscr = (mensualiteTotale * 12) > 0 ? (loyersEncaisses - chargesExploitationAnnuelles) / (mensualiteTotale * 12) : 0;
 
-    const cfMicro = computeCF(prixNet, loyer, Object.assign({}, inputs, { regime: 'micro-foncier' }), tmi);
-    const cfReel  = computeCF(prixNet, loyer, Object.assign({}, inputs, { regime: 'reel' }), tmi);
-    const cfSciIs = computeCF(prixNet, loyer, Object.assign({}, inputs, { regime: 'sci-is' }), tmi);
-    const maxCf = Math.max(cfMicro, cfReel, cfSciIs);
-    const bestRegime = maxCf === cfMicro ? 'Micro-foncier' : (maxCf === cfReel ? 'Foncier réel' : 'SCI à l\'IS');
+    const cfMicro3Y = computeAvgCF3Y(prixNet, loyer, Object.assign({}, inputs, { regime: 'micro-foncier' }), tmi);
+    const cfReel3Y  = computeAvgCF3Y(prixNet, loyer, Object.assign({}, inputs, { regime: 'reel' }), tmi);
+    const cfSciIs3Y = computeAvgCF3Y(prixNet, loyer, Object.assign({}, inputs, { regime: 'sci-is' }), tmi);
+    const maxCf3Y = Math.max(cfMicro3Y, cfReel3Y, cfSciIs3Y);
+    const bestRegime = maxCf3Y === cfMicro3Y ? 'Micro-foncier' : (maxCf3Y === cfReel3Y ? 'Foncier réel' : 'SCI à l\'IS');
 
     let pts = 0;
     if (cfNetNet >= 300) pts += 3; else if (cfNetNet >= 100) pts += 2; else if (cfNetNet >= 0) pts += 1;
@@ -800,9 +841,10 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     }
 
     if (regimeGap > 25) {
+        const engagementNote = bestRegime?.id === 'reel' ? ' (engagement 3 ans)' : '';
         blockers.push({
             label: 'Montage fiscal perfectible',
-            detail: `${Math.round(regimeGap)} € / mois sont encore disponibles via ${bestRegime.label}.`
+            detail: `${Math.round(regimeGap)} € / mois sont encore disponibles via ${bestRegime.label}${engagementNote}.`
         });
     }
 
@@ -979,13 +1021,17 @@ function buildActionLevers(sensitivity, regimeComparison) {
     const bestRegime = regimeComparison[0] || currentRegime;
     const levers = [];
 
-    if (bestRegime && currentRegime && bestRegime.id !== currentRegime.id && bestRegime.cfNetNet > currentRegime.cfNetNet + 1) {
-        levers.push({
+    if (bestRegime && currentRegime && bestRegime.id !== currentRegime.id && (bestRegime.cfAvg3Y ?? bestRegime.cfNetNet) > (currentRegime.cfAvg3Y ?? currentRegime.cfNetNet) + 1) {
+        const lever = {
             label: `Basculer en ${bestRegime.label}`,
             category: 'Fiscalité',
             delta: bestRegime.cfNetNet - currentRegime.cfNetNet,
             nextCf: bestRegime.cfNetNet
-        });
+        };
+        if (bestRegime.id === 'reel') {
+            lever.note = 'Engagement irrévocable sur 3 exercices fiscaux (art. 32 CGI)';
+        }
+        levers.push(lever);
     }
 
     return [
@@ -1009,6 +1055,7 @@ function buildTenYearProjection(model, inputs, tmi) {
     let remainingCapital = model.montantFinance;
     let cumulativeCashflow = 0;
     let cumulativePrincipal = 0;
+    let carryForwardDeficit = 0;
     const years = [];
 
     for (let year = 1; year <= horizonYears; year++) {
@@ -1042,9 +1089,10 @@ function buildTenYearProjection(model, inputs, tmi) {
             tmi,
             interestYear,
             insuranceYear,
-            year
-            // carryForwardDeficit non passé : projection indicative, déficit non reporté entre années
+            year,
+            carryForwardDeficit
         );
+        carryForwardDeficit = taxResult.newCarryForward;
         const annualCashflow = model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxResult.tax;
 
         cumulativeCashflow += annualCashflow;
@@ -1083,7 +1131,7 @@ function buildTenYearProjection(model, inputs, tmi) {
 const _matrixCache = { key: null, data: null };
 
 function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, thresholds) {
-    const cacheKey = `${prixNet}|${loyer}|${adults}|${children}|${inputs['revenus']}|${inputs['taux']}|${inputs['duree']}|${inputs['regime']}|${inputs['nego']}|${inputs['apport']}|${inputs['taxe-fonciere']}|${inputs['charges-copro']}|${inputs['assurance-pno']}|${inputs['vacance']}|${inputs['frais-bancaires']}|${thresholds.minCf}|${thresholds.minDscr}`;
+    const cacheKey = `${prixNet}|${loyer}|${adults}|${children}|${inputs['revenus']}|${inputs['taux-input']}|${inputs['duree']}|${inputs['regime']}|${inputs['nego']}|${inputs['apport']}|${inputs['fonciere']}|${inputs['copro']}|${inputs['pno']}|${inputs['vacance']}|${inputs['frais-bancaires']}|${thresholds.minCf}|${thresholds.minDscr}`;
     if (_matrixCache.key === cacheKey) return _matrixCache.data;
 
     const priceOffsets = [-10000, -5000, 0, 5000, 10000];
@@ -1199,9 +1247,10 @@ export function computeAnalysisViewModel(projectData) {
             id: regime,
             label: REGIME_LABELS[regime],
             cfNetNet: computeCF(prixNet, loyer, { ...inputs, regime }, tmi),
+            cfAvg3Y: computeAvgCF3Y(prixNet, loyer, { ...inputs, regime }, tmi),
             isCurrent: inputs['regime'] === regime
         }))
-        .sort((left, right) => right.cfNetNet - left.cfNetNet);
+        .sort((left, right) => right.cfAvg3Y - left.cfAvg3Y);
 
     const sensitivity = [
         { label: 'Référence actuelle', data: { ...inputs } },
@@ -1672,7 +1721,7 @@ function getResaleAbatementsYears(year) {
     let ir = 0;
     if (y <= 5) ir = 0;
     else if (y <= 21) ir = (y - 5) * 0.06;
-    else if (y === 22) ir = 0.98;
+    else if (y === 22) ir = 1.0;
     else ir = 1;
 
     let ps = 0;
@@ -1760,4 +1809,56 @@ export function computeResaleTimeline(prixNet, capitalRestantSeries, cfCumuleSer
     }
 
     return { rows, firstInterestingYear, bestYear, bestGain };
+}
+
+export function computeOwnedAssetCF(asset, scenario, tmi) {
+    const acq = asset.acquisition || {};
+    const post = asset.postAchat || {};
+    const credit = acq.credit || {};
+
+    const travauxMensualites = (post.travaux || []).reduce((sum, t) => {
+        if (!t.credit) return sum;
+        const tc = t.credit;
+        const nM = (tc.duree || 0) * 12;
+        const tM = ((tc.taux || 0) / 100) / 12;
+        if (nM <= 0) return sum;
+        const m = tM > 0 ? (tc.montant * tM) / (1 - Math.pow(1 + tM, -nM)) : tc.montant / nM;
+        return sum + m;
+    }, 0);
+
+    const inputs = {
+        'taux-input': credit.taux || 0,
+        'duree': credit.duree || 0,
+        'assurance': credit.assurance || 0,
+        'apport': 0,
+        'notaire': 0,
+        'agence': 0,
+        'travaux': 0,
+        'meubles': 0,
+        'frais-bancaires': 0,
+        'vacance': scenario.vacance ?? 5,
+        'copro': scenario.chargesCopro ?? post.chargesCopro ?? 0,
+        'fonciere': scenario.taxeFonciere ?? post.taxeFonciere ?? 0,
+        'pno': post.assurancePNO ?? 0,
+        'gestion': post.gestionLocative ?? 0,
+        'regime': scenario.regime || 'micro-foncier',
+    };
+
+    const loyer = scenario.loyer ?? acq.loyerInitial ?? 0;
+    const montantCredit = credit.montant || 0;
+    const model = buildFinancialModel(montantCredit, loyer, inputs, tmi);
+
+    const investissementTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
+    const rentaBrute = investissementTotal > 0 ? ((loyer * 12) / investissementTotal) * 100 : 0;
+    const dscr = model.mensualiteTotale > 0 ? (model.loyersEncaisses / 12) / model.mensualiteTotale : 0;
+
+    return {
+        cfNetNet: model.cfNetNet - travauxMensualites,
+        mensualiteTotale: model.mensualiteTotale + travauxMensualites,
+        chargesMensuelles: (model.chargesExploitationAnnuelles / 12) + travauxMensualites,
+        impotsAnnee: model.impotsAnnee,
+        loyerEffectif: model.loyersEncaisses / 12,
+        rentaBrute,
+        dscr,
+    };
 }
