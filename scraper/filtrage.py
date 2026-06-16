@@ -8,7 +8,7 @@ Tri des annonces selon 3 cas mutuellement exclusifs :
 import sqlite3
 
 from fingerprint import make_fingerprint
-from utils import url_existe, fingerprint_existe, inserer_bien, maj_prix_si_change
+from utils import url_existe, fingerprint_existe, maj_prix_si_change, marquer_bien_vu
 
 
 def filtrer_nouvelles_annonces(
@@ -29,30 +29,39 @@ def filtrer_nouvelles_annonces(
         "nouvelles":    0,
         "prix_changes": 0,
     }
+    seen_fingerprints: set[str] = set()
 
-    for annonce in annonces:
-        url   = annonce.get("url", "")
-        prix  = int(annonce.get("prix") or 0)
-        fp    = make_fingerprint(annonce)
+    with conn:
+        for annonce in annonces:
+            url   = annonce.get("url", "")
+            prix  = int(annonce.get("prix") or 0)
+            fp    = make_fingerprint(annonce)
 
-        # Cas 1 — URL déjà en base
-        bien = url_existe(url, conn)
-        if bien:
-            if maj_prix_si_change(bien, prix, conn):
-                stats["prix_changes"] += 1
-            stats["connues_url"] += 1
-            continue
+            # Cas 1 — URL déjà en base
+            bien = url_existe(url, conn)
+            if bien:
+                if maj_prix_si_change(bien, prix, conn, commit=False):
+                    stats["prix_changes"] += 1
+                stats["connues_url"] += 1
+                continue
 
-        # Cas 2 — Même bien, URL différente (doublon cross-site)
-        doublon = fingerprint_existe(fp, conn)
-        if doublon:
-            stats["doublons_fp"] += 1
-            continue
+            # Cas 2 — Même bien, URL différente (doublon cross-site)
+            doublon = fingerprint_existe(fp, conn)
+            if doublon:
+                marquer_bien_vu(doublon["id"], conn, commit=False)
+                stats["doublons_fp"] += 1
+                continue
 
-        # Cas 3 — Nouveau bien
-        annonce = dict(annonce)
-        annonce["_fingerprint"] = fp
-        nouvelles.append(annonce)
-        stats["nouvelles"] += 1
+            # Même lot de scan : éviter une seconde insertion avant que la DB ne voie le premier insert.
+            if fp in seen_fingerprints:
+                stats["doublons_fp"] += 1
+                continue
+
+            # Cas 3 — Nouveau bien
+            annonce = dict(annonce)
+            annonce["_fingerprint"] = fp
+            nouvelles.append(annonce)
+            seen_fingerprints.add(fp)
+            stats["nouvelles"] += 1
 
     return nouvelles, stats

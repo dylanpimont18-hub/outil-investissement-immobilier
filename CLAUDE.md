@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Navigation
+
+`CODEBASE_MAP.md` à la racine liste le rôle et les fonctions clés de chaque fichier source. Consulte-le pour savoir où écrire avant d'ouvrir un fichier.
+
+**Règle de mise à jour :** à la fin de chaque tâche où tu as modifié des fichiers, mets à jour les entrées correspondantes dans `CODEBASE_MAP.md` (uniquement les fichiers modifiés). Si tu as ajouté une nouvelle fonction ou supprimé une existante, reflète-le dans la liste de ce fichier.
+
 ## Project Overview
 
 A desktop application for real estate investment analysis (French language). The app is packaged as a Windows `.exe` via PyInstaller. It uses a local Flask server + PyWebView window — no external server, no internet required for the UI.

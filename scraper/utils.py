@@ -21,20 +21,27 @@ def fingerprint_existe(fp: str, conn: sqlite3.Connection) -> sqlite3.Row | None:
 
 # ── Insertion ────────────────────────────────────────────────────────────────
 
-def inserer_bien(annonce: dict, fingerprint: str, conn: sqlite3.Connection) -> int:
+def inserer_bien(
+    annonce: dict,
+    fingerprint: str,
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
+) -> int:
     """Insère un bien dans la table biens et retourne son id."""
     maintenant = _now()
     cur = conn.execute(
         """INSERT INTO biens
-           (fingerprint, site, url, titre, prix, surface, type_bien,
+           (fingerprint, site, url, titre, description, prix, surface, type_bien,
             ville, code_postal, dpe, source_scrape,
             date_premiere_vue, date_derniere_vue)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             fingerprint,
             annonce.get("site", ""),
             annonce.get("url", ""),
             annonce.get("titre"),
+            annonce.get("description") or "",
             annonce.get("prix"),
             annonce.get("surface"),
             annonce.get("type_bien"),
@@ -46,11 +53,18 @@ def inserer_bien(annonce: dict, fingerprint: str, conn: sqlite3.Connection) -> i
             maintenant,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return cur.lastrowid
 
 
-def inserer_annonce(bien_id: int, enrichie: dict, conn: sqlite3.Connection) -> int:
+def inserer_annonce(
+    bien_id: int,
+    enrichie: dict,
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
+) -> int:
     """Insère les données enrichies (IA + calculs) dans la table annonces."""
     cur = conn.execute(
         """INSERT INTO annonces
@@ -98,39 +112,119 @@ def inserer_annonce(bien_id: int, enrichie: dict, conn: sqlite3.Connection) -> i
             _now(),
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return cur.lastrowid
+
+
+def maj_description_bien(
+    bien_id: int,
+    description: str,
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
+) -> None:
+    """Met à jour le contenu brut d'un bien déjà stocké."""
+    conn.execute(
+        "UPDATE biens SET description = ? WHERE id = ?",
+        (description, bien_id),
+    )
+    if commit:
+        conn.commit()
 
 
 # ── Mise à jour ───────────────────────────────────────────────────────────────
 
-def maj_prix_si_change(bien_row: sqlite3.Row, nouveau_prix: int, conn: sqlite3.Connection) -> bool:
+def marquer_bien_vu(
+    bien_id: int,
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
+) -> None:
+    conn.execute(
+        "UPDATE biens SET date_derniere_vue = ?, missing_scan_count = 0 WHERE id = ?",
+        (_now(), bien_id),
+    )
+    if commit:
+        conn.commit()
+
+
+def maj_prix_si_change(
+    bien_row: sqlite3.Row,
+    nouveau_prix: int,
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
+) -> bool:
     """Met à jour le prix et logue l'historique si le prix a changé. Retourne True si changement."""
     if bien_row["prix"] == nouveau_prix:
-        conn.execute(
-            "UPDATE biens SET date_derniere_vue = ? WHERE id = ?",
-            (_now(), bien_row["id"]),
-        )
-        conn.commit()
+        marquer_bien_vu(bien_row["id"], conn, commit=commit)
         return False
 
     conn.execute(
-        "UPDATE biens SET prix = ?, date_derniere_vue = ? WHERE id = ?",
+        "UPDATE biens SET prix = ?, date_derniere_vue = ?, missing_scan_count = 0 WHERE id = ?",
         (nouveau_prix, _now(), bien_row["id"]),
     )
-    log_historique_prix(bien_row["id"], bien_row["prix"], nouveau_prix, conn)
+    log_historique_prix(bien_row["id"], bien_row["prix"], nouveau_prix, conn, commit=False)
+    if commit:
+        conn.commit()
     return True
 
 
+def incrementer_scans_manques(
+    code_postal: str,
+    seen_urls: set[str],
+    seen_fingerprints: set[str],
+    active_sources: set[str],
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
+) -> int:
+    if not code_postal or not active_sources:
+        return 0
+
+    query_parts = [
+        "UPDATE biens",
+        "SET missing_scan_count = COALESCE(missing_scan_count, 0) + 1",
+        "WHERE code_postal = ?",
+    ]
+    params: list[object] = [code_postal]
+
+    source_placeholders = ", ".join("?" for _ in active_sources)
+    query_parts.append(f"AND COALESCE(source_scrape, site) IN ({source_placeholders})")
+    params.extend(sorted(active_sources))
+
+    if seen_urls:
+        url_placeholders = ", ".join("?" for _ in seen_urls)
+        query_parts.append(f"AND url NOT IN ({url_placeholders})")
+        params.extend(sorted(seen_urls))
+
+    if seen_fingerprints:
+        fingerprint_placeholders = ", ".join("?" for _ in seen_fingerprints)
+        query_parts.append(f"AND fingerprint NOT IN ({fingerprint_placeholders})")
+        params.extend(sorted(seen_fingerprints))
+
+    cur = conn.execute(" ".join(query_parts), params)
+    if commit:
+        conn.commit()
+    return cur.rowcount
+
+
 def log_historique_prix(
-    bien_id: int, prix_ancien: int, prix_nouveau: int, conn: sqlite3.Connection
+    bien_id: int,
+    prix_ancien: int,
+    prix_nouveau: int,
+    conn: sqlite3.Connection,
+    *,
+    commit: bool = True,
 ):
     conn.execute(
         """INSERT INTO historique_prix (bien_id, prix_ancien, prix_nouveau, date_changement)
            VALUES (?, ?, ?, ?)""",
         (bien_id, prix_ancien, prix_nouveau, _now()),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

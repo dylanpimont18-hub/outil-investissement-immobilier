@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS biens (
     site               TEXT    NOT NULL,
     url                TEXT    UNIQUE NOT NULL,
     titre              TEXT,
+    description        TEXT,
     prix               INTEGER,
     surface            REAL,
     type_bien          TEXT,
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS biens (
     code_postal        TEXT,
     dpe                TEXT,
     source_scrape      TEXT,
+    missing_scan_count INTEGER NOT NULL DEFAULT 0,
     date_premiere_vue  TEXT    NOT NULL,
     date_derniere_vue  TEXT    NOT NULL
 );
@@ -71,12 +73,13 @@ CREATE TABLE IF NOT EXISTS loyers_marche (
     ville         TEXT    NOT NULL,
     code_postal   TEXT    NOT NULL,
     type_bien     TEXT    NOT NULL,
+    nb_pieces     INTEGER,
     surface_min   REAL    NOT NULL,
     surface_max   REAL    NOT NULL,
     loyer_median  REAL    NOT NULL,
     nb_annonces   INTEGER NOT NULL,
     date_collecte TEXT    NOT NULL,
-    UNIQUE(ville, code_postal, type_bien, surface_min, surface_max)
+    UNIQUE(ville, code_postal, type_bien, nb_pieces, surface_min, surface_max)
 );
 
 CREATE TABLE IF NOT EXISTS geocodes (
@@ -91,17 +94,26 @@ CREATE INDEX IF NOT EXISTS idx_biens_fingerprint ON biens(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_biens_url         ON biens(url);
 CREATE INDEX IF NOT EXISTS idx_biens_cp          ON biens(code_postal);
 CREATE INDEX IF NOT EXISTS idx_biens_dept        ON biens(substr(code_postal, 1, 2));
+CREATE INDEX IF NOT EXISTS idx_biens_prix        ON biens(prix);
+CREATE INDEX IF NOT EXISTS idx_biens_surface     ON biens(surface);
 CREATE INDEX IF NOT EXISTS idx_annonces_bien     ON annonces(bien_id);
+CREATE INDEX IF NOT EXISTS idx_annonces_score    ON annonces(score DESC, bien_id);
 CREATE INDEX IF NOT EXISTS idx_historique_bien   ON historique_prix(bien_id);
 CREATE INDEX IF NOT EXISTS idx_loyers_marche     ON loyers_marche(ville, type_bien, surface_min);
 """
 
 _MIGRATIONS = [
+    "ALTER TABLE biens ADD COLUMN description TEXT",
+    "ALTER TABLE biens ADD COLUMN missing_scan_count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE annonces ADD COLUMN cf_apres_impot_reel  REAL",
     "ALTER TABLE annonces ADD COLUMN cf_apres_impot_sci   REAL",
     "ALTER TABLE annonces ADD COLUMN regime_optimal       TEXT",
     "ALTER TABLE annonces ADD COLUMN loyer_source         TEXT",
     "ALTER TABLE annonces ADD COLUMN cf_apres_impot_micro REAL",
+    "ALTER TABLE loyers_marche ADD COLUMN nb_pieces INTEGER",
+    "CREATE INDEX IF NOT EXISTS idx_biens_prix ON biens(prix)",
+    "CREATE INDEX IF NOT EXISTS idx_biens_surface ON biens(surface)",
+    "CREATE INDEX IF NOT EXISTS idx_annonces_score ON annonces(score DESC, bien_id)",
 ]
 
 

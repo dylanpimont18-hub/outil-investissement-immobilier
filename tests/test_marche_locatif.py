@@ -64,3 +64,20 @@ def test_est_stale_sans_donnees(tmp_path):
     conn = init_db(tmp_path / "test.db")
     assert est_stale(conn) is True
     conn.close()
+
+
+def test_est_stale_par_ville(tmp_path):
+    from db import init_db
+
+    conn = init_db(tmp_path / "test.db")
+    conn.execute(
+        """INSERT INTO loyers_marche
+           (ville, code_postal, type_bien, nb_pieces, surface_min, surface_max, loyer_median, nb_annonces, date_collecte)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
+        ("Bourges", "18000", "appartement", 2, 30, 50, 550.0, 5),
+    )
+    conn.commit()
+
+    assert est_stale(conn, villes=[{"ville": "Vierzon", "code_postal": "18100"}]) is True
+    assert est_stale(conn, villes=[{"ville": "Bourges", "code_postal": "18000"}]) is False
+    conn.close()

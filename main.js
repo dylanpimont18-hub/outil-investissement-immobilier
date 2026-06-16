@@ -1,4 +1,4 @@
-﻿import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu, computeOwnedAssetCF, computeOwnedAssetTimeline } from './calculs.js';
+﻿import { calculateTMI, computeAnalysisViewModel, computePortfolioViewModel, getHouseholdTaxParts, capitalRestantDu, computeOwnedAssetCF, computeOwnedAssetTimeline, computeAmortizationSchedule, computePatrimoineNet, computeEndettementGlobal, computeCapaciteEmprunt, getOptimalRegime, computeRevenusLocatifsBruts, computeTresorerieReelle, computeCompteResultat, computePortfolioAlerts, computeSimulationTravaux, computeCFBreakdown, computeRegimeComparison } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
 import { initScanner, onScannerTabActivated } from './scanner.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
@@ -67,9 +67,11 @@ function createOwnedAsset(nom, ville) {
         id,
         nom: String(nom || '').trim(),
         ville: String(ville || '').trim(),
+        codePostal: '',
         anneeAchat: null,
         acquisition: {
             prix: 0, fraisAgence: 0, fraisNotaire: 0, loyerInitial: 0,
+            surface: 0, typeBien: 'appartement',
             credit: { montant: 0, duree: 0, taux: 0, assurance: 0 }
         },
         postAchat: {
@@ -77,9 +79,9 @@ function createOwnedAsset(nom, ville) {
             travaux: [], notes: []
         },
         scenarios: [
-            { id: 'pessimiste', nom: 'Pessimiste', variables: { vacance: 8, regime: 'micro-foncier' } },
-            { id: 'realiste',   nom: 'Réaliste',   variables: { vacance: 5, regime: 'micro-foncier' } },
-            { id: 'optimiste',  nom: 'Optimiste',  variables: { vacance: 2, regime: 'micro-foncier' } }
+            { id: 'pessimiste', nom: 'Pessimiste', variables: { vacance: 8, regime: state.ownedRegime || 'micro-foncier' } },
+            { id: 'realiste',   nom: 'Réaliste',   variables: { vacance: 5, regime: state.ownedRegime || 'micro-foncier' } },
+            { id: 'optimiste',  nom: 'Optimiste',  variables: { vacance: 2, regime: state.ownedRegime || 'micro-foncier' } }
         ],
         lastDiagnostic: null
     };
@@ -161,6 +163,14 @@ function addOwnedNote(assetId, text) {
     saveOwnedAssets(all);
 }
 
+function deleteOwnedNote(assetId, noteId) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    all[assetId].postAchat.notes = (post.notes || []).filter(n => n.id !== noteId);
+    saveOwnedAssets(all);
+}
+
 function addOwnedChargesAnnuelles(assetId, entry) {
     const all = loadOwnedAssets();
     if (!all[assetId]) return;
@@ -177,6 +187,48 @@ function deleteOwnedChargesAnnuelles(assetId, annee) {
     const post = all[assetId].postAchat || {};
     const list = (post.chargesAnnuelles || []).filter(e => e.annee !== annee);
     updateOwnedPostAchat(assetId, { chargesAnnuelles: list });
+}
+
+function addOwnedLoyerReel(assetId, entry) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    const list = (post.loyersReels || []).filter(e => e.mois !== entry.mois);
+    list.push({ mois: entry.mois, montant: Number(entry.montant) || 0, statut: entry.statut || 'encaisse' });
+    list.sort((a, b) => b.mois.localeCompare(a.mois));
+    updateOwnedPostAchat(assetId, { loyersReels: list });
+}
+
+function deleteOwnedLoyerReel(assetId, mois) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    updateOwnedPostAchat(assetId, { loyersReels: (post.loyersReels || []).filter(e => e.mois !== mois) });
+}
+
+function addOwnedDeficitFoncier(assetId, entry) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    const list = (post.deficitFoncierReporte || []).filter(e => e.annee !== entry.annee);
+    list.push({ annee: Number(entry.annee), montantInitial: Number(entry.montantInitial) || 0, utilise: Number(entry.utilise) || 0 });
+    list.sort((a, b) => b.annee - a.annee);
+    updateOwnedPostAchat(assetId, { deficitFoncierReporte: list });
+}
+
+function deleteOwnedDeficitFoncier(assetId, annee) {
+    const all = loadOwnedAssets();
+    if (!all[assetId]) return;
+    const post = all[assetId].postAchat || {};
+    updateOwnedPostAchat(assetId, { deficitFoncierReporte: (post.deficitFoncierReporte || []).filter(e => e.annee !== annee) });
+}
+
+const STORAGE_GOALS = 'investissementWebPortfolioGoals';
+function loadPortfolioGoals() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_GOALS)) || {}; } catch { return {}; }
+}
+function savePortfolioGoals(goals) {
+    localStorage.setItem(STORAGE_GOALS, JSON.stringify(goals));
 }
 
 function addOwnedScenario(assetId) {
@@ -424,6 +476,9 @@ const state = {
     ownedAssets: loadOwnedAssets(),
     activeOwnedAssetId: null,
     ownedRegime: localStorage.getItem('investissementWebOwnedRegime') || 'micro-foncier',
+    ownedYearFilter: 1,
+    ownedYearFilters: JSON.parse(localStorage.getItem('investissementWebOwnedYearFilters') || '{}'),
+    ownedLoyerPage: {},
 };
 
 let analysisWindowRef = null;
@@ -456,6 +511,7 @@ const nodes = {
     ownedAddForm: document.getElementById('owned-add-form'),
     ownedAddNom: document.getElementById('owned-add-nom'),
     ownedAddVille: document.getElementById('owned-add-ville'),
+    ownedAddCp: document.getElementById('owned-add-cp'),
     ownedAddCancel: document.getElementById('owned-add-cancel'),
     ownedKpiBanner: document.getElementById('owned-kpi-banner'),
     ownedListTable: document.getElementById('owned-list-table'),
@@ -469,6 +525,9 @@ const nodes = {
     accPostAchatContent: document.getElementById('acc-postachat-content'),
     accPostAchatSummary: document.getElementById('acc-postachat-summary'),
     ownedSynthese: document.getElementById('owned-synthese'),
+    ownedVerdict: document.getElementById('owned-verdict'),
+    ownedCfTableWrap: document.getElementById('owned-cf-table-wrap'),
+    ownedTravauxContent: document.getElementById('owned-travaux-content'),
     ownedDeleteModal: document.getElementById('owned-delete-modal'),
     ownedDeleteModalName: document.getElementById('owned-delete-modal-name'),
     ownedDeleteModalInput: document.getElementById('owned-delete-modal-input'),
@@ -1926,6 +1985,7 @@ function handleAutreCreditDrawerSave(event) {
     closeAutreCreditDrawer();
     emitStateUpdate();
     render({ syncVariables: false, syncProfile: false });
+    renderProfileCreditsList();
     showToast('Crédit enregistré.');
 }
 
@@ -1937,6 +1997,7 @@ function handleDeleteAutreCredit(creditId) {
     saveProfileData();
     emitStateUpdate();
     render({ syncVariables: false, syncProfile: false });
+    renderProfileCreditsList();
     showToast('Crédit supprimé.');
 }
 
@@ -2400,6 +2461,36 @@ function syncProfileForm() {
     nodes.profileChildren.value = String(state.profileData.children);
     if (nodes.profileObjectifCF) nodes.profileObjectifCF.value = String(state.profileData.objectifCF || 1000);
     if (nodes.profileRevaloAnnuelle) nodes.profileRevaloAnnuelle.value = String(state.profileData.revaloAnnuelle || 2);
+    renderProfileCreditsList();
+}
+
+function renderProfileCreditsList() {
+    const list = document.getElementById('profile-credits-list');
+    const addBtn = document.getElementById('profile-add-credit-btn');
+    if (!list) return;
+    const credits = state.profileData.autresCredits || [];
+    if (!credits.length) {
+        list.innerHTML = '<div class="profile-credits-empty">Aucun crédit hors immo saisi. Cela peut sous-estimer votre taux d\'endettement.</div>';
+    } else {
+        list.innerHTML = credits.map(c => `
+            <div class="profile-credit-row">
+                <span class="profile-credit-row__label">${escapeHtml(c.libelle || 'Crédit')}</span>
+                <span class="profile-credit-row__amount">−${(c.mensualite || 0).toLocaleString('fr-FR')} €/mois</span>
+                ${c.dateFin ? `<span style="font-size:11px;color:var(--text-tertiary)">jusqu'à ${c.dateFin}</span>` : ''}
+                <button class="profile-credit-row__edit" data-edit-credit="${escapeHtml(c.id)}">Modifier</button>
+                <button class="profile-credit-row__edit" data-delete-credit="${escapeHtml(c.id)}" style="color:var(--color-negative,#ef4444)">✕</button>
+            </div>`).join('');
+        list.querySelectorAll('[data-edit-credit]').forEach(btn => {
+            btn.addEventListener('click', () => openAutreCreditDrawer(btn.dataset.editCredit));
+        });
+        list.querySelectorAll('[data-delete-credit]').forEach(btn => {
+            btn.addEventListener('click', () => { handleDeleteAutreCredit(btn.dataset.deleteCredit); renderProfileCreditsList(); });
+        });
+    }
+    if (addBtn && !addBtn.dataset.wired) {
+        addBtn.dataset.wired = '1';
+        addBtn.addEventListener('click', () => openAutreCreditDrawer(null));
+    }
 }
 
 function syncVariablesForm() {
@@ -3335,19 +3426,549 @@ function buildPortfolioSimulator(collectionsView) {
 
     renderSimulatorContent();
 }
+// ─── HELPER MODAL GÉNÉRIQUE ──────────────────────────────────────────────────
+
+function _showOwnedModal(html, id = 'owned-generic-modal') {
+    let modal = document.getElementById(id);
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = id;
+        document.body.appendChild(modal);
+    }
+    modal.className = 'owned-modal-overlay';
+    modal.innerHTML = html;
+    modal.hidden = false;
+    const close = () => { modal.hidden = true; };
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+    modal.querySelectorAll('[data-close-modal]').forEach(el => el.addEventListener('click', close));
+    return modal;
+}
+
+// ─── COMPTE DE RÉSULTAT ──────────────────────────────────────────────────────
+
+function openCompteResultatModal(assetId) {
+    const asset = getOwnedAsset(assetId);
+    if (!asset) return;
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+    const currentYear = new Date().getFullYear();
+    const annees = [];
+    for (let y = anneeAchat; y <= currentYear; y++) annees.push(y);
+
+    function renderCR(annee) {
+        const cr = computeCompteResultat(asset, annee, tmi, regime);
+        const signCR = v => v >= 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR');
+        const cfTone = cr.cfReel >= 0 ? 'color:var(--success)' : 'color:var(--danger)';
+        return `
+        <div class="cr-body">
+            <div class="cr-section">
+                <div class="cr-row cr-row--total"><span>Recettes locatives brutes</span><span>${cr.recettesBrutes.toLocaleString('fr-FR')} €</span></div>
+                <div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;dont loyers théoriques</span><span>${cr.loyersTheoriques.toLocaleString('fr-FR')} €</span></div>
+                ${cr.vacanceEst > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;dont vacance estimée</span><span style="color:var(--danger)">-${cr.vacanceEst.toLocaleString('fr-FR')} €</span></div>` : ''}
+            </div>
+            <div class="cr-section">
+                <div class="cr-row cr-row--total"><span>Charges ${regime === 'micro-foncier' ? 'réelles' : 'déductibles'}</span><span>${cr.chargesDeductibles.toLocaleString('fr-FR')} €</span></div>
+                ${cr.interetsAnnee > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Intérêts d'emprunt</span><span>${cr.interetsAnnee.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.assuranceAnnee > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Assurance crédit</span><span>${cr.assuranceAnnee.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.taxeFonciere > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Taxe foncière</span><span>${cr.taxeFonciere.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.chargesCopro > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Charges copro</span><span>${cr.chargesCopro.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.assurancePNO > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Assurance PNO</span><span>${cr.assurancePNO.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.gestionLocative > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Gestion locative</span><span>${cr.gestionLocative.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.travauxDed > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Travaux déductibles</span><span>${cr.travauxDed.toLocaleString('fr-FR')} €</span></div>` : ''}
+            </div>
+            ${regime === 'micro-foncier' ? `
+            <div class="cr-section">
+                <div class="cr-row cr-row--sub"><span>Abattement forfaitaire (30%)</span><span>-${Math.round(cr.recettesBrutes * 0.3).toLocaleString('fr-FR')} €</span></div>
+                <div class="cr-row cr-row--sub"><span>Base imposable</span><span>${cr.baseImposable.toLocaleString('fr-FR')} €</span></div>
+            </div>` : ''}
+            <div class="cr-section">
+                <div class="cr-row cr-row--kpi"><span>Résultat foncier</span><span style="${cr.resultatFoncier < 0 ? 'color:var(--danger)' : ''}">${signCR(cr.resultatFoncier)} €</span></div>
+                <div class="cr-row cr-row--kpi"><span>Impôts (${regime})</span><span style="${cr.impots > 0 ? 'color:var(--danger)' : 'color:var(--success)'}">${cr.impots > 0 ? '-' : '+'}${Math.abs(cr.impots).toLocaleString('fr-FR')} €</span></div>
+                <div class="cr-row cr-row--kpi"><span>Résultat net après impôt</span><span style="${cr.resultatNet < 0 ? 'color:var(--danger)' : ''}">${signCR(cr.resultatNet)} €</span></div>
+            </div>
+            <div class="cr-section">
+                <div class="cr-row cr-row--sub"><span>Capital remboursé (hors intérêts)</span><span>-${cr.capitalRembourse.toLocaleString('fr-FR')} €</span></div>
+                <div class="cr-row cr-row--total cr-row--cf"><span>Cash-flow réel de l'année</span><span style="${cfTone}">${signCR(cr.cfReel)} €</span></div>
+                <div class="cr-row cr-row--sub" style="font-style:italic"><span>soit</span><span style="${cfTone}">${signCR(Math.round(cr.cfReel / 12))} €/mois</span></div>
+            </div>
+        </div>`;
+    }
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--wide">
+            <div class="owned-modal-head">
+                <div>
+                    <h3 class="owned-modal-title">Compte de résultat — ${escapeHtml(asset.nom)}</h3>
+                    <div class="owned-modal-sub">Régime : ${getOwnedRegime()}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                    <label style="font-size:.8rem;color:var(--text-secondary)">Année :
+                        <select id="cr-annee-select" class="variables-input" style="width:auto;margin-left:6px">
+                            ${annees.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
+                        </select>
+                    </label>
+                    <button class="btn btn--ghost" data-close-modal>✕</button>
+                </div>
+            </div>
+            <div id="cr-content">${renderCR(currentYear)}</div>
+        </div>
+    `, 'owned-cr-modal');
+    modal.querySelector('#cr-annee-select')?.addEventListener('change', e => {
+        const cr = document.getElementById('cr-content');
+        if (cr) cr.innerHTML = renderCR(Number(e.target.value));
+    });
+}
+
+// ─── SIMULATION TRAVAUX ───────────────────────────────────────────────────────
+
+function openSimulationTravauxModal(assetId) {
+    const asset = getOwnedAsset(assetId);
+    if (!asset) return;
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const currentYear = new Date().getFullYear();
+
+    function renderSimu(montant, annee, deductible) {
+        const sim = computeSimulationTravaux(asset, montant, annee, deductible, tmi, regime);
+        const rn = v => v >= 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR');
+        return `
+        <div class="cr-section">
+            <div class="cr-row cr-row--kpi"><span>Impact CF (mois 1)</span><span style="color:var(--danger)">${rn(sim.impactCFMois)} €/mois</span></div>
+            ${sim.applicable ? `
+            <div class="cr-row cr-row--kpi"><span>Déficit foncier créé</span><span>${sim.deficitCree.toLocaleString('fr-FR')} €</span></div>
+            <div class="cr-row cr-row--kpi"><span>Économie fiscale sur 3 ans</span><span style="color:var(--success)">+${sim.economieFiscale3ans.toLocaleString('fr-FR')} €</span></div>
+            <div class="cr-row cr-row--kpi"><span>Nouveau CF estimé (mois 1)</span><span style="${sim.nouveauCFMois >= 0 ? 'color:var(--success)' : 'color:var(--danger)'}">${rn(sim.nouveauCFMois)} €/mois</span></div>
+            ` : `<div class="cr-row" style="color:var(--text-tertiary);font-style:italic"><span colspan="2">${deductible ? 'Travaux déductibles nécessitent le régime Foncier Réel.' : 'Travaux non déductibles : impact cash uniquement.'}</span></div>`}
+        </div>`;
+    }
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal">
+            <div class="owned-modal-head">
+                <h3 class="owned-modal-title">Simuler des travaux — ${escapeHtml(asset.nom)}</h3>
+                <button class="btn btn--ghost" data-close-modal>✕</button>
+            </div>
+            <div class="cr-section">
+                <div class="owned-form-grid">
+                    <label class="variables-field">
+                        <span class="variables-label">Montant des travaux (€)</span>
+                        <input class="variables-input" type="number" id="simu-montant" min="0" step="500" value="10000">
+                    </label>
+                    <label class="variables-field">
+                        <span class="variables-label">Année de réalisation</span>
+                        <input class="variables-input" type="number" id="simu-annee" min="${asset.anneeAchat || 2020}" max="${currentYear + 5}" value="${currentYear}">
+                    </label>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.85rem">
+                    <input type="checkbox" id="simu-deductible" checked> Travaux déductibles (régime réel)
+                </label>
+            </div>
+            <div id="simu-result">${renderSimu(10000, currentYear, true)}</div>
+        </div>
+    `, 'owned-simu-modal');
+    const update = () => {
+        const m = Number(modal.querySelector('#simu-montant')?.value) || 0;
+        const a = Number(modal.querySelector('#simu-annee')?.value) || currentYear;
+        const d = modal.querySelector('#simu-deductible')?.checked ?? true;
+        const r = modal.querySelector('#simu-result');
+        if (r) r.innerHTML = renderSimu(m, a, d);
+    };
+    modal.querySelector('#simu-montant')?.addEventListener('input', update);
+    modal.querySelector('#simu-annee')?.addEventListener('input', update);
+    modal.querySelector('#simu-deductible')?.addEventListener('change', update);
+}
+
+// ─── CAPACITÉ D'EMPRUNT ───────────────────────────────────────────────────────
+
+function openCapaciteEmpruntModal() {
+    const assets = Object.values(loadOwnedAssets());
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const revenusMens = (state.profileData?.income || 0) / 12;
+    const endettement = computeEndettementGlobal(assets, revenusMens, state.profileData?.autresCredits || []);
+
+    function renderCapacite(duree, taux, apport) {
+        const capRes = endettement.capaciteResiduelle;
+        if (capRes <= 0) return `<div class="owned-alert owned-alert--error">Capacité résiduelle nulle (taux d'endettement ≥ 35 %).</div>`;
+        const cap = computeCapaciteEmprunt(capRes, duree, taux, apport);
+        return `
+        <div class="cr-section">
+            <div class="cr-row"><span>Capacité mensualité résiduelle</span><span>${Math.round(capRes).toLocaleString('fr-FR')} €/mois</span></div>
+            <div class="cr-row cr-row--kpi"><span>Montant empruntable</span><span style="color:var(--accent-gold)">${cap.montantEmpruntable.toLocaleString('fr-FR')} €</span></div>
+            <div class="cr-row cr-row--kpi"><span>Prix d'achat max (frais notaire ~8%)</span><span style="color:var(--accent-gold)">${cap.prixAchatMax.toLocaleString('fr-FR')} €</span></div>
+        </div>`;
+    }
+
+    const endettTone = endettement.tauxEndettement > 35 ? 'var(--danger)' : endettement.tauxEndettement > 30 ? 'var(--warning)' : 'var(--success)';
+    const modal = _showOwnedModal(`
+        <div class="owned-modal">
+            <div class="owned-modal-head">
+                <h3 class="owned-modal-title">Capacité d'emprunt</h3>
+                <button class="btn btn--ghost" data-close-modal>✕</button>
+            </div>
+            <div class="cr-section">
+                <div class="cr-row"><span>Mensualités totales actuelles</span><span>${Math.round(endettement.totalMensualites).toLocaleString('fr-FR')} €/mois</span></div>
+                <div class="cr-row cr-row--kpi"><span>Taux d'endettement</span><span style="color:${endettTone}">${endettement.tauxEndettement.toFixed(1)} %</span></div>
+            </div>
+            <div class="cr-section">
+                <div class="owned-form-grid">
+                    <label class="variables-field"><span class="variables-label">Durée crédit (ans)</span>
+                        <select id="cap-duree" class="variables-input">
+                            <option value="15">15 ans</option>
+                            <option value="20" selected>20 ans</option>
+                            <option value="25">25 ans</option>
+                        </select></label>
+                    <label class="variables-field"><span class="variables-label">Taux envisagé (%)</span>
+                        <input type="number" id="cap-taux" class="variables-input" min="0" max="10" step="0.01" value="3.5"></label>
+                    <label class="variables-field"><span class="variables-label">Apport disponible (€)</span>
+                        <input type="number" id="cap-apport" class="variables-input" min="0" step="1000" value="20000"></label>
+                </div>
+            </div>
+            <div id="cap-result">${renderCapacite(20, 3.5, 20000)}</div>
+        </div>
+    `, 'owned-cap-modal');
+    const update = () => {
+        const duree = Number(modal.querySelector('#cap-duree')?.value) || 20;
+        const taux = Number(modal.querySelector('#cap-taux')?.value) || 3.5;
+        const apport = Number(modal.querySelector('#cap-apport')?.value) || 0;
+        const r = modal.querySelector('#cap-result');
+        if (r) r.innerHTML = renderCapacite(duree, taux, apport);
+    };
+    modal.querySelector('#cap-duree')?.addEventListener('change', update);
+    modal.querySelector('#cap-taux')?.addEventListener('input', update);
+    modal.querySelector('#cap-apport')?.addEventListener('input', update);
+}
+
+// ─── OBJECTIFS ────────────────────────────────────────────────────────────────
+
+function openObjectifsModal() {
+    const goals = loadPortfolioGoals();
+    const modal = _showOwnedModal(`
+        <div class="owned-modal">
+            <div class="owned-modal-head">
+                <h3 class="owned-modal-title">⚙ Objectifs portefeuille</h3>
+                <button class="btn btn--ghost" data-close-modal>✕</button>
+            </div>
+            <div class="cr-section">
+                <div class="owned-form-grid">
+                    <label class="variables-field"><span class="variables-label">CF mensuel cible (€)</span>
+                        <input type="number" id="goal-cf" class="variables-input" min="0" step="100" value="${goals.cfCible || 0}"></label>
+                    <label class="variables-field"><span class="variables-label">Patrimoine net cible (€)</span>
+                        <input type="number" id="goal-pat" class="variables-input" min="0" step="10000" value="${goals.patrimoineCible || 0}"></label>
+                    <label class="variables-field"><span class="variables-label">Date objectif</span>
+                        <input type="month" id="goal-date" class="variables-input" value="${goals.dateObjectif || ''}"></label>
+                </div>
+                <textarea id="goal-comment" class="variables-input" rows="2" placeholder="Commentaire…" style="margin-top:8px;width:100%">${escapeHtml(goals.commentaire || '')}</textarea>
+            </div>
+            <div class="owned-modal-actions">
+                <button class="btn btn--ghost" data-close-modal>Annuler</button>
+                <button class="btn btn--primary" id="goal-save">Enregistrer</button>
+            </div>
+        </div>
+    `, 'owned-goals-modal');
+    modal.querySelector('#goal-save')?.addEventListener('click', () => {
+        savePortfolioGoals({
+            cfCible: Number(modal.querySelector('#goal-cf')?.value) || 0,
+            patrimoineCible: Number(modal.querySelector('#goal-pat')?.value) || 0,
+            dateObjectif: modal.querySelector('#goal-date')?.value || '',
+            commentaire: modal.querySelector('#goal-comment')?.value.trim() || '',
+        });
+        modal.hidden = true;
+        renderOwnedPortfolioList();
+    });
+}
+
+// ─── RAPPORT ANNUEL ────────────────────────────────────────────────────────────
+
+function openRapportAnnuelModal() {
+    const assets = Object.values(loadOwnedAssets());
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
+    const currentYear = new Date().getFullYear();
+    const anneeMin = assets.reduce((m, a) => Math.min(m, a.anneeAchat || currentYear), currentYear);
+
+    function buildRapport(annee) {
+        if (!assets.length) return '<p style="color:var(--text-tertiary);text-align:center">Aucun bien dans le portefeuille.</p>';
+        let totalValeur = 0, totalCRD = 0, totalLoyers = 0, totalCharges = 0, totalMens = 0, totalImpots = 0;
+        const lignesBiens = [];
+
+        for (const a of assets) {
+            const acq = a.acquisition || {};
+            const post = a.postAchat || {};
+            const sc = getOwnedDefaultScenario(a);
+            const r = computeOwnedAssetCF(a, { ...sc.variables, regime }, tmi);
+            const cr = computeCompteResultat(a, annee, tmi, regime);
+            const pn = computePatrimoineNet(a);
+
+            totalValeur += acq.valeurEstimee || 0;
+            totalCRD += pn.crd || 0;
+            totalLoyers += cr.recettesBrutes;
+            totalCharges += cr.chargesDeductibles;
+            totalMens += r.mensualiteTotale * 12;
+            totalImpots += cr.impots;
+
+            lignesBiens.push({ nom: a.nom, cf: r.cfNetNet, rdt: r.rentaBrute, patNet: pn.patrimoineNet });
+        }
+
+        const patNet = totalValeur - totalCRD;
+        const cfAnnuel = assets.reduce((sum, a) => {
+            const { years } = computeOwnedAssetTimeline(a, tmi, regime);
+            const row = years.find(y => y.year === annee) || years[years.length - 1];
+            return sum + (row ? row.cfAnnuel : 0);
+        }, 0);
+        const sig = v => v >= 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR');
+
+        return `<pre class="rapport-text">
+═══════════════════════════════════════════
+  RAPPORT PORTEFEUILLE — ${annee}
+═══════════════════════════════════════════
+
+PATRIMOINE
+  Valeur estimée totale     : ${totalValeur > 0 ? totalValeur.toLocaleString('fr-FR') + ' €' : 'Non renseignée'}
+  Capital restant dû total  : ${('-' + totalCRD.toLocaleString('fr-FR') + ' €')}
+  Patrimoine net            : ${patNet.toLocaleString('fr-FR')} €
+
+CASH-FLOW (${annee})
+  Loyers encaissés          : ${totalLoyers.toLocaleString('fr-FR')} €
+  Charges totales           : -${totalCharges.toLocaleString('fr-FR')} €
+  Mensualités crédit        : -${Math.round(totalMens).toLocaleString('fr-FR')} €
+  Impôts estimés            : -${Math.round(totalImpots).toLocaleString('fr-FR')} €
+  CF net-net annuel         : ${sig(Math.round(cfAnnuel))} €
+  CF net-net mensuel moy.   : ${sig(Math.round(cfAnnuel / 12))} €
+
+PAR BIEN
+${lignesBiens.map(b => `  ${escapeHtml(b.nom).padEnd(20)} │ CF : ${(b.cf >= 0 ? '+' : '') + Math.round(b.cf).toLocaleString('fr-FR')} €/m │ Rdt : ${b.rdt.toFixed(1)} % │ Patrim. net : ${b.patNet !== null ? (b.patNet / 1000).toFixed(0) + 'k€' : '—'}`).join('\n')}
+
+FISCALITÉ
+  Régime actuel             : ${REGIME_LABELS[regime] || regime}
+  Revenus fonciers bruts    : ${totalLoyers.toLocaleString('fr-FR')} €
+  Impôts estimés            : ${Math.round(totalImpots).toLocaleString('fr-FR')} €
+═══════════════════════════════════════════</pre>`;
+    }
+
+    const annees = [];
+    for (let y = Math.max(anneeMin, currentYear - 5); y <= currentYear; y++) annees.push(y);
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--wide">
+            <div class="owned-modal-head">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <h3 class="owned-modal-title">Rapport annuel portefeuille</h3>
+                    <select id="rapport-annee" class="variables-input" style="width:auto">
+                        ${annees.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
+                    </select>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn--ghost btn--sm" id="rapport-copy">⎘ Copier</button>
+                    <button class="btn btn--ghost" data-close-modal>✕</button>
+                </div>
+            </div>
+            <div id="rapport-content">${buildRapport(currentYear)}</div>
+        </div>
+    `, 'owned-rapport-modal');
+    modal.querySelector('#rapport-annee')?.addEventListener('change', e => {
+        const r = modal.querySelector('#rapport-content');
+        if (r) r.innerHTML = buildRapport(Number(e.target.value));
+    });
+    modal.querySelector('#rapport-copy')?.addEventListener('click', () => {
+        const pre = modal.querySelector('.rapport-text');
+        if (pre) navigator.clipboard?.writeText(pre.textContent);
+        showToast('Rapport copié dans le presse-papiers', 'success');
+    });
+}
+
+// ─── DASHBOARD DIRIGEANT (vue liste) ─────────────────────────────────────────
+
+function renderOwnedDashboard(list, tmi, regime) {
+    const wrap = document.getElementById('owned-dashboard-wrap');
+    if (!wrap) return;
+
+    if (!list.length) { wrap.innerHTML = ''; return; }
+
+    const revenusMens = (state.profileData?.income || 0) / 12;
+    const endettement = computeEndettementGlobal(list, revenusMens, state.profileData?.autresCredits || []);
+    const alerts = computePortfolioAlerts(list, tmi, regime, revenusMens);
+    const goals = loadPortfolioGoals();
+
+    // Snapshot : patrimoine net total, CF total, endettement, prochain crédit
+    const totalPatNet = list.reduce((s, a) => {
+        const pn = computePatrimoineNet(a);
+        return s + (pn.patrimoineNet || 0);
+    }, 0);
+    const totalCF = list.reduce((s, a) => {
+        const sc = getOwnedDefaultScenario(a);
+        return s + computeOwnedAssetCF(a, { ...sc.variables, regime }, tmi).cfNetNet;
+    }, 0);
+    const cfTone = totalCF >= 0 ? 'positive' : 'negative';
+    const endettTone = endettement.tauxEndettement > 35 ? 'negative' : endettement.tauxEndettement > 30 ? 'watch' : 'positive';
+    const prochainCredit = endettement.prochainCreditTermine;
+    const SEVERITY_ICON = { error: '🔴', warning: '🟡', info: '🔵' };
+
+    // Projections objectifs
+    const hasGoals = goals.cfCible > 0 || goals.patrimoineCible > 0;
+    const cfProgress = goals.cfCible > 0 ? Math.min(100, (Math.max(0, totalCF) / goals.cfCible) * 100) : 0;
+    const patProgress = goals.patrimoineCible > 0 ? Math.min(100, (Math.max(0, totalPatNet) / goals.patrimoineCible) * 100) : 0;
+    const dateObjectif = goals.dateObjectif ? new Date(goals.dateObjectif + '-01') : null;
+    const moisRestantsObj = dateObjectif ? Math.max(0, Math.round((dateObjectif - new Date()) / (1000 * 60 * 60 * 24 * 30.44))) : null;
+
+    wrap.innerHTML = `
+    <div class="owned-dashboard">
+        <div class="owned-dashboard-head">
+            <span class="owned-dashboard-title">Dashboard dirigeant</span>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn--ghost btn--sm" data-action="open-capacite">💳 Capacité d'emprunt</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-objectifs">⚙ Objectifs</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-rapport">📋 Rapport annuel</button>
+            </div>
+        </div>
+
+        <!-- Ligne 1 : Snapshot -->
+        <div class="owned-dashboard-kpis">
+            <div class="owned-dashboard-kpi">
+                <span class="owned-dashboard-kpi__label">Patrimoine net total</span>
+                <span class="owned-dashboard-kpi__value">${totalPatNet !== 0 ? totalPatNet.toLocaleString('fr-FR') + ' €' : '—'}</span>
+            </div>
+            <div class="owned-dashboard-kpi">
+                <span class="owned-dashboard-kpi__label">CF net-net / mois</span>
+                <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--${cfTone}">${totalCF >= 0 ? '+' : ''}${Math.round(totalCF).toLocaleString('fr-FR')} €</span>
+            </div>
+            <div class="owned-dashboard-kpi">
+                <span class="owned-dashboard-kpi__label">Taux d'endettement</span>
+                <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--${endettTone}">${endettement.tauxEndettement.toFixed(1)} %</span>
+                <div class="owned-jauge-wrap">
+                    <div class="owned-jauge-bar">
+                        <div class="owned-jauge-fill owned-jauge-fill--${endettTone}" style="width:${Math.min(100, endettement.tauxEndettement).toFixed(1)}%"></div>
+                        <div class="owned-jauge-seuil" style="left:35%" title="Seuil HCSF 35%"></div>
+                    </div>
+                    <span class="owned-jauge-hint">Capacité résiduelle : ${Math.round(endettement.capaciteResiduelle).toLocaleString('fr-FR')} €/mois</span>
+                </div>
+            </div>
+            <div class="owned-dashboard-kpi">
+                <span class="owned-dashboard-kpi__label">Prochain crédit terminé</span>
+                <span class="owned-dashboard-kpi__value">${prochainCredit ? escapeHtml(prochainCredit.assetNom) : '—'}</span>
+                ${prochainCredit ? `<span class="owned-dashboard-kpi__sub">dans ${Math.round(prochainCredit.moisRestants)} mois (${prochainCredit.anneeFinCredit})</span>` : ''}
+            </div>
+        </div>
+
+        <!-- Ligne 2 : Alertes -->
+        ${alerts.length ? `
+        <div class="owned-dashboard-alerts">
+            <div class="owned-dashboard-section-title">Alertes (${alerts.length})</div>
+            ${alerts.map(a => `
+            <div class="owned-dashboard-alert owned-dashboard-alert--${a.severity}">
+                ${SEVERITY_ICON[a.severity] || '•'} ${escapeHtml(a.msg)}
+                ${a.assetId ? `<button class="btn btn--ghost btn--xs" data-action="go-asset" data-id="${escapeHtml(a.assetId)}">→</button>` : ''}
+            </div>`).join('')}
+        </div>` : '<div class="owned-dashboard-no-alerts">✓ Aucune alerte active sur le portefeuille</div>'}
+
+        <!-- Ligne 3 : Objectifs -->
+        ${hasGoals ? `
+        <div class="owned-dashboard-goals">
+            <div class="owned-dashboard-section-title">Objectifs
+                <button class="btn btn--ghost btn--xs" data-action="open-objectifs" style="margin-left:8px">Modifier</button>
+            </div>
+            ${goals.cfCible > 0 ? `
+            <div class="owned-goal-row">
+                <span class="owned-goal-label">CF mensuel : ${Math.round(totalCF).toLocaleString('fr-FR')} € / ${goals.cfCible.toLocaleString('fr-FR')} € cible</span>
+                <div class="owned-goal-bar-wrap"><div class="owned-goal-bar" style="width:${cfProgress.toFixed(1)}%"></div></div>
+                <span class="owned-goal-delta">${totalCF >= goals.cfCible ? '✓ Atteint !' : 'Il manque ' + Math.round(goals.cfCible - totalCF).toLocaleString('fr-FR') + ' €/mois'}</span>
+            </div>` : ''}
+            ${goals.patrimoineCible > 0 ? `
+            <div class="owned-goal-row">
+                <span class="owned-goal-label">Patrimoine : ${totalPatNet.toLocaleString('fr-FR')} € / ${goals.patrimoineCible.toLocaleString('fr-FR')} € cible</span>
+                <div class="owned-goal-bar-wrap"><div class="owned-goal-bar" style="width:${patProgress.toFixed(1)}%"></div></div>
+                <span class="owned-goal-delta">${totalPatNet >= goals.patrimoineCible ? '✓ Atteint !' : 'Il manque ' + Math.round(goals.patrimoineCible - totalPatNet).toLocaleString('fr-FR') + ' €'}</span>
+            </div>` : ''}
+            ${moisRestantsObj !== null ? `<div class="owned-goal-deadline">⏱ ${moisRestantsObj > 0 ? moisRestantsObj + ' mois restants avant l\'objectif' : 'Date objectif dépassée'}</div>` : ''}
+        </div>` : `
+        <div class="owned-dashboard-goals owned-dashboard-goals--empty">
+            Aucun objectif défini. <button class="btn btn--ghost btn--xs" data-action="open-objectifs">Définir mes objectifs</button>
+        </div>`}
+    </div>`;
+
+    wrap.querySelectorAll('[data-action="go-asset"]').forEach(btn => {
+        btn.addEventListener('click', () => openOwnedDetail(btn.dataset.id));
+    });
+    wrap.querySelectorAll('[data-action="open-capacite"]').forEach(btn => {
+        btn.addEventListener('click', openCapaciteEmpruntModal);
+    });
+    wrap.querySelectorAll('[data-action="open-objectifs"]').forEach(btn => {
+        btn.addEventListener('click', openObjectifsModal);
+    });
+    wrap.querySelectorAll('[data-action="open-rapport"]').forEach(btn => {
+        btn.addEventListener('click', openRapportAnnuelModal);
+    });
+}
+
 function initOwnedPortfolioEvents() {
     const exportBtn = document.getElementById('owned-export-btn');
     if (exportBtn) {
-        exportBtn.addEventListener('click', () => {
+        exportBtn.addEventListener('click', async () => {
             const data = loadOwnedAssets();
-            const json = JSON.stringify(data, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `portefeuille-${new Date().toISOString().slice(0, 10)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+            try {
+                const res = await fetch('/api/portfolio/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ portfolio: data })
+                });
+                const json = await res.json();
+                if (json.filename) {
+                    exportBtn.textContent = `✓ ${json.filename}`;
+                    setTimeout(() => { exportBtn.textContent = '↓ Export'; }, 3000);
+                }
+            } catch {
+                // fallback client-side
+                const json = JSON.stringify(data, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `portefeuille-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click(); URL.revokeObjectURL(url);
+            }
+        });
+    }
+
+    const importBtn = document.getElementById('owned-import-btn');
+    if (importBtn) {
+        importBtn.addEventListener('click', openOwnedImportModal);
+    }
+
+    const importModal = document.getElementById('owned-import-modal');
+    const importCancel = document.getElementById('owned-import-modal-cancel');
+    const importConfirm = document.getElementById('owned-import-modal-confirm');
+    if (importCancel) importCancel.addEventListener('click', () => { if (importModal) importModal.hidden = true; });
+    if (importModal) importModal.addEventListener('click', e => { if (e.target === importModal) importModal.hidden = true; });
+    if (importConfirm) {
+        importConfirm.addEventListener('click', async () => {
+            const selected = importModal?.querySelector('.owned-import-file-item--selected');
+            if (!selected) return;
+            const filename = selected.dataset.filename;
+            try {
+                const res = await fetch('/api/portfolio/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename })
+                });
+                const json = await res.json();
+                if (json.portfolio) {
+                    const existing = loadOwnedAssets();
+                    let added = 0;
+                    for (const [id, asset] of Object.entries(json.portfolio)) {
+                        if (!existing[id]) { existing[id] = asset; added++; }
+                    }
+                    localStorage.setItem('investissementWebOwnedAssets', JSON.stringify(existing));
+                    importModal.hidden = true;
+                    renderOwnedPortfolioList();
+                    importConfirm.textContent = added > 0
+                        ? `✓ ${added} bien(s) importé(s)`
+                        : '⚠ Tous les biens sont déjà présents';
+                    if (added > 0) setTimeout(() => { importConfirm.textContent = 'Importer'; }, 3000);
+                }
+            } catch (err) {
+                console.error('Import error', err);
+            }
         });
     }
 
@@ -3363,7 +3984,9 @@ function initOwnedPortfolioEvents() {
             const nom = nodes.ownedAddNom?.value.trim();
             if (!nom) { nodes.ownedAddNom?.focus(); return; }
             const ville = nodes.ownedAddVille?.value.trim() || '';
+            const cp = nodes.ownedAddCp?.value.trim() || '';
             const asset = createOwnedAsset(nom, ville);
+            if (cp) updateOwnedAsset(asset.id, { codePostal: cp });
             closeOwnedAddModal();
             openOwnedDetail(asset.id);
         });
@@ -3379,14 +4002,14 @@ function initOwnedPortfolioEvents() {
     }
     if (nodes.ownedAiDrawerClose) {
         nodes.ownedAiDrawerClose.addEventListener('click', () => {
-            if (nodes.ownedAiDrawer) nodes.ownedAiDrawer.hidden = true;
-            if (nodes.ownedAiOverlay) nodes.ownedAiOverlay.hidden = true;
+            nodes.ownedAiDrawer?.classList.remove('is-open');
+            nodes.ownedAiOverlay?.classList.remove('is-open');
         });
     }
     if (nodes.ownedAiOverlay) {
         nodes.ownedAiOverlay.addEventListener('click', () => {
-            if (nodes.ownedAiDrawer) nodes.ownedAiDrawer.hidden = true;
-            nodes.ownedAiOverlay.hidden = true;
+            nodes.ownedAiDrawer?.classList.remove('is-open');
+            nodes.ownedAiOverlay.classList.remove('is-open');
         });
     }
     if (nodes.ownedDeleteModalInput) {
@@ -3411,6 +4034,134 @@ function initOwnedPortfolioEvents() {
     nodes.ownedDeleteModal?.addEventListener('click', e => {
         if (e.target === nodes.ownedDeleteModal) closeOwnedDeleteModal();
     });
+
+    // Délégation sur la vue détail pour les boutons dynamiques
+    document.getElementById('owned-detail-view')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const id = state.activeOwnedAssetId;
+        const action = btn.dataset.action;
+        if (action === 'open-compte-resultat' && id) {
+            openCompteResultatModal(id);
+        } else if (action === 'open-simu-travaux' && id) {
+            openSimulationTravauxModal(id);
+        } else if (action === 'analyse-loyer-marche' && id) {
+            const assetForLoyer = getOwnedAsset(id);
+            if (!assetForLoyer?.ville) return;
+            const acqForLoyer = assetForLoyer.acquisition || {};
+            if (!acqForLoyer.surface) { showToast('Renseignez la surface dans l\'accordéon Acquisition'); return; }
+
+            const _fetchLoyerMarche = () => fetch('/api/loyer-marche', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ville: assetForLoyer.ville,
+                    type_bien: acqForLoyer.typeBien || 'appartement',
+                    surface: acqForLoyer.surface
+                })
+            }).then(r => r.json());
+
+            if (btn.dataset.loyerState === 'no-data') {
+                // État B → C : lancer le refresh
+                if (!assetForLoyer.codePostal) {
+                    showToast('Renseignez le code postal dans l\'accordéon Acquisition');
+                    return;
+                }
+                btn.disabled = true;
+                btn.textContent = '⏳ Récupération…';
+                fetch('/api/loyer-marche/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ville: assetForLoyer.ville,
+                        code_postal: assetForLoyer.codePostal,
+                        type_bien: acqForLoyer.typeBien || 'appartement'
+                    })
+                }).then(r => r.json()).then(data => {
+                    if (data.error) {
+                        showToast(`Erreur lors de la récupération : ${data.error}`, 'negative');
+                        btn.disabled = false;
+                        btn.dataset.loyerState = 'no-data';
+                        btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
+                        return;
+                    }
+                    return _fetchLoyerMarche().then(d => {
+                        btn.disabled = false;
+                        delete btn.dataset.loyerState;
+                        if (d.error) {
+                            showToast(`Aucune annonce de location trouvée pour ${assetForLoyer.ville}`, 'neutral');
+                            btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
+                            btn.dataset.loyerState = 'no-data';
+                        } else {
+                            updateOwnedAsset(id, { loyerMarche: { loyerMedian: d.loyerMedian, nbSamples: d.nbSamples } });
+                            renderOwnedSynthese(getOwnedAsset(id));
+                        }
+                    });
+                }).catch(() => {
+                    showToast('Erreur réseau lors de la récupération', 'negative');
+                    btn.disabled = false;
+                    btn.dataset.loyerState = 'no-data';
+                    btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
+                });
+            } else {
+                // État A : tentative normale
+                btn.disabled = true;
+                btn.textContent = '…';
+                _fetchLoyerMarche().then(data => {
+                    btn.disabled = false;
+                    if (data.error) {
+                        btn.dataset.loyerState = 'no-data';
+                        btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
+                    } else {
+                        delete btn.dataset.loyerState;
+                        updateOwnedAsset(id, { loyerMarche: { loyerMedian: data.loyerMedian, nbSamples: data.nbSamples } });
+                        renderOwnedSynthese(getOwnedAsset(id));
+                    }
+                }).catch(() => { btn.disabled = false; btn.textContent = '📈 Loyer marché'; });
+            }
+        } else if (action === 'focus-valeur-estimee') {
+            e.preventDefault();
+            const accBtn = document.querySelector('[data-acc="acquisition"]');
+            accBtn?.setAttribute('aria-expanded', 'true');
+            document.getElementById('acc-acquisition-body')?.removeAttribute('hidden');
+            setTimeout(() => {
+                const input = nodes.accAcquisitionContent?.querySelector('[data-acq-field="valeurEstimee"]');
+                input?.focus();
+                input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+    });
+}
+
+async function openOwnedImportModal() {
+    const modal = document.getElementById('owned-import-modal');
+    const list = document.getElementById('owned-import-file-list');
+    const confirm = document.getElementById('owned-import-modal-confirm');
+    if (!modal || !list) return;
+    list.innerHTML = '<div class="owned-import-empty">Chargement…</div>';
+    if (confirm) confirm.disabled = true;
+    modal.hidden = false;
+    try {
+        const res = await fetch('/api/portfolio/import/list');
+        const { files } = await res.json();
+        if (!files || !files.length) {
+            list.innerHTML = '<div class="owned-import-empty">Aucun fichier dans le dossier exports/.</div>';
+            return;
+        }
+        list.innerHTML = files.map(f => `
+            <div class="owned-import-file-item" data-filename="${escapeHtml(f)}">
+                <span class="owned-import-file-item__name">${escapeHtml(f)}</span>
+            </div>`).join('');
+        list.querySelectorAll('.owned-import-file-item').forEach(item => {
+            item.addEventListener('click', () => {
+                list.querySelectorAll('.owned-import-file-item').forEach(i => i.classList.remove('owned-import-file-item--selected'));
+                item.classList.add('owned-import-file-item--selected');
+                if (confirm) confirm.disabled = false;
+            });
+        });
+    } catch {
+        list.innerHTML = '<div class="owned-import-empty">Erreur lors du chargement des fichiers.</div>';
+    }
 }
 
 function getOwnedTmi() {
@@ -3442,8 +4193,11 @@ function renderOwnedRegimeSelector() {
     ];
     const sliderHtml = `<div class="owned-regime-slider" id="owned-regime-slider">${options.map(o => `<button class="owned-regime-slider__btn${o.value === current ? ' owned-regime-slider__btn--active' : ''}" data-regime="${o.value}" type="button">${o.label}</button>`).join('')}</div>`;
     const existing = document.getElementById('owned-regime-slider');
+    const anchor = document.getElementById('owned-regime-slider-anchor');
     if (existing) {
         existing.outerHTML = sliderHtml;
+    } else if (anchor) {
+        anchor.insertAdjacentHTML('afterend', sliderHtml);
     } else {
         nodes.ownedKpiBanner?.insertAdjacentHTML('beforebegin', sliderHtml);
     }
@@ -3457,6 +4211,34 @@ function renderOwnedRegimeSelector() {
             }
         });
     });
+}
+
+function renderOwnedDonutSVG(recettes, depenses, positive) {
+    const R = 18, cx = 22, cy = 22, strokeW = 5, ringR = 20;
+    const total = recettes + depenses;
+    if (total <= 0) return '<div class="owned-donut-wrap"></div>';
+    const circ = 2 * Math.PI * R;
+    const recPct = recettes / total;
+    const depPct = depenses / total;
+    const recLen = recPct * circ;
+    const depLen = depPct * circ;
+    const gap = Math.min(1.5, circ * 0.02);
+    const ringColor = positive ? '#22c55e' : '#ef4444';
+    const ringCirc = 2 * Math.PI * ringR;
+    return `<div class="owned-donut-wrap">
+        <svg class="owned-donut-svg" width="44" height="44" viewBox="0 0 44 44">
+            <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--border)" stroke-width="${strokeW}"/>
+            <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#22c55e" stroke-width="${strokeW}"
+                stroke-dasharray="${recLen - gap} ${circ - recLen + gap}"
+                stroke-dashoffset="${circ / 4}" stroke-linecap="round"/>
+            <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#ef4444" stroke-width="${strokeW}"
+                stroke-dasharray="${depLen - gap} ${circ - depLen + gap}"
+                stroke-dashoffset="${circ / 4 - recLen}" stroke-linecap="round"/>
+            <circle cx="${cx}" cy="${cy}" r="${ringR}" fill="none" stroke="${ringColor}" stroke-width="2.5"
+                stroke-dasharray="${ringCirc * 0.92} ${ringCirc * 0.08}"
+                stroke-dashoffset="${ringCirc / 4}" opacity="0.5"/>
+        </svg>
+    </div>`;
 }
 
 function renderOwnedPortfolioList() {
@@ -3517,12 +4299,23 @@ function renderOwnedPortfolioList() {
                 openOwnedAddModal();
             });
         } else {
-            nodes.ownedListTable.innerHTML = `
+            const yr = state.ownedYearFilter || 1;
+            const YEAR_OPTIONS = [1, 3, 5, 10];
+            const yearSelectorHtml = `
+                <div class="owned-year-selector">
+                    <span class="owned-year-selector__label">Métriques en</span>
+                    <div class="owned-year-selector__btns">
+                        ${YEAR_OPTIONS.map(y => `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-year="${y}">An ${y}</button>`).join('')}
+                    </div>
+                </div>`;
+
+            nodes.ownedListTable.innerHTML = yearSelectorHtml + `
                 <table>
                     <thead>
                         <tr>
+                            <th></th>
                             <th>Bien</th>
-                            <th style="text-align:right">CF net-net</th>
+                            <th style="text-align:right">CF net/mois</th>
                             <th style="text-align:right">Rdt brut</th>
                             <th style="text-align:right">DSCR</th>
                             <th>Statut</th>
@@ -3531,13 +4324,36 @@ function renderOwnedPortfolioList() {
                     </thead>
                     <tbody>
                         ${list.map(asset => {
+                            // Métriques selon l'année sélectionnée
+                            const { years: timeline } = computeOwnedAssetTimeline(asset, tmi, regime);
+                            const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+                            const targetAbsYear = anneeAchat + yr - 1;
+                            const yearRow = timeline.find(y => y.year === targetAbsYear) || timeline[timeline.length - 1];
+                            const cfAnnuel = yearRow ? yearRow.cfAnnuel : 0;
+                            const cfMens = cfAnnuel / 12;
+
                             const sc = getOwnedDefaultScenario(asset);
                             const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
-                            const cfTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
+                            const cfTone = cfMens >= 0 ? 'positive' : 'negative';
+
+                            // Alerte régime : comparer régime optimal an 1 vs an 5
+                            const cmp = computeRegimeComparison(asset, tmi, [1, 5]);
+                            const optAn1 = cmp.optimal[1];
+                            const optAn5 = cmp.optimal[5];
+                            const regimeAlertHtml = (optAn1 && optAn5 && optAn1 !== optAn5)
+                                ? `<span class="owned-regime-alert" title="Régime optimal change en an 5">⚠ Régime an 5</span>`
+                                : '';
+
+                            // Donut inline SVG
+                            const recettes = Math.max(0, (asset.acquisition?.loyerInitial || 0) * 12 * (1 - (asset.postAchat?.vacance ?? 5) / 100));
+                            const depenses = Math.max(0, recettes - cfAnnuel);
+                            const total = recettes + depenses;
+                            const donutHtml = total > 0 ? renderOwnedDonutSVG(recettes, depenses, cfMens >= 0) : '<div class="owned-donut-wrap"></div>';
+
                             const hasUnclassified = (asset.postAchat?.travaux || []).some(t => t.tag === 'a-classifier');
                             let statusTone, statusLabel;
-                            if (r.cfNetNet < -50) {
-                                statusTone = 'negative'; statusLabel = `CF ${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €`;
+                            if (cfMens < -50) {
+                                statusTone = 'negative'; statusLabel = `CF ${Math.round(cfMens).toLocaleString('fr-FR')} €`;
                             } else if (r.dscr > 0 && r.dscr < 1) {
                                 statusTone = 'negative'; statusLabel = `DSCR ${r.dscr.toFixed(2).replace('.', ',')}`;
                             } else if (r.dscr >= 1 && r.dscr < 1.1) {
@@ -3549,12 +4365,13 @@ function renderOwnedPortfolioList() {
                             }
                             return `
                             <tr data-asset-id="${escapeHtml(asset.id)}">
+                                <td style="padding:6px 4px 6px 0;width:52px">${donutHtml}</td>
                                 <td>
                                     <div class="owned-table-name">${escapeHtml(asset.nom)}</div>
-                                    <div class="owned-table-meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · ${asset.anneeAchat}` : ''}</div>
+                                    <div class="owned-table-meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · ${asset.anneeAchat}` : ''}${regimeAlertHtml ? ' ' + regimeAlertHtml : ''}</div>
                                 </td>
                                 <td class="owned-table-num owned-table-num--${cfTone}">
-                                    ${r.cfNetNet >= 0 ? '+' : ''}${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €
+                                    ${cfMens >= 0 ? '+' : ''}${Math.round(cfMens).toLocaleString('fr-FR')} €
                                 </td>
                                 <td class="owned-table-num">${r.rentaBrute.toFixed(1).replace('.', ',')} %</td>
                                 <td class="owned-table-num">${r.dscr.toFixed(2).replace('.', ',')}</td>
@@ -3573,9 +4390,17 @@ function renderOwnedPortfolioList() {
                 </table>
             `;
 
+            // Year selector events
+            nodes.ownedListTable.querySelectorAll('.owned-year-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.ownedYearFilter = Number(btn.dataset.year);
+                    renderOwnedPortfolioList();
+                });
+            });
+
             nodes.ownedListTable.querySelectorAll('tr[data-asset-id]').forEach(row => {
                 row.addEventListener('click', e => {
-                    if (e.target.closest('[data-action]')) return;
+                    if (e.target.closest('[data-action]') || e.target.closest('.owned-year-btn')) return;
                     openOwnedDetail(row.dataset.assetId);
                 });
             });
@@ -3589,6 +4414,96 @@ function renderOwnedPortfolioList() {
         }
     }
     renderOwnedPortfolioCharts(list, tmi, regime);
+    renderOwnedDashboard(list, tmi, regime);
+    renderOwnedCfConsolidatedSection(list, tmi, regime);
+}
+
+function renderOwnedCfConsolidatedSection(list, tmi, regime) {
+    const wrap = document.getElementById('owned-portfolio-cf-consolidated');
+    if (!wrap) return;
+    if (!list.length) { wrap.innerHTML = ''; return; }
+
+    const YEARS = 20;
+    const currentYear = new Date().getFullYear();
+    const labels = Array.from({ length: YEARS }, (_, i) => currentYear + i);
+
+    // Sum cfAnnuel per year across all assets
+    const yearlyCf = labels.map(yr => {
+        return list.reduce((sum, asset) => {
+            const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+            const entry = years.find(y => y.year === yr);
+            if (entry) return sum + entry.cfAnnuel;
+            const last = years[years.length - 1];
+            return sum + (last ? last.cfAnnuel : 0);
+        }, 0);
+    });
+    let cumSum = 0;
+    const cumValues = yearlyCf.map(v => { cumSum += v; return cumSum; });
+
+    const width = 760; const height = 200;
+    const pad = { top: 16, right: 16, bottom: 32, left: 60 };
+    const pw = width - pad.left - pad.right;
+    const ph = height - pad.top - pad.bottom;
+    const minV = Math.min(0, ...cumValues);
+    const maxV = Math.max(0, ...cumValues);
+    const range = Math.max(1, maxV - minV);
+    const ticks = Array.from({ length: 4 }, (_, i) => maxV - (range / 3) * i);
+    const xFor = i => pad.left + (YEARS <= 1 ? pw / 2 : (pw * i) / (YEARS - 1));
+    const yFor = v => pad.top + ((maxV - v) / range) * ph;
+    const pts = cumValues.map((v, i) => ({ x: xFor(i), y: yFor(v) }));
+    const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const fillD = `${pathD} L${pts[pts.length-1].x.toFixed(1)} ${(pad.top+ph).toFixed(1)} L${pad.left} ${(pad.top+ph).toFixed(1)} Z`;
+    const finalCum = cumValues[YEARS - 1] || 0;
+
+    wrap.innerHTML = `
+        <div class="owned-dashboard-cf-chart-wrap">
+            <div class="owned-dashboard-chart-title">CF net cumulé — portefeuille entier (${list.length} bien${list.length > 1 ? 's' : ''})</div>
+            <div class="owned-dashboard-chart-meta">
+                <span>Horizon : 20 ans</span>
+                <span>Fin : <strong class="${finalCum >= 0 ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(finalCum)}</strong></span>
+            </div>
+            <svg viewBox="0 0 ${width} ${height}" class="owned-cf-svg" aria-label="CF net cumulé du portefeuille">
+                ${ticks.map(v => `
+                    <line class="owned-cf-grid-line" x1="${pad.left}" y1="${yFor(v).toFixed(1)}" x2="${width-pad.right}" y2="${yFor(v).toFixed(1)}"></line>
+                    <text class="owned-cf-axis-text" x="${pad.left - 6}" y="${(yFor(v)+4).toFixed(1)}" text-anchor="end">${formatCompactCurrency(v)}</text>
+                `).join('')}
+                ${(minV < 0 && maxV > 0) ? `<line class="owned-cf-zero-line" x1="${pad.left}" y1="${yFor(0).toFixed(1)}" x2="${width-pad.right}" y2="${yFor(0).toFixed(1)}"></line>` : ''}
+                ${labels.filter((_, i) => i % 4 === 0 || i === YEARS - 1).map((yr, _, __, i = labels.indexOf(yr)) => `
+                    <text class="owned-cf-axis-text" x="${xFor(i).toFixed(1)}" y="${height - 6}" text-anchor="middle">${yr}</text>
+                `).join('')}
+                <path class="owned-cf-fill" d="${fillD}"></path>
+                <path class="owned-cf-path" d="${pathD}"></path>
+                ${pts.filter((_, i) => i % 4 === 0 || i === YEARS - 1).map(p => `<circle class="owned-cf-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5"></circle>`).join('')}
+            </svg>
+        </div>
+        ${renderOwnedRepartitionBarHTML(list, tmi, regime)}
+    `;
+}
+
+function renderOwnedRepartitionBarHTML(list, tmi, regime) {
+    const cfs = list.map(asset => {
+        const sc = getOwnedDefaultScenario(asset);
+        const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+        return { name: asset.nom, cf: r.cfNetNet };
+    });
+    const totalAbs = cfs.reduce((s, c) => s + Math.abs(c.cf), 0);
+    if (!totalAbs) return '';
+    const COLORS_POS = ['#2DA44E','#3FB950','#56D364','#7EE787'];
+    const COLORS_NEG = ['#CF222E','#F85149','#FF6B6B','#FFA8A8'];
+    let pi = 0; let ni = 0;
+    const segs = cfs.map(c => ({
+        name: c.name, cf: c.cf,
+        w: (Math.abs(c.cf) / totalAbs * 100).toFixed(1),
+        color: c.cf >= 0 ? COLORS_POS[pi++ % 4] : COLORS_NEG[ni++ % 4],
+        pos: c.cf >= 0
+    }));
+    return `
+        <div class="owned-repartition-bar-wrap">
+            <div class="owned-dashboard-chart-title">Répartition du CF par bien</div>
+            <div class="owned-repartition-bar">${segs.map(s => `<div class="owned-repartition-segment" style="width:${s.w}%;background:${s.color}" title="${escapeHtml(s.name)} : ${formatSignedCurrency(s.cf)}/mois"></div>`).join('')}</div>
+            <div class="owned-repartition-legend">${segs.map(s => `<span class="owned-repartition-legend-item"><span class="owned-repartition-swatch" style="background:${s.color}"></span><span>${escapeHtml(s.name)}</span><strong class="${s.pos ? 'value-positive' : 'value-negative'}">${formatSignedCurrency(s.cf)}</strong></span>`).join('')}</div>
+        </div>
+    `;
 }
 
 function openOwnedAddModal() {
@@ -3629,12 +4544,13 @@ function openOwnedDetail(assetId) {
         const post = _a.postAchat || {};
         if (!post.chargesAnnuelles || post.chargesAnnuelles.length === 0) {
             const annee = _a.anneeAchat || new Date().getFullYear();
-            if ((post.taxeFonciere ?? 0) > 0 || (post.gestionLocative ?? 0) > 0 || (post.assurancePNO ?? 0) > 0) {
+            if ((post.taxeFonciere ?? 0) > 0 || (post.gestionLocative ?? 0) > 0 || (post.assurancePNO ?? 0) > 0 || (post.chargesCopro ?? 0) > 0) {
                 addOwnedChargesAnnuelles(assetId, {
                     annee,
                     taxeFonciere: post.taxeFonciere ?? 0,
                     gestionLocative: post.gestionLocative ?? 0,
                     assurancePNO: post.assurancePNO ?? 0,
+                    chargesCopro: post.chargesCopro ?? 0,
                 });
             }
         }
@@ -3649,6 +4565,16 @@ function closeOwnedDetail() {
     nodes.ownedDetailView.hidden = true;
     nodes.ownedListView.hidden = false;
     renderOwnedPortfolioList();
+}
+
+function renderOwnedProjectionContent(asset) {
+    const el = document.getElementById('owned-projection-content');
+    if (!el) return;
+    const hasData = (asset.acquisition?.prix || 0) > 0;
+    if (!hasData) { el.innerHTML = ''; return; }
+    const tmi = getOwnedTmi();
+    const cmp = computeRegimeComparison(asset, tmi);
+    el.innerHTML = renderRegimeComparisonHTML(cmp);
 }
 
 function renderOwnedDetail() {
@@ -3666,34 +4592,241 @@ function renderOwnedDetail() {
 
     if (nodes.ownedDiagnosticBtn) {
         const hasData = (asset.acquisition?.prix || 0) > 0;
+        nodes.ownedDiagnosticBtn.hidden = !hasData;
         nodes.ownedDiagnosticBtn.disabled = !hasData;
     }
 
+    renderOwnedRegimeSelector();
     renderOwnedSynthese(asset);
+    renderOwnedVerdictBlock(asset);
     renderOwnedCharts(asset);
+    renderOwnedCrdChart(asset);
     renderAccordionAcquisition(asset);
     renderAccordionPostAchat(asset);
     renderAccordionSimulateur(asset);
+    renderOwnedCfTable(asset);
+    renderOwnedProjectionContent(asset);
+    renderOwnedTravauxTab(asset);
 
     const detail = nodes.ownedDetailView;
-    if (detail && !detail.dataset.accWired) {
-        detail.dataset.accWired = '1';
+    if (detail && !detail.dataset.tabWired) {
+        detail.dataset.tabWired = '1';
         detail.addEventListener('click', e => {
-            const btn = e.target.closest('.owned-accordion__header');
+            const btn = e.target.closest('.owned-tab');
             if (!btn) return;
-            const key = btn.dataset.acc;
-            const bodyId = `acc-${key}-body`;
-            const body = document.getElementById(bodyId);
-            if (!body) return;
-            const isOpen = btn.getAttribute('aria-expanded') === 'true';
-            btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-            body.hidden = isOpen;
+            const tabKey = btn.dataset.tab;
+            detail.querySelectorAll('.owned-tab').forEach(t => {
+                t.classList.toggle('owned-tab--active', t === btn);
+                t.setAttribute('aria-selected', t === btn ? 'true' : 'false');
+            });
+            detail.querySelectorAll('.owned-tab-panel').forEach(p => {
+                p.hidden = p.id !== `owned-tab-${tabKey}`;
+            });
         });
     }
 }
 
+function renderOwnedVerdictBlock(asset) {
+    const el = nodes.ownedVerdict || document.getElementById('owned-verdict');
+    if (!el) return;
+    const acq = asset.acquisition || {};
+    const hasData = (acq.prix || 0) > 0;
+    if (!hasData) { el.innerHTML = ''; return; }
+
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+    const defaultYrVerdict = Math.max(1, new Date().getFullYear() - anneeAchat + 1);
+    const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYrVerdict;
+    const YEAR_OPTIONS = [1, 3, 5, 10];
+
+    // Métriques selon l'année sélectionnée
+    const { years: timeline } = computeOwnedAssetTimeline(asset, tmi, regime);
+    const targetAbsYear = anneeAchat + yr - 1;
+    const yearRow = timeline.find(y => y.year === targetAbsYear) || timeline[timeline.length - 1];
+    const cfAnnuel = yearRow ? yearRow.cfAnnuel : 0;
+    const cfNetNet = Math.round(cfAnnuel / 12);
+
+    const sc = getOwnedDefaultScenario(asset);
+    const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+    const rentaBrute = r.rentaBrute || 0;
+    const dscr = r.dscr || 0;
+    const effort = Math.max(0, -cfNetNet);
+
+    const cfTone = cfNetNet > 0 ? 'positive' : cfNetNet >= -100 ? 'watch' : 'negative';
+    const cfSign = cfNetNet > 0 ? '+' : '';
+    const rentaTone = rentaBrute > 6 ? 'positive' : rentaBrute >= 4 ? 'watch' : 'negative';
+    const dscrTone = dscr > 1.2 ? 'positive' : dscr >= 1 ? 'watch' : 'negative';
+    const effortTone = effort === 0 ? 'positive' : effort < 200 ? 'watch' : 'negative';
+
+    const yearSelectorHtml = `
+        <div class="owned-year-selector" style="margin-bottom:8px">
+            <span class="owned-year-selector__label">Vue</span>
+            <div class="owned-year-selector__btns">
+                ${YEAR_OPTIONS.map(y => { const absYear = anneeAchat + y - 1; return `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-verdict-year="${y}">An ${y} <span style="font-size:.65em;opacity:.6">${absYear}</span></button>`; }).join('')}
+            </div>
+        </div>`;
+
+    el.innerHTML = yearSelectorHtml + `
+        <div class="owned-verdict__grid">
+            <div class="owned-verdict__metric">
+                <span class="owned-verdict__label">CF net / mois (an ${yr})</span>
+                <span class="owned-verdict__value owned-verdict__value--${cfTone}">${cfSign}${cfNetNet.toLocaleString('fr-FR')} €</span>
+            </div>
+            <div class="owned-verdict__metric">
+                <span class="owned-verdict__label">Rendement brut</span>
+                <span class="owned-verdict__value owned-verdict__value--${rentaTone}">${rentaBrute.toFixed(1)} %</span>
+            </div>
+            <div class="owned-verdict__metric">
+                <span class="owned-verdict__label">DSCR</span>
+                <span class="owned-verdict__value owned-verdict__value--${dscrTone}">${dscr.toFixed(2)}</span>
+            </div>
+            <div class="owned-verdict__metric">
+                <span class="owned-verdict__label">Effort épargne (an ${yr})</span>
+                <span class="owned-verdict__value owned-verdict__value--${effortTone}">${effort.toLocaleString('fr-FR')} €/mois</span>
+            </div>
+        </div>
+    `;
+
+    el.querySelectorAll('[data-verdict-year]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: Number(btn.dataset.verdictYear) };
+            localStorage.setItem('investissementWebOwnedYearFilters', JSON.stringify(state.ownedYearFilters));
+            renderOwnedVerdictBlock(asset);
+            const freshPost = getOwnedAsset(asset.id);
+            if (freshPost) renderAccordionPostAchat(freshPost);
+        });
+    });
+}
+
+function renderOwnedCfTable(asset) {
+    const wrap = nodes.ownedCfTableWrap || document.getElementById('owned-cf-table-wrap');
+    if (!wrap) return;
+    const acq = asset.acquisition || {};
+    const hasData = (acq.prix || 0) > 0;
+    if (!hasData) { wrap.innerHTML = ''; return; }
+
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+    if (!years || !years.length) { wrap.innerHTML = ''; return; }
+
+    const first20 = years.slice(0, 20);
+    const rows = first20.map(y => {
+        const cf = y.cfAnnuel ?? y.cfNet ?? 0;
+        const cfCls = cf >= 0 ? 'positive' : 'negative';
+        const cfSign = cf >= 0 ? '+' : '';
+        const loyers = Math.round(y.recettesAnnee ?? y.loyers ?? 0);
+        const depenses = Math.round(y.depensesAnnee ?? y.charges ?? 0);
+        return `<tr>
+            <td>${y.year}</td>
+            <td>${loyers.toLocaleString('fr-FR')} €</td>
+            <td>${depenses.toLocaleString('fr-FR')} €</td>
+            <td class="${cfCls}">${cfSign}${Math.round(cf).toLocaleString('fr-FR')} €</td>
+            <td style="font-size:.75rem;color:var(--text-tertiary)">${Math.round(y.cumulCF ?? 0).toLocaleString('fr-FR')} €</td>
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+        <div class="owned-cf-table">
+            <div class="owned-cf-table__title">Flux de trésorerie annuels</div>
+            <div class="owned-cf-table__scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Année</th>
+                            <th>Recettes</th>
+                            <th>Dépenses</th>
+                            <th>CF annuel</th>
+                            <th>CF cumulé</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function renderOwnedTravauxTab(asset) {
+    const el = nodes.ownedTravauxContent || document.getElementById('owned-travaux-content');
+    if (!el) return;
+
+    const post = asset.postAchat || {};
+    const TAG_LABELS = { 'deductible': 'Déductible', 'non-deductible': 'Non déductible', 'a-classifier': 'À classifier' };
+    const TAG_CSS = { 'deductible': 'tag--green', 'non-deductible': 'tag--grey', 'a-classifier': 'tag--orange' };
+
+    const currentYear = new Date().getFullYear();
+    const sorted = [...(post.travaux || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const totalDed = (post.travaux || [])
+        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
+        .reduce((s, t) => s + t.montant, 0);
+
+    el.innerHTML = `
+        <div class="owned-section-title">Travaux</div>
+        <div class="owned-travaux-list">
+            ${sorted.length ? sorted.map(t => `
+                <div class="owned-travaux-row">
+                    <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
+                    <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}</span>
+                    <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
+                    <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
+                    <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
+                </div>
+            `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun travail enregistré.</p>'}
+        </div>
+        ${totalDed > 0 ? `<div class="owned-travaux-totals"><span>Déductible ${currentYear} : <strong>${Math.round(totalDed).toLocaleString('fr-FR')} €</strong></span></div>` : ''}
+        <form class="owned-travaux-form" data-form="add-travail-tab" novalidate>
+            <input type="date" name="date" class="variables-input" required placeholder="Date" style="flex:0 0 140px">
+            <input type="text" name="description" class="variables-input" required placeholder="Description" style="flex:1;min-width:120px">
+            <input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" style="flex:0 0 100px">
+            <select name="tag" class="variables-input" style="flex:0 0 130px">
+                <option value="a-classifier">À classifier</option>
+                <option value="deductible">Déductible</option>
+                <option value="non-deductible">Non déductible</option>
+            </select>
+            <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
+        </form>
+    `;
+
+    el.querySelectorAll('[data-delete-travail-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedTravail(id, btn.dataset.deleteTravailTab);
+            const fresh = getOwnedAsset(id);
+            renderOwnedTravauxTab(fresh);
+            renderAccordionPostAchat(fresh);
+            renderOwnedSynthese(fresh);
+            renderOwnedCharts(fresh);
+            renderAccordionSimulateur(fresh);
+        });
+    });
+
+    el.querySelector('[data-form="add-travail-tab"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        addOwnedTravail(id, {
+            date: fd.get('date'),
+            description: fd.get('description')?.trim(),
+            montant: Number(fd.get('montant')),
+            tag: fd.get('tag')
+        });
+        e.target.reset();
+        const fresh = getOwnedAsset(id);
+        renderOwnedTravauxTab(fresh);
+        renderAccordionPostAchat(fresh);
+        renderOwnedSynthese(fresh);
+        renderOwnedCharts(fresh);
+        renderAccordionSimulateur(fresh);
+    });
+}
+
 let _ownedCfCumChart = null;
 let _ownedEcartChart = null;
+let _ownedCrdChart = null;
 let _ownedPortfolioCfChart = null;
 let _ownedPortfolioEcartChart = null;
 
@@ -3842,6 +4975,58 @@ function renderOwnedPortfolioCharts(list, tmi, regime) {
     }
 }
 
+function renderOwnedCrdChart(asset) {
+    const wrap = document.getElementById('owned-crd-chart-wrap');
+    if (!wrap) return;
+    if (_ownedCrdChart) { _ownedCrdChart.destroy(); _ownedCrdChart = null; }
+
+    const credit = asset.acquisition?.credit || {};
+    const montant = credit.montant || 0;
+    const duree = credit.duree || 0;
+    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+
+    if (!montant || !duree) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+
+    const { schedule } = computeAmortizationSchedule(montant, credit.taux || 0, duree, anneeAchat);
+    const labels = schedule.map(r => String(r.annee));
+    const dataCRD = schedule.map(r => r.crdDebut);
+    const currentYear = new Date().getFullYear();
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textClr = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+    const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const canvas = document.getElementById('owned-crd-chart');
+    if (!canvas) return;
+
+    _ownedCrdChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data: dataCRD,
+                borderColor: '#ef4444',
+                backgroundColor: isDark ? 'rgba(239,68,68,0.07)' : 'rgba(239,68,68,0.08)',
+                borderWidth: 2,
+                pointRadius: 2,
+                tension: 0.1,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => 'CRD : ' + Math.round(ctx.parsed.y).toLocaleString('fr-FR') + ' €' } }
+            },
+            scales: {
+                x: { ticks: { color: textClr, maxRotation: 45, font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } },
+                y: { ticks: { color: textClr, callback: v => (Math.abs(v) >= 1000 ? (v/1000).toFixed(0) + 'k' : v) + '€', font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } }
+            }
+        }
+    });
+}
+
 function renderOwnedSynthese(asset) {
     if (!nodes.ownedSynthese) return;
     const acq = asset.acquisition || {};
@@ -3886,8 +5071,37 @@ function renderOwnedSynthese(asset) {
         return { key, label, impots: rd.impotsAnnee, cfNetNet: rd.cfNetNet };
     });
 
+    // Patrimoine net
+    const patNet = computePatrimoineNet(asset);
+    const patTone = patNet.patrimoineNet !== null ? (patNet.patrimoineNet >= 0 ? 'positive' : 'negative') : '';
+
+    // Trésorerie réelle
+    const tresoReel = computeTresorerieReelle(asset, tmi, currentRegime);
+
+    // Régime optimal
+    const optRegime = getOptimalRegime(asset, tmi);
+    const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
+    const optGain = optRegime.optimal ? (optRegime.optimalCF || 0) - (optRegime.allCFs[currentRegime] || 0) : 0;
+    const hasOptAlert = optRegime.optimal && optRegime.optimal !== currentRegime && optGain > 20;
+
+    // Revenus bruts pour alerte 15k
+    const allAssets = Object.values(loadOwnedAssets());
+    const revenusBruts = computeRevenusLocatifsBruts(allAssets);
+    const alerteMicroFoncier = revenusBruts > 15000 && currentRegime === 'micro-foncier';
+    const anneeComp = new Date().getFullYear();
+
+    const loyerMarche = asset.loyerMarche || null;
+    const loyerInitialVal = acq.loyerInitial || 0;
+    const loyerSousEvalue = loyerMarche && loyerInitialVal > 0 && loyerInitialVal < loyerMarche.loyerMedian * 0.9;
+
     nodes.ownedSynthese.innerHTML = `
-        <div class="owned-synthese__title">Synthèse · scénario réaliste</div>
+        ${alerteMicroFoncier ? `<div class="owned-alert owned-alert--error">⚠ Revenus fonciers bruts ${Math.round(revenusBruts).toLocaleString('fr-FR')} €/an — Micro-foncier interdit au-delà de 15 000 €. Changez de régime.</div>` : ''}
+        ${hasOptAlert ? `<div class="owned-alert owned-alert--warning">💡 ${REGIME_LABELS_SHORT[optRegime.optimal]} serait plus favorable de <strong>+${Math.round(optGain).toLocaleString('fr-FR')} €/mois</strong> pour ce bien</div>` : ''}
+        ${loyerSousEvalue ? `<div class="owned-alert owned-alert--warning">📈 Loyer potentiellement sous-évalué : marché à <strong>${Math.round(loyerMarche.loyerMedian).toLocaleString('fr-FR')} €/mois</strong> (médiane sur ${loyerMarche.nbSamples} biens)</div>` : ''}
+        <div class="owned-synthese__title">Synthèse · scénario réaliste
+            ${asset.ville ? `<button class="btn btn--ghost btn--sm" data-action="analyse-loyer-marche" style="font-size:0.75rem" title="Comparer le loyer au marché local">📈 Loyer marché</button>` : ''}
+            <button class="btn btn--ghost btn--sm" data-action="open-compte-resultat" data-annee="${anneeComp}" style="margin-left:auto;font-size:0.75rem">📊 Compte de résultat ${anneeComp}</button>
+        </div>
         <div class="owned-synthese__cards">
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Mensualité crédit</span>
@@ -3921,15 +5135,49 @@ function renderOwnedSynthese(asset) {
                     ${r.dscr.toFixed(2).replace('.', ',')}
                 </span>
             </div>
+            <div class="owned-synthese__card ${patNet.patrimoineNet !== null ? (patTone === 'positive' ? 'owned-synthese__card--patrimoine-pos' : 'owned-synthese__card--patrimoine-neg') : ''}">
+                <span class="owned-synthese__card-label">Patrimoine net</span>
+                ${patNet.patrimoineNet !== null
+                    ? `<span class="owned-synthese__card-value owned-synthese__card-value--${patTone}">${patNet.patrimoineNet >= 0 ? '+' : ''}${patNet.patrimoineNet.toLocaleString('fr-FR')} €</span>
+                       <span class="owned-synthese__card-sub">Valeur ${patNet.valeurEstimee.toLocaleString('fr-FR')} € − CRD ${patNet.crd.toLocaleString('fr-FR')} €</span>`
+                    : `<span class="owned-synthese__card-value" style="color:var(--text-tertiary)">—</span>
+                       <span class="owned-synthese__card-sub"><a href="#" data-action="focus-valeur-estimee" style="color:var(--accent-gold)">Renseigner la valeur</a></span>`
+                }
+            </div>
         </div>
-        <div class="owned-synthese__title" style="margin-top:16px">Défiscalisation — comparaison des régimes</div>
+        ${tresoReel ? `
+        <div class="owned-synthese__title" style="margin-top:16px">Trésorerie réelle · 12 derniers mois</div>
+        ${tresoReel.n < 6 ? `<div style="color:var(--warning,#e6a817);font-size:.75rem;margin-bottom:6px">⚠ ${tresoReel.n} mois seulement — moyenne peu représentative</div>` : ''}
+        <div class="owned-synthese__cards">
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">Taux d'occupation réel</span>
+                <span class="owned-synthese__card-value">${tresoReel.tauxOccupation.toFixed(0)} %</span>
+                <span class="owned-synthese__card-sub">sur ${tresoReel.n} mois saisis</span>
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">CF réel moyen</span>
+                <span class="owned-synthese__card-value ${tresoReel.cfReelMoyen >= 0 ? 'owned-synthese__card-value--positive' : 'owned-synthese__card-value--negative'}">
+                    ${tresoReel.cfReelMoyen >= 0 ? '+' : ''}${Math.round(tresoReel.cfReelMoyen).toLocaleString('fr-FR')} €/mois
+                </span>
+            </div>
+            <div class="owned-synthese__card">
+                <span class="owned-synthese__card-label">Écart vs prévisionnel</span>
+                <span class="owned-synthese__card-value ${tresoReel.ecart >= 0 ? 'owned-synthese__card-value--positive' : 'owned-synthese__card-value--negative'}">
+                    ${tresoReel.ecart >= 0 ? '+' : ''}${Math.round(tresoReel.ecart).toLocaleString('fr-FR')} €/mois
+                </span>
+            </div>
+        </div>` : ''}
+        <div class="owned-synthese__title" style="margin-top:16px">Défiscalisation — comparaison des régimes
+            <button class="btn btn--ghost btn--sm" data-action="open-simu-travaux" style="margin-left:auto;font-size:0.75rem">🔧 Simuler des travaux</button>
+        </div>
         <div class="owned-synthese__defisca">
             ${defisca.map(d => {
                 const isActive = d.key === currentRegime;
+                const isOptimal = d.key === optRegime.optimal;
                 const cfTone = d.cfNetNet >= 0 ? 'positive' : 'negative';
                 return `
                 <div class="owned-synthese__defisca-card${isActive ? ' owned-synthese__defisca-card--active' : ''}">
-                    <span class="owned-synthese__defisca-name">${d.label}${isActive ? ' ✓' : ''}</span>
+                    <span class="owned-synthese__defisca-name">${d.label}${isActive ? ' ✓' : ''}${isOptimal && !isActive ? ' <span class="owned-badge owned-badge--optimal">Optimal</span>' : ''}${isOptimal && isActive ? ' <span class="owned-badge owned-badge--optimal">✓ Optimal</span>' : ''}</span>
                     <div class="owned-synthese__defisca-row">
                         <span>Impôts/an</span>
                         <span>${Math.round(d.impots).toLocaleString('fr-FR')} €</span>
@@ -3975,12 +5223,28 @@ function renderAccordionAcquisition(asset) {
                 <input class="variables-input" type="number" min="0" step="10" data-acq-field="loyerInitial" value="${acq.loyerInitial || 0}">
             </label>
             <label class="variables-field">
+                <span class="variables-label">Surface (m²)</span>
+                <input class="variables-input" type="number" min="0" step="1" data-acq-field="surface" value="${acq.surface || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Type de bien</span>
+                <select class="variables-input" data-acq-field="typeBien">
+                    <option value="appartement"${(acq.typeBien || 'appartement') === 'appartement' ? ' selected' : ''}>Appartement</option>
+                    <option value="maison"${acq.typeBien === 'maison' ? ' selected' : ''}>Maison</option>
+                    <option value="immeuble"${acq.typeBien === 'immeuble' ? ' selected' : ''}>Immeuble de rapport</option>
+                </select>
+            </label>
+            <label class="variables-field">
                 <span class="variables-label">Année d'achat</span>
                 <input class="variables-input" type="number" min="1900" max="2099" step="1" data-owned-field="anneeAchat" value="${asset.anneeAchat || ''}">
             </label>
             <label class="variables-field">
                 <span class="variables-label">Ville</span>
                 <input class="variables-input" type="text" data-owned-field="ville" value="${escapeHtml(asset.ville || '')}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Code postal</span>
+                <input class="variables-input" type="text" maxlength="5" data-owned-field="codePostal" value="${escapeHtml(asset.codePostal || '')}">
             </label>
         </div>
         <div class="owned-section-title">Crédit immobilier</div>
@@ -4002,12 +5266,23 @@ function renderAccordionAcquisition(asset) {
                 <input class="variables-input" type="number" min="0" max="5" step="0.01" data-credit-field="assurance" value="${credit.assurance || 0}">
             </label>
         </div>
+        <div class="owned-section-title" style="margin-top:20px">Valeur patrimoniale</div>
+        <div class="owned-form-grid">
+            <label class="variables-field">
+                <span class="variables-label">Valeur estimée actuelle (€)</span>
+                <input class="variables-input" type="number" min="0" step="1000" data-acq-field="valeurEstimee" value="${acq.valeurEstimee || 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Date d'estimation</span>
+                <input class="variables-input" type="month" data-acq-field="dateEstimation" value="${acq.dateEstimation || ''}">
+            </label>
+        </div>
     `;
 
     if (!nodes.accAcquisitionContent.dataset.acqWired) {
         nodes.accAcquisitionContent.dataset.acqWired = '1';
         nodes.accAcquisitionContent.addEventListener('change', e => {
-            const input = e.target.closest('input');
+            const input = e.target.closest('input, select');
             if (!input) return;
             const id = state.activeOwnedAssetId;
             if (!id) return;
@@ -4031,10 +5306,98 @@ function renderAccordionAcquisition(asset) {
                 if (metaEl) metaEl.textContent = `${freshAsset.ville}${freshAsset.anneeAchat ? ` · Acquis ${freshAsset.anneeAchat}` : ''}`;
             }
             renderOwnedSynthese(freshAsset);
+            renderOwnedVerdictBlock(freshAsset);
+            renderOwnedCfTable(freshAsset);
             renderOwnedCharts(freshAsset);
             renderAccordionSimulateur(freshAsset);
+            renderOwnedCrdChart(freshAsset);
         });
     }
+}
+
+function renderCFBreakdownHTML(bd, yr) {
+    const fmt = v => Math.abs(v).toLocaleString('fr-FR') + ' €';
+    const cfCls = bd.cfNetNet >= 0 ? 'pos' : bd.cfNetNet >= -50 ? 'watch' : 'neg';
+    const cfSign = bd.cfNetNet >= 0 ? '+' : '−';
+    return `<div class="cf-breakdown">
+        <div class="cf-breakdown__title">Décomposition CF annuel — an ${yr}</div>
+        <div class="cf-breakdown__row">
+            <span class="cf-breakdown__op"></span>
+            <span class="cf-breakdown__label">Loyer brut théorique</span>
+            <span class="cf-breakdown__value">${fmt(bd.loyerBrut)}</span>
+        </div>
+        <div class="cf-breakdown__row cf-breakdown__row--sub">
+            <span class="cf-breakdown__op">−</span>
+            <span class="cf-breakdown__label">Vacance locative</span>
+            <span class="cf-breakdown__value cf-breakdown__value--neg">−${fmt(bd.vacanceEuros)}</span>
+        </div>
+        <div class="cf-breakdown__row cf-breakdown__row--separator">
+            <span class="cf-breakdown__op">=</span>
+            <span class="cf-breakdown__label">Loyers encaissés</span>
+            <span class="cf-breakdown__value">${fmt(bd.loyersEncaisses)}</span>
+        </div>
+        <div class="cf-breakdown__row">
+            <span class="cf-breakdown__op">−</span>
+            <span class="cf-breakdown__label">Charges (taxe, copro, PNO, gestion)</span>
+            <span class="cf-breakdown__value cf-breakdown__value--neg">−${fmt(bd.charges)}</span>
+        </div>
+        ${bd.mensualiteCredit > 0 ? `<div class="cf-breakdown__row">
+            <span class="cf-breakdown__op">−</span>
+            <span class="cf-breakdown__label">Mensualités crédit</span>
+            <span class="cf-breakdown__value cf-breakdown__value--neg">−${fmt(bd.mensualiteCredit)}</span>
+        </div>` : ''}
+        <div class="cf-breakdown__row">
+            <span class="cf-breakdown__op">−</span>
+            <span class="cf-breakdown__label">Impôts (${getOwnedRegime() === 'micro-foncier' ? 'micro-foncier' : getOwnedRegime() === 'reel' ? 'réel' : 'SCI-IS'})</span>
+            <span class="cf-breakdown__value cf-breakdown__value--neg">−${fmt(bd.impots)}</span>
+        </div>
+        <div class="cf-breakdown__row cf-breakdown__row--total">
+            <span class="cf-breakdown__op">=</span>
+            <span class="cf-breakdown__label">CF net-net annuel</span>
+            <span class="cf-breakdown__value cf-breakdown__value--${cfCls}">${cfSign}${fmt(bd.cfNetNet)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;padding-left:24px">
+            soit ${cfSign}${Math.round(bd.cfNetNet / 12).toLocaleString('fr-FR')} €/mois
+        </div>
+    </div>`;
+}
+
+function renderRegimeComparisonHTML(cmp, yr) {
+    const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier Réel', 'sci-is': 'SCI-IS' };
+    const YEARS = [1, 3, 5, 10];
+    const regimes = ['micro-foncier', 'reel', 'sci-is'];
+    const fmt = v => v === null ? '—' : (v >= 0 ? '+' : '−') + Math.abs(Math.round(v / 12)).toLocaleString('fr-FR') + ' €/m';
+    const cls = v => v === null ? '' : v >= 0 ? 'cf-pos' : 'cf-neg';
+
+    // Alerte : régime optimal change-t-il entre an 1 et an 5 ?
+    const opt1 = cmp.optimal[1];
+    const opt5 = cmp.optimal[5];
+    const alertHtml = (opt1 && opt5 && opt1 !== opt5)
+        ? `<div class="regime-comparison__alert">⚠ Régime optimal an 1 : <strong>${REGIME_LABELS[opt1]}</strong> — mais en an 5 : <strong>${REGIME_LABELS[opt5]}</strong> devient plus avantageux. Rappel : le foncier réel engage sur 3 ans minimum.</div>`
+        : '';
+
+    return `<div class="regime-comparison">
+        <div class="regime-comparison__title">Comparatif régimes fiscaux — CF mensuel net</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Régime</th>
+                    ${YEARS.map(y => `<th>An ${y}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${regimes.map(regime => `<tr>
+                    <td>${REGIME_LABELS[regime]}</td>
+                    ${YEARS.map(y => {
+                        const v = cmp.byRegime[regime]?.[y] ?? null;
+                        const isOpt = cmp.optimal[y] === regime;
+                        return `<td><span class="${cls(v)}">${fmt(v)}</span>${isOpt ? '<span class="optimal-badge">✓</span>' : ''}</td>`;
+                    }).join('')}
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        ${alertHtml}
+    </div>`;
 }
 
 function renderAccordionPostAchat(asset) {
@@ -4058,26 +5421,79 @@ function renderAccordionPostAchat(asset) {
 
     const sorted = [...(post.travaux || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
+    // CF Breakdown pour l'année sélectionnée (filtre par bien)
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+    const defaultYear = asset.anneeAchat
+        ? Math.max(1, currentYear - asset.anneeAchat + 1)
+        : 1;
+    const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYear;
+    const breakdown = (asset.acquisition?.prix || 0) > 0 ? computeCFBreakdown(asset, tmi, regime, yr) : null;
+    const breakdownHtml = breakdown ? renderCFBreakdownHTML(breakdown, yr) : '';
+
+    // P0-B : résoudre les valeurs courantes depuis chargesAnnuelles pour les inputs plats
+    const recentEntriesDisplay = (post.chargesAnnuelles || [])
+        .filter(e => e.annee <= currentYear)
+        .sort((a, b) => b.annee - a.annee);
+    const ceDisplay = recentEntriesDisplay[0] || null;
+    const displayTF = ceDisplay ? (ceDisplay.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0);
+    const displayGestion = ceDisplay ? (ceDisplay.gestionLocative ?? post.gestionLocative ?? 0) : (post.gestionLocative ?? 0);
+    const displayPNO = ceDisplay ? (ceDisplay.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
+    const displayCopro = ceDisplay ? (ceDisplay.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
+    const displayFromYear = ceDisplay ? ceDisplay.annee : null;
+
     nodes.accPostAchatContent.innerHTML = `
         <div class="owned-section-title">Charges récurrentes</div>
+        ${displayFromYear ? `
+        <div style="font-size:.75rem;color:var(--accent-gold);margin-bottom:8px;
+          padding:6px 10px;background:var(--surface-raised,var(--surface));
+          border-left:2px solid var(--accent-gold);border-radius:4px">
+          ⚠ Ces valeurs proviennent de l'entrée <strong>${displayFromYear}</strong>
+          de l'historique. Modifiez-les ici pour mettre à jour cette entrée.
+        </div>` : ''}
         <div class="owned-form-grid">
             <label class="variables-field">
-                <span class="variables-label">Taxe foncière (€/an)</span>
-                <input class="variables-input" type="number" min="0" step="10" data-post-field="taxeFonciere" value="${post.taxeFonciere || 0}">
+                <span class="variables-label">Vacance locative (%)</span>
+                <input class="variables-input" type="number" min="0" max="100" step="0.5" data-post-field="vacance" value="${post.vacance ?? 5}">
             </label>
             <label class="variables-field">
-                <span class="variables-label">Charges copro (€/mois)</span>
-                <input class="variables-input" type="number" min="0" step="5" data-post-field="chargesCopro" value="${post.chargesCopro || 0}">
+                <span class="variables-label">Taxe foncière (€/an)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
+                <input class="variables-input" type="number" min="0" step="10" data-post-field="taxeFonciere" value="${displayTF}">
             </label>
             <label class="variables-field">
-                <span class="variables-label">Gestion locative (% loyer)</span>
-                <input class="variables-input" type="number" min="0" max="20" step="0.5" data-post-field="gestionLocative" value="${post.gestionLocative || 0}">
+                <span class="variables-label">Charges copro (€/mois)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
+                <input class="variables-input" type="number" min="0" step="5" data-post-field="chargesCopro" value="${displayCopro}">
             </label>
             <label class="variables-field">
-                <span class="variables-label">Assurance PNO (€/an)</span>
-                <input class="variables-input" type="number" min="0" step="10" data-post-field="assurancePNO" value="${post.assurancePNO || 0}">
+                <span class="variables-label">Gestion locative (% loyer)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
+                <input class="variables-input" type="number" min="0" max="20" step="0.5" data-post-field="gestionLocative" value="${displayGestion}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Assurance PNO (€/an)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
+                <input class="variables-input" type="number" min="0" step="10" data-post-field="assurancePNO" value="${displayPNO}">
             </label>
         </div>
+
+        <div class="owned-section-title" style="margin-top:20px">Évolution des charges</div>
+        <div class="owned-charges-annuelles-list">
+            ${(post.chargesAnnuelles || []).length ? (post.chargesAnnuelles || []).map(e => `
+                <div class="owned-charges-annuelles-row">
+                    <span class="owned-charges-annuelles-row__year">${e.annee}</span>
+                    <span class="owned-charges-annuelles-row__vals">TF : ${(e.taxeFonciere ?? 0).toLocaleString('fr-FR')} €/an · Copro : ${(e.chargesCopro ?? 0).toLocaleString('fr-FR')} €/mois · Gest. : ${e.gestionLocative ?? 0} % · PNO : ${(e.assurancePNO ?? 0).toLocaleString('fr-FR')} €/an</span>
+                    <button class="owned-travaux-delete" data-delete-charges="${e.annee}" title="Supprimer">✕</button>
+                </div>
+            `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Ajoutez une année pour suivre l\'évolution des charges.</p>'}
+        </div>
+        <form class="owned-charges-form" data-form="add-charges" novalidate>
+            <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.anneeAchat || 2020}" step="1" required style="min-width:0">
+            <input type="number" name="taxeFonciere" class="variables-input" placeholder="TF (€/an)" min="0" step="10" style="min-width:0">
+            <input type="number" name="chargesCopro" class="variables-input" placeholder="Copro (€/mois)" min="0" step="5" style="min-width:0">
+            <input type="number" name="gestionLocative" class="variables-input" placeholder="Gestion (%)" min="0" max="20" step="0.5" style="min-width:0">
+            <input type="number" name="assurancePNO" class="variables-input" placeholder="PNO (€/an)" min="0" step="10" style="min-width:0">
+            <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
+        </form>
+
+        ${breakdownHtml}
 
         <div class="owned-section-title">Travaux</div>
         <div class="owned-travaux-list">
@@ -4105,30 +5521,93 @@ function renderAccordionPostAchat(asset) {
             <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
         </form>
 
-        <div class="owned-section-title" style="margin-top:20px">Évolution des charges</div>
-        <div class="owned-charges-annuelles-list">
-            ${(post.chargesAnnuelles || []).length ? (post.chargesAnnuelles || []).map(e => `
-                <div class="owned-charges-annuelles-row">
-                    <span class="owned-charges-annuelles-row__year">${e.annee}</span>
-                    <span class="owned-charges-annuelles-row__vals">TF : ${(e.taxeFonciere ?? 0).toLocaleString('fr-FR')} €/an · Gest. : ${e.gestionLocative ?? 0} % · PNO : ${(e.assurancePNO ?? 0).toLocaleString('fr-FR')} €/an</span>
-                    <button class="owned-travaux-delete" data-delete-charges="${e.annee}" title="Supprimer">✕</button>
-                </div>
-            `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Ajoutez une année pour suivre l\'évolution des charges.</p>'}
-        </div>
-        <form class="owned-charges-form" data-form="add-charges" novalidate>
-            <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.anneeAchat || 2020}" step="1" required style="min-width:0">
-            <input type="number" name="taxeFonciere" class="variables-input" placeholder="TF (€/an)" min="0" step="10" style="min-width:0">
-            <input type="number" name="gestionLocative" class="variables-input" placeholder="Gestion (%)" min="0" max="20" step="0.5" style="min-width:0">
-            <input type="number" name="assurancePNO" class="variables-input" placeholder="PNO (€/an)" min="0" step="10" style="min-width:0">
-            <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
-        </form>
+        <div class="owned-section-title" style="margin-top:20px">Suivi des loyers réels</div>
+        ${(() => {
+            const ALL_LOYERS = [...(post.loyersReels || [])].sort((a, b) => b.mois.localeCompare(a.mois));
+            const PAGE_SIZE = 12;
+            const loyerPage = state.ownedLoyerPage?.[asset.id] || 0;
+            const loyers = ALL_LOYERS.slice(loyerPage * PAGE_SIZE, (loyerPage + 1) * PAGE_SIZE);
+            const hasMore = ALL_LOYERS.length > (loyerPage + 1) * PAGE_SIZE;
+            const hasPrev = loyerPage > 0;
+            const loyerPrevu = asset.acquisition?.loyerInitial || 0;
+            const STATUT_LABELS = { encaisse: '✓ Encaissé', impaye: '✗ Impayé', vacant: '○ Vacant', partiel: '~ Partiel' };
+            const STATUT_CSS = { encaisse: 'loyer-statut--ok', impaye: 'loyer-statut--bad', vacant: 'loyer-statut--vacant', partiel: 'loyer-statut--partial' };
+            return `
+            <table class="owned-loyers-table">
+                <thead><tr><th>Mois</th><th>Prévu</th><th>Réel</th><th>Statut</th><th>Écart</th><th></th></tr></thead>
+                <tbody>
+                ${loyers.length ? loyers.map(e => {
+                    const ecart = (e.montant || 0) - loyerPrevu;
+                    return `<tr>
+                        <td>${e.mois}</td>
+                        <td>${loyerPrevu.toLocaleString('fr-FR')} €</td>
+                        <td>${(e.montant || 0).toLocaleString('fr-FR')} €</td>
+                        <td><span class="loyer-statut ${STATUT_CSS[e.statut] || ''}">${STATUT_LABELS[e.statut] || e.statut}</span></td>
+                        <td class="${ecart < 0 ? 'owned-table-num--negative' : ''}">${ecart >= 0 ? '+' : ''}${ecart.toLocaleString('fr-FR')} €</td>
+                        <td><button class="owned-travaux-delete" data-delete-loyer="${escapeHtml(e.mois)}" title="Supprimer">✕</button></td>
+                    </tr>`;
+                }).join('') : '<tr><td colspan="6" style="text-align:center;font-style:italic;color:var(--text-tertiary);padding:12px">Aucun loyer saisi</td></tr>'}
+                </tbody>
+            </table>
+            <div style="display:flex;gap:8px;margin-top:6px">
+                ${hasPrev ? `<button class="btn btn--ghost btn--sm" data-loyer-page="${loyerPage - 1}">← Précédent</button>` : ''}
+                ${hasMore ? `<button class="btn btn--ghost btn--sm" data-loyer-page="${loyerPage + 1}">Suivant →</button>` : ''}
+            </div>
+            <form class="owned-loyers-form" data-form="add-loyer" novalidate>
+                <input type="month" name="mois" class="variables-input" required style="flex:1;min-width:120px">
+                <input type="number" name="montant" class="variables-input" placeholder="Montant €" min="0" step="10" style="flex:1;min-width:80px">
+                <select name="statut" class="variables-input" style="flex:1;min-width:100px">
+                    <option value="encaisse">Encaissé</option>
+                    <option value="partiel">Partiel</option>
+                    <option value="impaye">Impayé</option>
+                    <option value="vacant">Vacant</option>
+                </select>
+                <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
+            </form>`;
+        })()}
+
+        <div class="owned-section-title" style="margin-top:20px">Déficits fonciers reportables</div>
+        ${(() => {
+            const defs = [...(post.deficitFoncierReporte || [])].sort((a, b) => b.annee - a.annee);
+            const currentYear = new Date().getFullYear();
+            const stockTotal = defs.filter(d => d.annee >= currentYear - 10).reduce((s, d) => s + Math.max(0, (d.montantInitial || 0) - (d.utilise || 0)), 0);
+            return `
+            ${stockTotal > 0 ? `<div class="owned-deficit-total">Stock reportable : <strong>${Math.round(stockTotal).toLocaleString('fr-FR')} €</strong></div>` : ''}
+            <table class="owned-loyers-table">
+                <thead><tr><th>Année</th><th>Montant initial</th><th>Utilisé</th><th>Restant</th><th>Expire</th><th></th></tr></thead>
+                <tbody>
+                ${defs.length ? defs.map(d => {
+                    const restant = Math.max(0, (d.montantInitial || 0) - (d.utilise || 0));
+                    const expire = d.annee + 10;
+                    const expired = expire <= currentYear;
+                    return `<tr ${expired ? 'style="opacity:0.4"' : ''}>
+                        <td>${d.annee}</td>
+                        <td>${(d.montantInitial || 0).toLocaleString('fr-FR')} €</td>
+                        <td>${(d.utilise || 0).toLocaleString('fr-FR')} €</td>
+                        <td>${restant.toLocaleString('fr-FR')} €</td>
+                        <td>${expired ? '<span style="color:var(--danger)">Expiré</span>' : expire}</td>
+                        <td><button class="owned-travaux-delete" data-delete-deficit="${d.annee}" title="Supprimer">✕</button></td>
+                    </tr>`;
+                }).join('') : '<tr><td colspan="6" style="text-align:center;font-style:italic;color:var(--text-tertiary);padding:12px">Aucun déficit enregistré</td></tr>'}
+                </tbody>
+            </table>
+            <form class="owned-deficit-form" data-form="add-deficit" novalidate>
+                <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.anneeAchat || 2015}" max="${currentYear}" step="1" required style="flex:0 0 80px">
+                <input type="number" name="montantInitial" class="variables-input" placeholder="Montant (€)" min="0" step="100" required style="flex:1">
+                <input type="number" name="utilise" class="variables-input" placeholder="Déjà utilisé (€)" min="0" step="100" style="flex:1">
+                <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
+            </form>`;
+        })()}
 
         <div class="owned-section-title" style="margin-top:20px">Notes</div>
         <div class="owned-notes-list">
             ${[...(post.notes || [])].reverse().map(n => `
                 <div class="owned-note-entry">
                     <p class="owned-note-text">${escapeHtml(n.text)}</p>
-                    <span class="owned-note-date">${new Date(n.createdAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span class="owned-note-date">${new Date(n.createdAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+                        <button class="owned-travaux-delete" data-delete-note="${escapeHtml(n.id)}" title="Supprimer" style="margin-left:auto">✕</button>
+                    </div>
                 </div>
             `).join('') || '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune note.</p>'}
         </div>
@@ -4143,10 +5622,36 @@ function renderAccordionPostAchat(asset) {
             const id = state.activeOwnedAssetId;
             if (!id) return;
             updateOwnedPostAchat(id, { [input.dataset.postField]: Number(input.value) });
+
+            // B1 : synchroniser vers chargesAnnuelles
+            const freshForCharges = getOwnedAsset(id);
+            const postForCharges = freshForCharges?.postAchat || {};
+            const ca = postForCharges.chargesAnnuelles || [];
+            const currentYearSync = new Date().getFullYear();
+            const lastEntry = [...ca].filter(e => e.annee <= currentYearSync)
+                                     .sort((a, b) => b.annee - a.annee)[0];
+            if (lastEntry) {
+                const field = input.dataset.postField;
+                if (['taxeFonciere', 'chargesCopro', 'gestionLocative', 'assurancePNO'].includes(field)) {
+                    addOwnedChargesAnnuelles(id, { ...lastEntry, [field]: Number(input.value) });
+                }
+            }
+
             const fresh = getOwnedAsset(id);
             renderOwnedSynthese(fresh);
+            renderOwnedVerdictBlock(fresh);
+            renderOwnedCfTable(fresh);
             renderOwnedCharts(fresh);
             renderAccordionSimulateur(fresh);
+            renderOwnedProjectionContent(fresh);
+
+            // B3 : mise à jour ciblée du bloc CF breakdown sans re-rendre tout l'accordéon
+            const yr2 = (state.ownedYearFilters?.[id]) ?? 1;
+            const bdNew = (fresh.acquisition?.prix || 0) > 0
+                ? computeCFBreakdown(fresh, getOwnedTmi(), getOwnedRegime(), yr2)
+                : null;
+            const bdWrap = nodes.accPostAchatContent.querySelector('.cf-breakdown');
+            if (bdWrap && bdNew) bdWrap.outerHTML = renderCFBreakdownHTML(bdNew, yr2);
         });
     });
 
@@ -4160,6 +5665,7 @@ function renderAccordionPostAchat(asset) {
             renderOwnedSynthese(fresh);
             renderOwnedCharts(fresh);
             renderAccordionSimulateur(fresh);
+            renderOwnedTravauxTab(fresh);
         });
     });
 
@@ -4175,11 +5681,13 @@ function renderAccordionPostAchat(asset) {
             tag: fd.get('tag')
         });
         e.target.reset();
+        showToast('Travail ajouté');
         const fresh = getOwnedAsset(id);
         renderAccordionPostAchat(fresh);
         renderOwnedSynthese(fresh);
         renderOwnedCharts(fresh);
         renderAccordionSimulateur(fresh);
+        renderOwnedTravauxTab(fresh);
     });
 
     nodes.accPostAchatContent.querySelectorAll('[data-delete-charges]').forEach(btn => {
@@ -4202,9 +5710,15 @@ function renderAccordionPostAchat(asset) {
         if (!id) return;
         const annee = Number(fd.get('annee'));
         if (!annee) return;
+        const anneeAchatMin = getOwnedAsset(id)?.anneeAchat || 2000;
+        if (annee < anneeAchatMin || annee > new Date().getFullYear() + 1) {
+            showToast(`Année invalide (min : ${anneeAchatMin})`, 'negative');
+            return;
+        }
         addOwnedChargesAnnuelles(id, {
             annee,
             taxeFonciere: Number(fd.get('taxeFonciere')) || 0,
+            chargesCopro: Number(fd.get('chargesCopro')) || 0,
             gestionLocative: Number(fd.get('gestionLocative')) || 0,
             assurancePNO: Number(fd.get('assurancePNO')) || 0,
         });
@@ -4224,7 +5738,74 @@ function renderAccordionPostAchat(asset) {
         if (!text) return;
         addOwnedNote(id, text);
         if (textarea) textarea.value = '';
+        showToast('Note enregistrée');
         renderAccordionPostAchat(getOwnedAsset(id));
+    });
+
+    nodes.accPostAchatContent.querySelectorAll('[data-delete-note]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedNote(id, btn.dataset.deleteNote);
+            renderAccordionPostAchat(getOwnedAsset(id));
+        });
+    });
+
+    nodes.accPostAchatContent.querySelectorAll('[data-delete-loyer]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedLoyerReel(id, btn.dataset.deleteLoyer);
+            const fresh = getOwnedAsset(id);
+            renderAccordionPostAchat(fresh);
+            renderOwnedSynthese(fresh);
+        });
+    });
+
+    nodes.accPostAchatContent.querySelector('[data-form="add-loyer"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        const mois = fd.get('mois');
+        if (!mois) return;
+        addOwnedLoyerReel(id, { mois, montant: Number(fd.get('montant')) || 0, statut: fd.get('statut') || 'encaisse' });
+        e.target.reset();
+        showToast('Loyer enregistré');
+        const fresh = getOwnedAsset(id);
+        renderAccordionPostAchat(fresh);
+        renderOwnedSynthese(fresh);
+    });
+
+    nodes.accPostAchatContent.querySelectorAll('[data-delete-deficit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            deleteOwnedDeficitFoncier(id, Number(btn.dataset.deleteDeficit));
+            renderAccordionPostAchat(getOwnedAsset(id));
+        });
+    });
+
+    nodes.accPostAchatContent.querySelector('[data-form="add-deficit"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        const annee = Number(fd.get('annee'));
+        if (!annee) return;
+        addOwnedDeficitFoncier(id, { annee, montantInitial: Number(fd.get('montantInitial')) || 0, utilise: Number(fd.get('utilise')) || 0 });
+        e.target.reset();
+        showToast('Déficit enregistré');
+        renderAccordionPostAchat(getOwnedAsset(id));
+    });
+
+    nodes.accPostAchatContent.querySelectorAll('[data-loyer-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            state.ownedLoyerPage = { ...(state.ownedLoyerPage || {}), [id]: Number(btn.dataset.loyerPage) };
+            renderAccordionPostAchat(getOwnedAsset(id));
+        });
     });
 }
 
@@ -4237,11 +5818,14 @@ function renderAccordionSimulateur(asset) {
         nodes.accSimulateurSummary.textContent = `${scenarios.length} scénario${scenarios.length > 1 ? 's' : ''}`;
     }
 
+    const loyerInitial = asset.acquisition?.loyerInitial || 0;
     const VARS = [
-        { key: 'loyer', label: 'Loyer (€/mois)', type: 'number', step: 10, min: 0 },
+        { key: 'loyer', label: `Loyer (€/mois)`, type: 'number', step: 10, min: 0, placeholder: loyerInitial || '' },
         { key: 'taxeFonciere', label: 'Taxe foncière (€/an)', type: 'number', step: 10, min: 0 },
         { key: 'vacance', label: 'Vacance (%)', type: 'number', step: 1, min: 0, max: 100 },
         { key: 'chargesCopro', label: 'Charges copro (€/mois)', type: 'number', step: 5, min: 0 },
+        { key: 'gestionLocative', label: 'Gestion locative (% loyer)', type: 'number', step: 0.5, min: 0, max: 20 },
+        { key: 'assurancePNO', label: 'Assurance PNO (€/an)', type: 'number', step: 10, min: 0 },
         { key: 'regime', label: 'Régime fiscal', type: 'select', options: [
             { value: 'micro-foncier', label: 'Micro-foncier' },
             { value: 'reel', label: 'Réel' },
@@ -4249,7 +5833,11 @@ function renderAccordionSimulateur(asset) {
         ]},
     ];
 
-    const results = scenarios.map(sc => computeOwnedAssetCF(asset, sc.variables, tmi));
+    const globalRegime = getOwnedRegime();
+    const results = scenarios.map(sc =>
+        computeOwnedAssetCF(asset, sc.variables, tmi,
+            sc.variables.regime ? null : globalRegime)
+    );
 
     function cellInput(sc, varDef) {
         const val = sc.variables[varDef.key] ?? '';
@@ -4262,9 +5850,10 @@ function renderAccordionSimulateur(asset) {
                 </select>
             </td>`;
         }
+        const placeholder = varDef.placeholder !== undefined ? varDef.placeholder : '';
         return `<td class="${cls}">
             <input type="number" min="${varDef.min ?? ''}" max="${varDef.max ?? ''}" step="${varDef.step}"
-                value="${val}" data-sc-id="${escapeHtml(sc.id)}" data-var-key="${escapeHtml(varDef.key)}">
+                value="${val}" placeholder="${placeholder}" data-sc-id="${escapeHtml(sc.id)}" data-var-key="${escapeHtml(varDef.key)}">
         </td>`;
     }
 
@@ -4369,10 +5958,19 @@ function renderAccordionSimulateur(asset) {
         input.addEventListener('change', () => {
             const id = state.activeOwnedAssetId;
             if (!id) return;
-            const val = input.tagName === 'SELECT' ? input.value : Number(input.value);
+            let val;
+            if (input.tagName === 'SELECT') {
+                val = input.value;
+            } else if (input.value === '') {
+                val = undefined;
+            } else {
+                val = Number(input.value);
+            }
             updateOwnedScenarioVar(id, input.dataset.scId, input.dataset.varKey, val);
             const fresh = getOwnedAsset(id);
             renderOwnedSynthese(fresh);
+            renderOwnedVerdictBlock(fresh);
+            renderOwnedCfTable(fresh);
             renderAccordionSimulateur(fresh);
         });
     });
@@ -4434,8 +6032,9 @@ async function callOwnedDiagnosticIA(assetId) {
     if (!nodes.ownedAiDrawer || !nodes.ownedAiOverlay || !nodes.ownedAiDrawerContent) return;
 
     nodes.ownedAiDrawerContent.innerHTML = `<p style="color:var(--text-secondary);text-align:center;padding:24px">Analyse en cours…</p>`;
-    nodes.ownedAiDrawer.hidden = false;
-    nodes.ownedAiOverlay.hidden = false;
+    void nodes.ownedAiDrawer.offsetWidth;
+    nodes.ownedAiDrawer.classList.add('is-open');
+    nodes.ownedAiOverlay.classList.add('is-open');
 
     try {
         const resp = await fetch('/api/portfolio-diagnostic', {
@@ -5004,7 +6603,7 @@ function initWorkspaceTabs() {
             if (target === 'collection-panel') {
                 collectionPanel.style.display = '';
                 collectionPanel.style.animation = 'tabFadeIn 200ms ease-out';
-                if (_portfolioMap) { window.requestAnimationFrame(() => _portfolioMap.invalidateSize()); }
+                if (typeof _portfolioMap !== 'undefined' && _portfolioMap) { window.requestAnimationFrame(() => _portfolioMap.invalidateSize()); }
             } else if (target === 'scanner-panel') {
                 if (scannerPanel) {
                     scannerPanel.style.display = '';
@@ -5017,6 +6616,72 @@ function initWorkspaceTabs() {
             }
         });
     });
+}
+
+function initGlossaire() {
+    const GLOSSAIRE_DATA = [
+        {
+            section: 'Rentabilité',
+            terms: [
+                { name: 'CF brut', def: 'Première mesure de rendement, avant toute déduction.', formula: 'Loyers annuels bruts / Prix d\'achat × 100' },
+                { name: 'CF net', def: 'Cash-flow après déduction des charges (crédit, charges courantes, vacance, gestion). Hors impôts.', formula: 'CF net = Loyers × (1 - vacance) - crédit annuel - charges' },
+                { name: 'CF net-net', def: 'Cash-flow après impôts. Indicateur final de ce qui reste en poche chaque mois.', formula: 'CF net-net = CF net - impôts' },
+                { name: 'Rendement brut', def: 'Benchmark rapide, ne tient pas compte des charges ni des impôts.', formula: 'Loyers annuels / Prix d\'achat total × 100' },
+                { name: 'Rendement net', def: 'Rendement après charges et impôts. Plus représentatif de la performance réelle.', formula: null },
+                { name: 'GRM (Gross Rent Multiplier)', def: 'Nombre d\'années de loyers bruts pour rembourser le bien. Plus bas = mieux.', formula: 'Prix d\'achat / Loyers annuels bruts' },
+                { name: 'CoC (Cash-on-Cash)', def: 'Rendement sur le capital investi personnellement. Mesure l\'efficacité de l\'effet de levier.', formula: 'CF net annuel / Apport × 100' },
+                { name: 'Effort d\'épargne', def: 'Montant mensuel que l\'investisseur doit débourser de sa poche si le CF net-net est négatif.', formula: 'max(0, -CF net-net mensuel)' }
+            ]
+        },
+        {
+            section: 'Financement',
+            terms: [
+                { name: 'DSCR (Debt Service Coverage Ratio)', def: 'Capacité du bien à couvrir sa dette. > 1.2 = confortable, < 1 = le bien ne s\'autofinance pas.', formula: 'Loyers nets / Mensualité crédit' },
+                { name: 'Apport', def: 'Capital personnel investi (hors crédit). Influence le CoC et le taux d\'endettement.', formula: null },
+                { name: 'Taux d\'endettement', def: 'Limite réglementaire en France : 35 %.', formula: 'Total mensualités crédit / Revenus mensuels nets × 100' },
+                { name: 'CRD (Capital Restant Dû)', def: 'Montant encore dû à la banque à une date donnée. Diminue au fil des remboursements.', formula: null },
+                { name: 'Amortissement', def: 'Part de la mensualité qui rembourse le capital (vs intérêts). Augmente avec le temps.', formula: null }
+            ]
+        },
+        {
+            section: 'Fiscalité & Risque',
+            terms: [
+                { name: 'TMI (Tranche Marginale d\'Imposition)', def: 'Taux de la dernière tranche d\'imposition du foyer. Détermine l\'impôt sur les revenus fonciers en régime réel ou micro.', formula: null },
+                { name: 'Micro-foncier', def: 'Régime simplifié avec abattement forfaitaire de 30 % sur les loyers. Plafond 15 000 €/an. Pas de déduction des charges réelles.', formula: null },
+                { name: 'Réel foncier', def: 'Régime permettant de déduire les charges réelles (crédit, travaux, gestion…). Souvent plus avantageux si charges > 30 % des loyers.', formula: null },
+                { name: 'SCI IS', def: 'Société Civile Immobilière soumise à l\'Impôt sur les Sociétés. Taux IS 15 % jusqu\'à 42 500 €. Amortissement du bien déductible.', formula: null },
+                { name: 'Vacance locative', def: 'Période sans locataire. Paramétrable en % des loyers annuels.', formula: null },
+                { name: 'Score de confiance', def: 'Note interne (0–100) mesurant la fiabilité des hypothèses saisies (loyer, charges, travaux…). Plus les données sont sourcées, plus le score est élevé.', formula: null }
+            ]
+        }
+    ];
+
+    const drawer = document.getElementById('glossaire-drawer');
+    const overlay = document.getElementById('glossaire-overlay');
+    const btn = document.getElementById('glossaire-btn');
+    const closeBtn = document.getElementById('glossaire-close');
+    const content = document.getElementById('glossaire-content');
+    if (!drawer || !overlay || !btn || !closeBtn || !content) return;
+
+    const html = GLOSSAIRE_DATA.map(({ section, terms }) => {
+        const termsHtml = terms.map(({ name, def, formula }) => `
+            <div class="glossaire-term">
+                <div class="glossaire-term__name">${escapeHtml(name)}</div>
+                <div class="glossaire-term__def">${escapeHtml(def)}</div>
+                ${formula ? `<span class="glossaire-term__formula">${escapeHtml(formula)}</span>` : ''}
+            </div>
+        `).join('');
+        return `<div class="glossaire-section"><div class="glossaire-section__title">${escapeHtml(section)}</div>${termsHtml}</div>`;
+    }).join('');
+    content.innerHTML = html;
+
+    function openGlossaire() { drawer.hidden = false; overlay.hidden = false; closeBtn.focus(); }
+    function closeGlossaire() { drawer.hidden = true; overlay.hidden = true; btn.focus(); }
+
+    btn.addEventListener('click', openGlossaire);
+    closeBtn.addEventListener('click', closeGlossaire);
+    overlay.addEventListener('click', closeGlossaire);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !drawer.hidden) closeGlossaire(); });
 }
 
 function initAccordion() {
@@ -5087,6 +6752,7 @@ if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
 }
 initAccordion();
 initTutoBar();
+initGlossaire();
 initSliders();
 
 // Modal régimes fiscaux

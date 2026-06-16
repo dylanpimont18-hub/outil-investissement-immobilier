@@ -33,3 +33,22 @@ def test_annonces_new_columns(tmp_path):
     assert "regime_optimal"      in cols
     assert "loyer_source"        in cols
     conn.close()
+
+
+def test_biens_description_column_exists(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(biens)").fetchall()]
+    assert "description" in cols
+    assert "missing_scan_count" in cols
+    conn.close()
+
+
+def test_scanner_indexes_exist(tmp_path):
+    conn = init_db(tmp_path / "test.db")
+    biens_indexes = {r[1] for r in conn.execute("PRAGMA index_list('biens')").fetchall()}
+    annonces_indexes = {r[1] for r in conn.execute("PRAGMA index_list('annonces')").fetchall()}
+
+    assert "idx_biens_prix" in biens_indexes
+    assert "idx_biens_surface" in biens_indexes
+    assert "idx_annonces_score" in annonces_indexes
+    conn.close()

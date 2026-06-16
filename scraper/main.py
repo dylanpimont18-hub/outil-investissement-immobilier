@@ -88,7 +88,7 @@ def _hydrate_descriptions(scraper, annonces: list[dict], emit, pct_scrape: int):
             future.result()
 
 
-def main(progress_callback=None, villes_override=None):
+def main(progress_callback=None, villes_override=None, force_marche=False):
     def _emit(pct: int, msg: str):
         _log(msg)
         if progress_callback:
@@ -107,8 +107,8 @@ def main(progress_callback=None, villes_override=None):
     conn = init_db()
     _emit(5, "Base SQLite initialisée.")
 
-    # ── 1.5 Marché locatif (si stale) ────────────────────────────────────────
-    if marche_stale(conn, villes=villes):
+    # ── 1.5 Marché locatif ───────────────────────────────────────────────────
+    if force_marche or marche_stale(conn, villes=villes):
         _emit(3, "Analyse du marché locatif (premières données ou expirées)…")
         try:
             marche_main(conn, villes=villes, progress_callback=lambda p, m: _emit(int(3 + p * 0.02), m))
@@ -146,6 +146,8 @@ def main(progress_callback=None, villes_override=None):
         _emit(pct_scrape, f"Scraping {nom_scraper}…")
         scraper = None
         fetch_ok = True
+        import time as _time
+        _t0 = _time.monotonic()
         try:
             scraper  = ScraperClass()
             annonces = scraper.fetch_all(villes)
@@ -153,6 +155,10 @@ def main(progress_callback=None, villes_override=None):
             fetch_ok = False
             _emit(pct_scrape, f"  [{nom_scraper}] ERREUR : {e}")
             annonces = []
+        _elapsed = _time.monotonic() - _t0
+
+        if not annonces and _elapsed < 5:
+            _emit(pct_scrape, f"  [{nom_scraper}] ⚠ IP temporairement bloquée (HTTP 403). Attendez quelques minutes avant de relancer.")
 
         if fetch_ok:
             for ville in villes:

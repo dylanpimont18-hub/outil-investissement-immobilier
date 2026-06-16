@@ -1,6 +1,7 @@
 """LeBonCoin — HTML scraping via __NEXT_DATA__."""
 
 import json
+import random
 import re
 import time
 
@@ -23,15 +24,15 @@ _HEADERS = {
     "accept-encoding": "gzip, deflate, br",
     "cache-control": "no-cache",
     "pragma": "no-cache",
-    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
     "sec-fetch-dest": "document",
     "sec-fetch-mode": "navigate",
-    "sec-fetch-site": "same-origin",
+    "sec-fetch-site": "none",
     "sec-fetch-user": "?1",
     "upgrade-insecure-requests": "1",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 }
 _APT = ("appartement", "loft", "studio", "duplex", "triplex")
 _MAI = ("maison", "villa", "château", "manoir", "pavillon")
@@ -60,6 +61,7 @@ class LeBonCoinScraper(BaseScraper):
         rayon_km = ville.get("rayon_km")
         loc_param = f"{cp}__{int(rayon_km * 1000)}" if rayon_km else cp
 
+        time.sleep(random.uniform(2, 5))
         ads, max_pages = self._fetch_page(loc_param, 1)
         if ads is None:
             return annonces
@@ -67,7 +69,7 @@ class LeBonCoinScraper(BaseScraper):
         annonces.extend(filter(None, (self._parse(ad, ville) for ad in ads)))
 
         for page in range(2, min(max_pages, 10) + 1):
-            time.sleep(4)
+            time.sleep(random.uniform(6, 10))
             ads, _ = self._fetch_page(loc_param, page)
             if not ads:
                 break
@@ -77,7 +79,7 @@ class LeBonCoinScraper(BaseScraper):
 
     def _fetch_page(self, loc_param, page):
         # Nouvelle session par page : contournement DataDome (suivi de session bloqué)
-        session = crequests.Session(impersonate="chrome124")
+        session = crequests.Session(impersonate="chrome131")
         url = f"https://www.leboncoin.fr/recherche?category=9&locations={loc_param}&page={page}"
         try:
             r = session.get(url, headers=_HEADERS, timeout=20)
@@ -85,6 +87,9 @@ class LeBonCoinScraper(BaseScraper):
             _logger.warning("[leboncoin] page %d : %s", page, e)
             return None, 0
 
+        if r.status_code == 403:
+            _logger.warning("[leboncoin] page %d : HTTP 403 — IP temporairement bloquée par DataDome. Réessayez dans quelques minutes.", page)
+            return None, 0
         if r.status_code != 200:
             _logger.warning("[leboncoin] page %d : HTTP %d", page, r.status_code)
             return None, 0
@@ -152,7 +157,7 @@ class LeBonCoinScraper(BaseScraper):
 
     def fetch_description(self, url: str) -> str:
         try:
-            session = crequests.Session(impersonate="chrome124")
+            session = crequests.Session(impersonate="chrome131")
             r = session.get(url, headers=_HEADERS, timeout=20)
             m = _NEXT_DATA.search(r.text)
             if not m:

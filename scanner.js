@@ -1462,6 +1462,7 @@ export function initScanner({ saveCurrentStudy } = {}) {
   _renderScannerHero();
   _loadResults(false);
   _loadPendingCount();
+  _loadMarche();
 }
 
 export function onScannerTabActivated() {
@@ -1469,6 +1470,7 @@ export function onScannerTabActivated() {
   _renderScannerHero();
   _loadResults(false);
   _loadPendingCount();
+  _loadMarche();
   if (_scanRunning) _startPolling();
 }
 
@@ -2036,7 +2038,12 @@ function _renderActiveFilterBar(filters, filteredCount, totalCount) {
 }
 
 async function _startScan(endpoint) {
-  if (_scanRunning || !_scanTarget) return;
+  if (_scanRunning) return;
+  if (!_scanTarget) {
+    const input = document.getElementById('scan-target-cp-input');
+    if (input) { input.focus(); input.select(); }
+    return;
+  }
   try {
     const resp = await fetch(endpoint, {
       method: 'POST',
@@ -2098,6 +2105,72 @@ async function _loadPendingCount() {
   } catch (_) {}
 }
 
+async function _loadMarche() {
+  const container = document.getElementById('scanner-marche');
+  if (!container) return;
+  try {
+    const cp = _scanTarget?.cp || '';
+    const ville = _scanTarget?.commune || '';
+    const params = cp
+      ? `?code_postal=${encodeURIComponent(cp)}&ville=${encodeURIComponent(ville)}`
+      : '';
+    const resp = await fetch(`/api/marche${params}`);
+    if (!resp.ok) return;
+    const { rows } = await resp.json();
+    _renderMarche(rows, container);
+  } catch (_) {}
+}
+
+function _renderMarche(rows, container) {
+  if (!rows || !rows.length) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const dateCollecte = (rows[0]?.date_collecte || '').slice(0, 10);
+  const ville = rows[0]?.ville || '';
+  const TYPE_LABELS = { appartement: 'Appt', maison: 'Maison', immeuble: 'Immeuble' };
+
+  const rowsHtml = rows.map(r => {
+    const tranche = r.surface_max >= 9999
+      ? `${r.surface_min}+ m²`
+      : `${r.surface_min}–${r.surface_max} m²`;
+    const typeLabel = TYPE_LABELS[r.type_bien] || r.type_bien;
+    const piecesLabel = r.nb_pieces ? `T${r.nb_pieces}` : '—';
+    const loyerLabel = r.loyer_median != null
+      ? new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(r.loyer_median) + ' €'
+      : '—';
+    return `<tr>
+      <td>${_esc(typeLabel)}</td>
+      <td>${_esc(piecesLabel)}</td>
+      <td>${_esc(tranche)}</td>
+      <td class="scanner-marche__loyer">${_esc(loyerLabel)}</td>
+      <td style="color:var(--muted)">${r.nb_annonces}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="scanner-marche__head">
+      <span class="scanner-marche__title">Marché locatif — ${_esc(ville)}</span>
+      <span class="scanner-marche__meta">collecté le ${_esc(dateCollecte)} · loyers médians / mois</span>
+    </div>
+    <div class="scanner-marche__table-wrap">
+      <table class="scanner-marche__table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Pièces</th>
+            <th>Surface</th>
+            <th>Loyer médian</th>
+            <th>Annonces</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+  container.style.display = '';
+}
+
 // ─── Polling ─────────────────────────────────────────────────────────────────
 
 function _startPolling() {
@@ -2126,6 +2199,7 @@ async function _pollStatus() {
         _showProgress(false);
         await _loadResults(true);
         await _loadPendingCount();
+        await _loadMarche();
         if (_scanTarget) {
           _setCPFilter(_scanTarget.cp, _scanTarget.commune, _scanTarget.label);
         }

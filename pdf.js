@@ -996,16 +996,16 @@ export function buildPrintDocument(uploadedPhotos) {
     });
   })();`;
 
+    const assetBaseUrl = window.location.origin;
+
     const documentHTML = `<!DOCTYPE html>
   <html lang="fr">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <title>${title}</title>
     <style>
+  ${buildLocalFontFaceCss(assetBaseUrl, { includeLegacyAliases: true })}
   ${css}
 
   html, body {
@@ -1056,6 +1056,147 @@ export function buildPrintDocument(uploadedPhotos) {
   </html>`;
 
     return { documentHTML, filename };
+}
+
+function buildLocalFontFaceCss(assetBaseUrl, options = {}) {
+    const { includeLegacyAliases = false } = options;
+    const baseUrl = String(assetBaseUrl || '').replace(/\/$/, '');
+    const fontUrl = fileName => `${baseUrl}/vendor/fonts/${fileName}`;
+
+    const sharedFonts = `
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('${fontUrl('CormorantGaramond-500.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('${fontUrl('CormorantGaramond-600.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('${fontUrl('CormorantGaramond-700.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('${fontUrl('IBMPlexMono-400.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('${fontUrl('IBMPlexMono-500.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('${fontUrl('IBMPlexMono-600.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-400.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-500.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-600.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-700.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-800.ttf')}') format('truetype');
+}
+`;
+
+    if (!includeLegacyAliases) {
+        return sharedFonts;
+    }
+
+    return `${sharedFonts}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-400.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-500.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-600.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-700.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-600.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-700.ttf')}') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('${fontUrl('Manrope-800.ttf')}') format('truetype');
+}`;
 }
 
 function escapeDecisionPdfHtml(value) {
@@ -1170,10 +1311,23 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
     const decisionJournal = analysisModel.decisionJournal;
     const decisionThresholds = analysisModel.decisionThresholds;
     const metrics = analysisModel.metrics;
-    const filename = `Fiche-decision-${slugifyDecisionPdfLabel(variablesData['nom-bien'])}.pdf`;
-    const thesis = decisionJournal.thesis || decisionJournal.suggestedThesis || 'These non renseignee.';
+    const filename = `Analyse-locative-${slugifyDecisionPdfLabel(variablesData['nom-bien'])}.pdf`;
+    const thesis = decisionJournal.thesis || decisionJournal.suggestedThesis || 'Analyse non renseignée.';
     const nextStep = decisionJournal.nextStep || decisionJournal.suggestedNextStep || acquisitionDecision.action;
     const profileSummary = `${profileData.name || 'Profil'} · ${Math.round(profileData.income || 0).toLocaleString('fr-FR')} € / an · ${profileData.adults || 1} adulte${(profileData.adults || 1) > 1 ? 's' : ''} · ${profileData.children || 0} enfant${(profileData.children || 0) > 1 ? 's' : ''}`;
+    const assetStatusLabel = variablesData['statut-bien'] === 'owned' ? 'Bien au portefeuille' : 'Dossier en analyse';
+    const assetTypeLabel = variablesData['type-bien'] === 'maison'
+      ? 'Maison'
+      : variablesData['type-bien'] === 'immeuble'
+        ? 'Immeuble de rapport'
+        : 'Appartement';
+    const decisionToneClass = getDecisionPdfToneClass(acquisitionDecision.tone);
+    const scoreCardToneClass = decisionToneClass.replace('tone-', 'score-card--');
+    const cfToneClass = metrics.cfNetNet >= 0 ? 'tone-positive' : 'tone-negative';
+    const dscrToneClass = metrics.dscr >= decisionThresholds.minDscr ? 'tone-positive' : 'tone-watch';
+    const confidenceToneClass = confidenceModel.score >= 70 ? 'tone-positive' : confidenceModel.score >= 45 ? 'tone-watch' : 'tone-negative';
+    const robustnessToneClass = getDecisionPdfToneClass(scenarioModel.tone);
+    const assetBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
     const checklistMarkup = (acquisitionChecklist.items || []).map(item => {
         const checklistState = getDecisionPdfChecklistState(item.status);
@@ -1207,52 +1361,56 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
     <title>${escapeDecisionPdfHtml(filename.replace(/\.pdf$/i, ''))}</title>
     <style>
+      ${buildLocalFontFaceCss(assetBaseUrl)}
       :root {
         color-scheme: light;
-        --bg: #F8F9FA;
-        --surface: #FFFFFF;
-        --surface-alt: #F4F6F8;
-        --text: #1A2B3C;
-        --muted: #6C757D;
-        --border: #E9ECEF;
-        --accent: #C5A059;
-        --accent-soft: rgba(197, 160, 89, 0.14);
-        --success: #2D6A4F;
-        --success-soft: rgba(45, 106, 79, 0.12);
-        --watch: #B37B1A;
-        --watch-soft: rgba(197, 160, 89, 0.14);
-        --danger: #E63946;
-        --danger-soft: rgba(230, 57, 70, 0.10);
-        --neutral-soft: #EEF1F4;
-        --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        --paper: #f3f6fa;
+        --paper-deep: #e8eef5;
+        --surface: #ffffff;
+        --surface-soft: #f6f9fc;
+        --surface-muted: #edf3f8;
+        --text: #17202a;
+        --muted: #5b6673;
+        --border: rgba(23, 32, 42, 0.12);
+        --accent: #2f6e8e;
+        --accent-strong: #1f536e;
+        --accent-soft: rgba(47, 110, 142, 0.10);
+        --success: #2d6a4f;
+        --success-soft: rgba(45, 106, 79, 0.10);
+        --watch: #9a6700;
+        --watch-soft: rgba(154, 103, 0, 0.12);
+        --danger: #b42318;
+        --danger-soft: rgba(180, 35, 24, 0.10);
+        --neutral-soft: rgba(91, 102, 115, 0.10);
+        --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.06);
+        --shadow-lift: 0 12px 28px rgba(15, 23, 42, 0.08);
       }
 
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
       html, body {
         margin: 0;
         padding: 0;
-        background: var(--bg);
+        background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
         color: var(--text);
-        font-family: 'Inter', sans-serif;
+        font-family: 'Manrope', sans-serif;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
 
       body {
-        padding: 24px;
+        padding: 22px;
       }
 
       .sheet {
         max-width: 980px;
         margin: 0 auto;
         display: grid;
-        gap: 16px;
+        gap: 18px;
       }
 
       .hero,
@@ -1261,88 +1419,170 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       .score-card,
       .scenario-card,
       .journal-box {
+        position: relative;
+        overflow: hidden;
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: 16px;
         background: var(--surface);
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow-soft);
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
 
       .hero {
         display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(250px, 0.85fr);
-        gap: 16px;
+        grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.92fr);
+        gap: 18px;
         padding: 22px;
-        background: linear-gradient(180deg, #FFFFFF 0%, #F4F6F8 100%);
+        background: linear-gradient(180deg, var(--surface-soft) 0%, var(--surface) 100%);
+        box-shadow: var(--shadow-lift);
+      }
+
+      .hero::after {
+        display: none;
+      }
+
+      .hero-copy,
+      .score-panel {
+        position: relative;
+        z-index: 1;
       }
 
       .eyebrow,
+      .hero-badge,
+      .meta-chip,
       .label,
-      .journal-label {
-        font-family: 'JetBrains Mono', monospace;
+      .journal-label,
+      .panel-kicker,
+      .pill {
+        font-family: 'IBM Plex Mono', monospace;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.12em;
+      }
+
+      .eyebrow-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
       }
 
       .eyebrow {
-        margin: 0 0 8px;
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
         font-size: 11px;
-        color: var(--accent);
+        color: var(--accent-strong);
+      }
+
+      .eyebrow::before {
+        content: '';
+        width: 28px;
+        height: 1px;
+        background: var(--border);
+      }
+
+      .hero-badge,
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 30px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+        color: var(--muted);
+        font-size: 10px;
       }
 
       .hero h1,
       .panel h2 {
         margin: 0;
-        font-family: 'Montserrat', sans-serif;
+        font-family: 'Manrope', sans-serif;
+        font-weight: 700;
         letter-spacing: -0.03em;
+        color: var(--text);
       }
 
       .hero h1 {
-        font-size: 32px;
-        line-height: 1.05;
-      }
-
-      .hero-meta,
-      .panel-note,
-      .hero .summary,
-      .hero .action,
-      .bullet-list p,
-      .checklist-list p,
-      .journal-note,
-      .scenario-card p,
-      .footer-note {
-        line-height: 1.6;
-      }
-
-      .hero-meta,
-      .panel-note,
-      .bullet-list p,
-      .checklist-list p,
-      .journal-note,
-      .scenario-card p,
-      .footer-note {
-        color: var(--muted);
+        max-width: 14ch;
+        font-size: 38px;
+        line-height: 1;
       }
 
       .hero-meta {
-        margin: 10px 0 0;
         display: flex;
         flex-wrap: wrap;
-        gap: 8px 14px;
-        font-size: 13px;
+        gap: 8px;
+        margin: 16px 0 0;
+      }
+
+      .hero .summary,
+      .panel-note,
+      .bullet-list p,
+      .checklist-list p,
+      .journal-note,
+      .scenario-card p,
+      .footer-note,
+      .hero-ledger-item p,
+      .score-note,
+      .metric-note {
+        color: var(--muted);
+        line-height: 1.68;
       }
 
       .hero .summary {
-        margin: 14px 0 0;
+        margin: 18px 0 0;
         font-size: 15px;
-        color: var(--text);
+        color: var(--muted);
+        max-width: 60ch;
       }
 
       .hero .action {
-        margin: 12px 0 0;
-        padding: 12px 14px;
-        border-radius: 12px;
-        background: var(--accent-soft);
+        margin: 16px 0 0;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+      }
+
+      .hero .action strong {
+        display: block;
+        margin-bottom: 6px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .hero-ledger {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .hero-ledger-item {
+        padding: 14px 15px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface-soft);
+      }
+
+      .hero-ledger-item strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 14px;
         color: var(--text);
+      }
+
+      .hero-ledger-item p {
+        margin: 8px 0 0;
+        font-size: 12px;
       }
 
       .score-panel {
@@ -1353,22 +1593,105 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
 
       .score-card {
         padding: 18px;
+        background: var(--surface);
       }
 
-      .label {
-        font-size: 11px;
+      .score-card--primary {
+        padding: 20px;
+      }
+
+      .score-card--primary::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--accent);
+      }
+
+      .score-card--positive::before,
+      .score-card--excellent::before {
+        background: var(--success);
+      }
+
+      .score-card--watch::before {
+        background: var(--watch);
+      }
+
+      .score-card--negative::before {
+        background: var(--danger);
+      }
+
+      .label,
+      .journal-label,
+      .panel-kicker {
+        font-size: 10px;
         color: var(--muted);
       }
 
       .score-value {
-        margin-top: 8px;
-        font-family: 'Montserrat', sans-serif;
-        font-size: 42px;
-        line-height: 1;
+        margin-top: 10px;
+        font-family: 'Manrope', sans-serif;
+        font-size: 46px;
+        font-weight: 700;
+        line-height: 0.92;
+        letter-spacing: -0.05em;
+        color: var(--accent-strong);
+      }
+
+      .score-card--positive .score-value,
+      .score-card--excellent .score-value {
+        color: var(--success);
+      }
+
+      .score-card--watch .score-value {
+        color: var(--watch);
+      }
+
+      .score-card--negative .score-value {
+        color: var(--danger);
       }
 
       .score-value small {
         font-size: 18px;
+      }
+
+      .score-card--primary .pill {
+        margin-top: 12px;
+      }
+
+      .score-note {
+        margin: 12px 0 0;
+        font-size: 13px;
+      }
+
+      .score-pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .panel,
+      .metric-card {
+        padding: 18px;
+      }
+
+      .panel--metrics {
+        padding: 18px;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 14px;
+      }
+
+      .panel-note {
+        margin: 10px 0 0;
+        font-size: 13px;
       }
 
       .metric-grid,
@@ -1378,19 +1701,85 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
         gap: 16px;
       }
 
+      .panel--metrics .metric-grid {
+        margin-top: 16px;
+        gap: 12px;
+      }
+
       .metric-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
-      .metric-card,
-      .panel {
-        padding: 16px;
+      .metric-card {
+        min-height: 110px;
+        border-radius: 14px;
+        background: var(--surface);
       }
 
       .metric-card strong {
         display: block;
         margin-top: 10px;
-        font-size: 24px;
+        font-family: 'Manrope', sans-serif;
+        font-size: 25px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        line-height: 1.08;
+        color: var(--text);
+      }
+
+      .metric-note {
+        display: block;
+        margin-top: 8px;
+        font-size: 12px;
+      }
+
+      .metric-card--ink {
+        background: var(--surface);
+      }
+
+      .metric-card--accent {
+        border-color: rgba(47, 110, 142, 0.22);
+        background: linear-gradient(180deg, var(--surface-soft) 0%, var(--surface) 100%);
+      }
+
+      .metric-card--accent strong {
+        color: var(--accent-strong);
+      }
+
+      .metric-card.tone-positive,
+      .metric-card.tone-excellent,
+      .scenario-card.tone-positive,
+      .scenario-card.tone-excellent {
+        color: var(--text);
+        border-color: rgba(46, 106, 74, 0.22);
+        background: linear-gradient(180deg, #f4faf7 0%, var(--surface) 100%);
+      }
+
+      .metric-card.tone-positive strong,
+      .metric-card.tone-excellent strong {
+        color: var(--success);
+      }
+
+      .metric-card.tone-watch,
+      .scenario-card.tone-watch {
+        color: var(--text);
+        border-color: rgba(160, 109, 21, 0.24);
+        background: linear-gradient(180deg, #fff9f0 0%, var(--surface) 100%);
+      }
+
+      .metric-card.tone-watch strong {
+        color: var(--watch);
+      }
+
+      .metric-card.tone-negative,
+      .scenario-card.tone-negative {
+        color: var(--text);
+        border-color: rgba(185, 75, 75, 0.22);
+        background: linear-gradient(180deg, #fff6f5 0%, var(--surface) 100%);
+      }
+
+      .metric-card.tone-negative strong {
+        color: var(--danger);
       }
 
       .panel-grid {
@@ -1398,12 +1787,8 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       }
 
       .panel h2 {
-        font-size: 20px;
-      }
-
-      .panel-note {
-        margin: 8px 0 0;
-        font-size: 13px;
+        font-size: 28px;
+        line-height: 0.96;
       }
 
       .pill {
@@ -1411,32 +1796,35 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
         align-items: center;
         justify-content: center;
         min-height: 28px;
-        padding: 4px 10px;
+        padding: 5px 10px;
         border-radius: 999px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
-        letter-spacing: 0.04em;
+        border: 1px solid transparent;
+        font-size: 10px;
       }
 
       .tone-positive,
       .tone-excellent {
         background: var(--success-soft);
         color: var(--success);
+        border-color: rgba(46, 106, 74, 0.18);
       }
 
       .tone-watch {
         background: var(--watch-soft);
         color: var(--watch);
+        border-color: rgba(160, 109, 21, 0.18);
       }
 
       .tone-negative {
         background: var(--danger-soft);
         color: var(--danger);
+        border-color: rgba(185, 75, 75, 0.16);
       }
 
       .tone-neutral {
         background: var(--neutral-soft);
         color: var(--muted);
+        border-color: rgba(109, 102, 92, 0.12);
       }
 
       .bullet-list,
@@ -1447,9 +1835,8 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
         margin: 16px 0 0;
       }
 
-      .bullet-list li,
-      .mini-list li {
-        padding: 12px 0;
+      .bullet-list li {
+        padding: 14px 0;
         border-top: 1px solid var(--border);
       }
 
@@ -1473,27 +1860,38 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       .checklist-list li {
         display: flex;
         justify-content: space-between;
-        gap: 12px;
         align-items: flex-start;
-        padding: 12px 14px;
-        border-radius: 12px;
-        background: var(--surface-alt);
+        gap: 12px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 242, 231, 0.92));
       }
 
       .mini-list li {
         display: flex;
         justify-content: space-between;
+        align-items: flex-start;
         gap: 12px;
-        align-items: baseline;
+        padding: 10px 0;
+        border-top: 1px solid var(--border);
       }
 
       .mini-list span {
         color: var(--muted);
       }
 
+      .mini-list strong {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 18px;
+        line-height: 1.08;
+      }
+
       .journal-box {
-        padding: 14px;
-        background: var(--surface-alt);
+        padding: 16px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
       }
 
       .journal-box + .journal-box {
@@ -1503,13 +1901,12 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       .journal-label {
         display: inline-block;
         margin-bottom: 8px;
-        font-size: 11px;
-        color: var(--accent);
+        color: var(--accent-strong);
       }
 
       .journal-note {
         margin: 0;
-        font-size: 13px;
+        font-size: 14px;
       }
 
       .scenario-grid {
@@ -1518,15 +1915,18 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       }
 
       .scenario-card {
-        padding: 14px;
-        background: var(--surface-alt);
+        padding: 16px;
       }
 
       .scenario-head {
         display: flex;
         justify-content: space-between;
-        gap: 8px;
         align-items: center;
+        gap: 8px;
+      }
+
+      .scenario-head strong {
+        font-size: 16px;
       }
 
       .scenario-card p {
@@ -1535,33 +1935,37 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       }
 
       .scenario-metrics {
-        margin-top: 12px;
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 12px;
+        margin-top: 12px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        color: var(--muted);
       }
 
       .footer-note {
+        margin: 4px 0 0;
+        padding: 16px 0 6px;
+        border-top: 1px solid var(--border);
         font-size: 11px;
         text-align: center;
-        padding-bottom: 12px;
       }
 
       @page {
         size: A4 portrait;
-        margin: 10mm;
+        margin: 12mm;
       }
 
       @media print {
         body {
           padding: 0;
-          background: #FFFFFF;
+          background: #ffffff;
         }
 
         .sheet {
           max-width: none;
+          gap: 12px;
         }
 
         .hero,
@@ -1576,6 +1980,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
 
       @media (max-width: 900px) {
         .hero,
+        .hero-ledger,
         .metric-grid,
         .panel-grid,
         .scenario-grid {
@@ -1587,59 +1992,139 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
   <body>
     <main class="sheet">
       <section class="hero">
-        <div>
-          <p class="eyebrow">Fiche synthese decisionnelle</p>
-          <h1>${escapeDecisionPdfHtml(variablesData['nom-bien'] || 'Bien a etudier')}</h1>
-          <div class="hero-meta">
-            <span>${escapeDecisionPdfHtml(variablesData.ville || 'Ville non renseignee')}</span>
-            <span>${escapeDecisionPdfHtml(variablesData['statut-bien'] === 'owned' ? 'Bien deja detenu' : 'Opportunite en etude')}</span>
-            <span>${escapeDecisionPdfHtml(variablesData['type-bien'] === 'maison' ? 'Maison' : variablesData['type-bien'] === 'immeuble' ? 'Immeuble de rapport' : 'Appartement')}</span>
-            <span>Genere le ${escapeDecisionPdfHtml(generatedOn)}</span>
+        <div class="hero-copy">
+          <div class="eyebrow-row">
+            <p class="eyebrow">Rapport d'analyse</p>
+            <span class="hero-badge">Génération locale</span>
           </div>
+
+          <h1>${escapeDecisionPdfHtml(variablesData['nom-bien'] || 'Bien à étudier')}</h1>
+
+          <div class="hero-meta">
+            <span class="meta-chip">${escapeDecisionPdfHtml(variablesData.ville || 'Ville non renseignée')}</span>
+            <span class="meta-chip">${escapeDecisionPdfHtml(assetStatusLabel)}</span>
+            <span class="meta-chip">${escapeDecisionPdfHtml(assetTypeLabel)}</span>
+            <span class="meta-chip">Généré le ${escapeDecisionPdfHtml(generatedOn)}</span>
+          </div>
+
           <p class="summary">${escapeDecisionPdfHtml(acquisitionDecision.summary)}</p>
-          <p class="action"><strong>Action immediate:</strong> ${escapeDecisionPdfHtml(acquisitionDecision.action)}</p>
-          <p class="panel-note">Profil foyer: ${escapeDecisionPdfHtml(profileSummary)}</p>
+          <p class="action"><strong>Recommandation</strong>${escapeDecisionPdfHtml(acquisitionDecision.action)}</p>
+
+          <div class="hero-ledger">
+            <article class="hero-ledger-item">
+              <span class="label">Profil de calcul</span>
+              <strong>${escapeDecisionPdfHtml(profileSummary)}</strong>
+              <p>Paramètres utilisés pour la fiscalité, la capacité et les seuils de contrôle du dossier.</p>
+            </article>
+            <article class="hero-ledger-item">
+              <span class="label">État de lecture</span>
+              <strong>${escapeDecisionPdfHtml(acquisitionDecision.priceBand)}</strong>
+              <p>Checklist ${escapeDecisionPdfHtml(acquisitionDecision.checklistLabel)} · Fiabilité ${escapeDecisionPdfHtml(confidenceModel.label)} · Stress ${escapeDecisionPdfHtml(scenarioModel.label)}</p>
+            </article>
+          </div>
         </div>
 
         <aside class="score-panel">
-          <div class="score-card">
-            <span class="label">Decision achat</span>
+          <div class="score-card score-card--primary ${scoreCardToneClass}">
+            <span class="label">Indice de décision</span>
             <div class="score-value">${escapeDecisionPdfHtml(String(acquisitionDecision.score))}<small>/100</small></div>
-            <span class="pill ${getDecisionPdfToneClass(acquisitionDecision.tone)}">${escapeDecisionPdfHtml(acquisitionDecision.label)}</span>
+            <span class="pill ${decisionToneClass}">${escapeDecisionPdfHtml(acquisitionDecision.label)}</span>
+            <p class="score-note">Score composite basé sur le prix, le cash-flow, la couverture de dette, la qualité des hypothèses et la tenue au stress.</p>
           </div>
+
           <div class="score-card">
-            <span class="label">Lecture rapide</span>
-            <p class="panel-note">${escapeDecisionPdfHtml(acquisitionDecision.priceBand)} · Checklist ${escapeDecisionPdfHtml(acquisitionDecision.checklistLabel)} · Confiance ${escapeDecisionPdfHtml(confidenceModel.label)} · Stress ${escapeDecisionPdfHtml(scenarioModel.label)}</p>
+            <span class="label">États synthétiques</span>
+            <div class="score-pill-row">
+              <span class="pill tone-neutral">${escapeDecisionPdfHtml(acquisitionDecision.priceBand)}</span>
+              <span class="pill ${decisionToneClass}">${escapeDecisionPdfHtml(acquisitionDecision.checklistLabel)}</span>
+              <span class="pill ${confidenceToneClass}">${escapeDecisionPdfHtml(confidenceModel.label)}</span>
+              <span class="pill ${robustnessToneClass}">${escapeDecisionPdfHtml(scenarioModel.label)}</span>
+            </div>
+            <p class="score-note">États retenus pour la lecture synthétique du dossier au moment de l export.</p>
           </div>
         </aside>
       </section>
 
-      <section class="metric-grid">
-        <article class="metric-card"><span class="label">Prix affiche</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acquisitionDecision.currentPrice))}</strong></article>
-        <article class="metric-card"><span class="label">Offre max</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acquisitionDecision.maxOfferPrice))}</strong></article>
-        <article class="metric-card"><span class="label">Cible solide</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acquisitionDecision.solidOfferPrice))}</strong></article>
-        <article class="metric-card"><span class="label">CF net-net</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(metrics.cfNetNet))}</strong></article>
-        <article class="metric-card"><span class="label">DSCR</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfRatio(metrics.dscr))}</strong></article>
-        <article class="metric-card"><span class="label">Renta nette-nette</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfPercent(metrics.rentaNetNet))}</strong></article>
-        <article class="metric-card"><span class="label">Confiance</span><strong>${escapeDecisionPdfHtml(`${confidenceModel.score}/100`)}</strong></article>
-        <article class="metric-card"><span class="label">Robustesse</span><strong>${escapeDecisionPdfHtml(scenarioModel.label)}</strong></article>
+      <section class="panel panel--metrics">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">Indicateurs</p>
+            <h2>Synthèse chiffrée</h2>
+          </div>
+          <span class="pill ${decisionToneClass}">${escapeDecisionPdfHtml(acquisitionDecision.label)}</span>
+        </div>
+        <p class="panel-note">Indicateurs principaux utilisés dans l évaluation économique et documentaire du dossier.</p>
+        <div class="metric-grid">
+          <article class="metric-card metric-card--ink">
+            <span class="label">Prix affiché</span>
+            <strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acquisitionDecision.currentPrice))}</strong>
+            <span class="metric-note">Base vendeur actuelle.</span>
+          </article>
+          <article class="metric-card metric-card--accent">
+            <span class="label">Seuil d'offre</span>
+            <strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acquisitionDecision.maxOfferPrice))}</strong>
+            <span class="metric-note">Seuil à ne pas dépasser.</span>
+          </article>
+          <article class="metric-card metric-card--accent">
+            <span class="label">Seuil favorable</span>
+            <strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acquisitionDecision.solidOfferPrice))}</strong>
+            <span class="metric-note">Zone de négociation avec marge de sécurité.</span>
+          </article>
+          <article class="metric-card ${cfToneClass}">
+            <span class="label">CF net-net</span>
+            <strong>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(metrics.cfNetNet))}</strong>
+            <span class="metric-note">Après charges et impôts.</span>
+          </article>
+          <article class="metric-card ${dscrToneClass}">
+            <span class="label">DSCR</span>
+            <strong>${escapeDecisionPdfHtml(formatDecisionPdfRatio(metrics.dscr))}</strong>
+            <span class="metric-note">Couverture de la dette.</span>
+          </article>
+          <article class="metric-card metric-card--accent">
+            <span class="label">Renta nette-nette</span>
+            <strong>${escapeDecisionPdfHtml(formatDecisionPdfPercent(metrics.rentaNetNet))}</strong>
+            <span class="metric-note">Rendement après fiscalité.</span>
+          </article>
+          <article class="metric-card ${confidenceToneClass}">
+            <span class="label">Fiabilité</span>
+            <strong>${escapeDecisionPdfHtml(`${confidenceModel.score}/100`)}</strong>
+            <span class="metric-note">Qualité des hypothèses.</span>
+          </article>
+          <article class="metric-card ${robustnessToneClass}">
+            <span class="label">Robustesse</span>
+            <strong>${escapeDecisionPdfHtml(scenarioModel.label)}</strong>
+            <span class="metric-note">Tenue du dossier au stress.</span>
+          </article>
+        </div>
       </section>
 
       <section class="panel-grid">
         <article class="panel">
-          <h2>Checklist avant offre</h2>
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">01 vérification</p>
+              <h2>Checklist avant offre</h2>
+            </div>
+            <span class="pill ${decisionToneClass}">${escapeDecisionPdfHtml(acquisitionDecision.checklistLabel)}</span>
+          </div>
           <p class="panel-note">${escapeDecisionPdfHtml(acquisitionChecklist.summary)}</p>
           <ul class="checklist-list">${checklistMarkup}</ul>
         </article>
 
         <article class="panel">
-          <h2>Garde-fous</h2>
-          <p class="panel-note">Seuils actifs au moment de la decision.</p>
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">02 seuils</p>
+              <h2>Seuils retenus</h2>
+            </div>
+            <span class="pill tone-neutral">Seuils</span>
+          </div>
+          <p class="panel-note">Paramètres retenus au moment de l export.</p>
           <ul class="mini-list">
             <li><span>CF mini / mois</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(decisionThresholds.minCf))}</strong></li>
             <li><span>DSCR mini</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfRatio(decisionThresholds.minDscr))}</strong></li>
             <li><span>Vacance max</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfPercent(decisionThresholds.maxVacancy))}</strong></li>
-            <li><span>Ecart loyer max</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfPercent(decisionThresholds.maxRentGapRatio * 100))}</strong></li>
+            <li><span>Écart loyer max</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfPercent(decisionThresholds.maxRentGapRatio * 100))}</strong></li>
             <li><span>Effort foyer max</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfPercent(decisionThresholds.maxEffortRatio))}</strong></li>
             <li><span>Passoire bloquante</span><strong>${escapeDecisionPdfHtml(variablesData['blocage-passoire'] === 'yes' ? 'Oui' : 'Non')}</strong></li>
           </ul>
@@ -1648,20 +2133,32 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
 
       <section class="panel-grid">
         <article class="panel">
-          <h2>Qualite des hypotheses</h2>
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">03 hypothèses</p>
+              <h2>Qualité des hypothèses</h2>
+            </div>
+            <span class="pill ${confidenceToneClass}">${escapeDecisionPdfHtml(confidenceModel.label)}</span>
+          </div>
           <p class="panel-note">${escapeDecisionPdfHtml(confidenceModel.summary)}</p>
           <ul class="mini-list">
             <li><span>Score</span><strong>${escapeDecisionPdfHtml(`${confidenceModel.score}/100`)}</strong></li>
-            <li><span>Verifiees</span><strong>${escapeDecisionPdfHtml(String(confidenceModel.verifiedCount))}</strong></li>
-            <li><span>Estimees</span><strong>${escapeDecisionPdfHtml(String(confidenceModel.estimatedCount))}</strong></li>
+            <li><span>Vérifiées</span><strong>${escapeDecisionPdfHtml(String(confidenceModel.verifiedCount))}</strong></li>
+            <li><span>Estimées</span><strong>${escapeDecisionPdfHtml(String(confidenceModel.estimatedCount))}</strong></li>
             <li><span>Inconnues</span><strong>${escapeDecisionPdfHtml(String(confidenceModel.unknownCount))}</strong></li>
           </ul>
         </article>
 
         <article class="panel">
-          <h2>Journal de decision</h2>
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">04 journal</p>
+              <h2>Journal d'analyse</h2>
+            </div>
+            <span class="pill tone-neutral">Mémo</span>
+          </div>
           <div class="journal-box">
-            <span class="journal-label">These</span>
+            <span class="journal-label">Thèse</span>
             <p class="journal-note">${formatDecisionPdfMultiline(thesis)}</p>
           </div>
           <div class="journal-box">
@@ -1672,23 +2169,42 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       </section>
 
       <section class="panel">
-        <h2>Stress tests</h2>
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">05 scénarios</p>
+            <h2>Scénarios de stress</h2>
+          </div>
+          <span class="pill ${robustnessToneClass}">${escapeDecisionPdfHtml(scenarioModel.label)}</span>
+        </div>
         <p class="panel-note">${escapeDecisionPdfHtml(scenarioModel.summary)}</p>
         <div class="scenario-grid">${scenarioMarkup}</div>
       </section>
 
       <section class="panel-grid">
         <article class="panel">
-          <h2>Blocages</h2>
-          <ul class="bullet-list">${buildDecisionPdfNotes(acquisitionDecision.blockers, 'Aucun blocage majeur', 'Aucun point bloquant majeur n a ete remonte sur ce dossier a ce stade.')}</ul>
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">06 risques</p>
+              <h2>Blocages</h2>
+            </div>
+            <span class="pill tone-negative">À lever</span>
+          </div>
+          <ul class="bullet-list">${buildDecisionPdfNotes(acquisitionDecision.blockers, 'Aucun blocage majeur', 'Aucun point bloquant majeur n a été remonté sur ce dossier à ce stade.')}</ul>
         </article>
+
         <article class="panel">
-          <h2>Points forts</h2>
-          <ul class="bullet-list">${buildDecisionPdfNotes(acquisitionDecision.strengths, 'Signal positif limite', 'Le dossier ne declenche pas encore de point fort majeur au dela des ratios de base.')}</ul>
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">06 appuis</p>
+              <h2>Points d'appui</h2>
+            </div>
+            <span class="pill tone-positive">À confirmer</span>
+          </div>
+          <ul class="bullet-list">${buildDecisionPdfNotes(acquisitionDecision.strengths, 'Appuis limités', 'Le dossier ne fait pas encore apparaître de point d appui majeur au-delà des ratios de base.')}</ul>
         </article>
       </section>
 
-      <p class="footer-note">Document genere localement depuis Spark Investissement. Cette fiche sert de support d arbitrage et ne remplace pas un conseil fiscal, juridique ou bancaire personnalise.</p>
+      <p class="footer-note">Document généré localement depuis Spark Investissement. Cette synthèse aide à la décision et ne remplace pas un conseil fiscal, juridique ou bancaire personnalisé.</p>
     </main>
     <script>
       (function () {

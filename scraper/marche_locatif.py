@@ -1,64 +1,108 @@
 """
-Analyse du marché locatif — scrape les annonces de LOCATION
+Analyse du marché locatif — scrape les annonces de LOCATION sur LeBonCoin
 pour calculer des loyers médians par (ville × type_bien × tranche de surface).
 Cache dans la table loyers_marche (TTL 30 jours).
 """
 
+import json
+import random
+import re
 import statistics
 import time
 from datetime import datetime, timedelta
 
 from curl_cffi import requests as crequests
+from logger import get_logger
+
+_logger = get_logger("spark.marche")
 
 TRANCHES = [(0, 30), (30, 50), (50, 70), (70, 100), (100, 9999)]
 TTL_JOURS = 30
 MIN_ANNONCES = 3
 
+_NEXT_DATA = re.compile(
+    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+    re.DOTALL,
+)
+# Même bypass DataDome que le scraper d'achat
+_HEADERS = {
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "accept-language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "accept-encoding": "gzip, deflate, br",
+    "cache-control": "no-cache",
+    "pragma": "no-cache",
+    "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "same-origin",
+    "sec-fetch-user": "?1",
+    "upgrade-insecure-requests": "1",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+}
 
-def est_stale(conn, ttl_jours: int = TTL_JOURS) -> bool:
-    """True si les données de marché sont absentes ou plus vieilles que ttl_jours."""
-    row = conn.execute("SELECT MAX(date_collecte) FROM loyers_marche").fetchone()
-    if not row or not row[0]:
-        return True
-    try:
-        date = datetime.fromisoformat(row[0])
-        return datetime.now() - date > timedelta(days=ttl_jours)
-    except Exception:
-        return True
+
+def est_stale(conn, villes: list[dict] | None = None, ttl_jours: int = TTL_JOURS) -> bool:
+    """True si les données de marché sont absentes ou trop anciennes.
+
+    Quand `villes` est fourni, chaque ville ciblée doit avoir un cache récent.
+    """
+    if not villes:
+        row = conn.execute("SELECT MAX(date_collecte) FROM loyers_marche").fetchone()
+        if not row or not row[0]:
+            return True
+        try:
+            date = datetime.fromisoformat(row[0])
+            return datetime.now() - date > timedelta(days=ttl_jours)
+        except Exception:
+            return True
+
+    for ville in villes:
+        row = conn.execute(
+            "SELECT MAX(date_collecte) FROM loyers_marche WHERE code_postal = ? AND ville = ?",
+            (ville["code_postal"], ville["ville"]),
+        ).fetchone()
+        if not row or not row[0]:
+            return True
+        try:
+            date = datetime.fromisoformat(row[0])
+        except Exception:
+            return True
+        if datetime.now() - date > timedelta(days=ttl_jours):
+            return True
+    return False
 
 
 def calculer_medianes(annonces: list[dict]) -> list[dict]:
-    """
-    Groupe les annonces par (ville, code_postal, type_bien, tranche_surface)
-    et calcule le loyer médian pour chaque segment.
-    Nécessite au moins MIN_ANNONCES annonces par segment.
-    """
     from collections import defaultdict
     buckets: dict[tuple, list[float]] = defaultdict(list)
 
     for a in annonces:
-        loyer    = a.get("loyer")
-        surface  = a.get("surface")
-        type_b   = a.get("type_bien")
-        ville    = a.get("ville")
-        cp       = a.get("code_postal")
+        loyer     = a.get("loyer")
+        surface   = a.get("surface")
+        type_b    = a.get("type_bien")
+        ville     = a.get("ville")
+        cp        = a.get("code_postal")
+        nb_pieces = a.get("nb_pieces")  # peut être None
         if not all([loyer, surface, type_b, ville, cp]):
             continue
         if loyer < 100 or loyer > 5000:
             continue
         for s_min, s_max in TRANCHES:
             if s_min <= surface < s_max:
-                buckets[(ville, cp, type_b, s_min, s_max)].append(float(loyer))
+                buckets[(ville, cp, type_b, nb_pieces, s_min, s_max)].append(float(loyer))
                 break
 
     result = []
     now = datetime.now().isoformat(timespec="seconds")
-    for (ville, cp, type_b, s_min, s_max), loyeurs in buckets.items():
+    for (ville, cp, type_b, nb_pieces, s_min, s_max), loyeurs in buckets.items():
         if len(loyeurs) >= MIN_ANNONCES:
             result.append({
                 "ville":         ville,
                 "code_postal":   cp,
                 "type_bien":     type_b,
+                "nb_pieces":     nb_pieces,
                 "surface_min":   s_min,
                 "surface_max":   s_max,
                 "loyer_median":  round(statistics.median(loyeurs), 0),
@@ -69,15 +113,14 @@ def calculer_medianes(annonces: list[dict]) -> list[dict]:
 
 
 def sauvegarder_medianes(medianes: list[dict], conn) -> int:
-    """INSERT OR REPLACE dans loyers_marche. Retourne le nombre de lignes sauvegardées."""
     n = 0
     for m in medianes:
         conn.execute("""
             INSERT OR REPLACE INTO loyers_marche
-            (ville, code_postal, type_bien, surface_min, surface_max,
+            (ville, code_postal, type_bien, nb_pieces, surface_min, surface_max,
              loyer_median, nb_annonces, date_collecte)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (m["ville"], m["code_postal"], m["type_bien"],
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (m["ville"], m["code_postal"], m["type_bien"], m.get("nb_pieces"),
               m["surface_min"], m["surface_max"],
               m["loyer_median"], m["nb_annonces"], m["date_collecte"]))
         n += 1
@@ -85,12 +128,7 @@ def sauvegarder_medianes(medianes: list[dict], conn) -> int:
     return n
 
 
-# ── Scrapers location ─────────────────────────────────────────────────────────
-# LeBonCoin : category=9 pour les ventes, category=10 pour les locations.
-# La structure __NEXT_DATA__ est identique — seul le paramètre category change.
-
-def _parse_leboncoin_ad(ad, ville: dict) -> dict | None:
-    """Parse un ad JSON LeBonCoin (même structure que LeBonCoinScraper._parse)."""
+def _parse_location_ad(ad, ville: dict) -> dict | None:
     attrs = ad.get("attributes", [])
 
     def _attr(key):
@@ -99,10 +137,26 @@ def _parse_leboncoin_ad(ad, ville: dict) -> dict | None:
                 return a.get("value", "")
         return ""
 
-    price_list = ad.get("price", [])
-    if not price_list:
-        return None
-    loyer = price_list[0]
+    def _attr_label(key):
+        for a in attrs:
+            if a.get("key") == key:
+                return (a.get("value_label") or "").lower()
+        return ""
+
+    # Loyer : préférer rent_excluding_charges (hors charges) sinon price
+    loyer_hc = _attr("rent_excluding_charges")
+    try:
+        loyer = float(loyer_hc) if loyer_hc else None
+    except (ValueError, TypeError):
+        loyer = None
+    if loyer is None:
+        price_list = ad.get("price", [])
+        if not price_list:
+            return None
+        try:
+            loyer = float(price_list[0])
+        except (ValueError, TypeError):
+            return None
 
     surface_str = _attr("square")
     try:
@@ -112,7 +166,15 @@ def _parse_leboncoin_ad(ad, ville: dict) -> dict | None:
     if not surface or surface <= 0:
         return None
 
-    type_label = (_attr("real_estate_type") or "").lower()
+    # Nombre de pièces (T1=1, T2=2, T3=3…)
+    rooms_str = _attr("rooms")
+    try:
+        nb_pieces = int(rooms_str) if rooms_str else None
+    except (ValueError, TypeError):
+        nb_pieces = None
+
+    # Type : utiliser value_label (ex: "Appartement") et non value (ID numérique)
+    type_label = _attr_label("real_estate_type")
     _APT = ("appartement", "loft", "studio", "duplex", "triplex")
     _MAI = ("maison", "villa", "château", "manoir", "pavillon")
     if any(t in type_label for t in _APT):
@@ -122,32 +184,37 @@ def _parse_leboncoin_ad(ad, ville: dict) -> dict | None:
     else:
         return None
 
-    loc = ad.get("location", {})
+    # Ville normalisée sur le nom cible pour éviter la fragmentation par quartier
     return {
-        "loyer":        float(loyer),
-        "surface":      surface,
-        "type_bien":    type_bien,
-        "ville":        loc.get("city_label") or loc.get("city") or ville["ville"],
-        "code_postal":  loc.get("zipcode") or ville["code_postal"],
+        "loyer":       loyer,
+        "surface":     surface,
+        "nb_pieces":   nb_pieces,
+        "type_bien":   type_bien,
+        "ville":       ville["ville"],
+        "code_postal": ville["code_postal"],
     }
 
 
-def _fetch_leboncoin_locations(villes: list[dict], session) -> list[dict]:
-    """Scrape leboncoin.fr/locations (category=10) pour chaque ville."""
-    import json
-    import re
-    _NEXT_DATA = re.compile(
-        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-        re.DOTALL,
-    )
+def _fetch_leboncoin_locations(villes: list[dict]) -> tuple[list[dict], bool]:
+    """Scrape LeBonCoin category=10 (locations). Nouvelle session par page (bypass DataDome).
+    Retourne (annonces, blocked) — blocked=True si HTTP 403 détecté."""
     result = []
+    blocked = False
     for ville in villes:
         cp = ville["code_postal"]
-        for page in range(1, 6):  # max 5 pages
+        time.sleep(random.uniform(2, 5))
+        for page in range(1, 6):
+            session = crequests.Session(impersonate="chrome131")
             url = f"https://www.leboncoin.fr/recherche?category=10&locations={cp}&page={page}"
             try:
-                r = session.get(url, timeout=30)
-                r.raise_for_status()
+                r = session.get(url, headers=_HEADERS, timeout=20)
+                if r.status_code == 403:
+                    _logger.warning("[Marché/LBC] %s p%d : HTTP 403 — IP bloquée", ville["ville"], page)
+                    blocked = True
+                    break
+                if r.status_code != 200:
+                    _logger.warning("[Marché/LBC] %s p%d : HTTP %d", ville["ville"], page, r.status_code)
+                    break
                 m = _NEXT_DATA.search(r.text)
                 if not m:
                     break
@@ -157,100 +224,41 @@ def _fetch_leboncoin_locations(villes: list[dict], session) -> list[dict]:
                 if not ads:
                     break
                 for ad in ads:
-                    parsed = _parse_leboncoin_ad(ad, ville)
+                    parsed = _parse_location_ad(ad, ville)
                     if parsed:
                         result.append(parsed)
                 if page >= sd.get("max_pages", 1):
                     break
-                time.sleep(1)
+                time.sleep(random.uniform(6, 10))
             except Exception as e:
-                print(f"  [Marché/LBC] {ville['ville']} p{page} : {e}")
+                _logger.warning("[Marché/LBC] %s p%d : %s", ville["ville"], page, e)
                 break
-        time.sleep(0.5)
-    return result
+    return result, blocked
 
 
-def _fetch_pap_locations(villes: list[dict], session) -> list[dict]:
-    """Scrape api.pap.fr/annonce/recherche pour les locations."""
-    _API = "https://api.pap.fr/annonce/recherche"
-    _HEADERS = {
-        "Accept":     "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    }
-    result = []
-    for ville in villes:
-        page = 1
-        while page <= 5:
-            params = {
-                "categorie":              "location-appartement,location-maison",
-                "geo_objets_ids":         ville["code_postal"],
-                "recherche[geo][region]": "centre-val-de-loire",
-                "page":                   page,
-                "nb_by_page":             20,
-            }
-            try:
-                r    = session.get(_API, headers=_HEADERS, params=params, timeout=30)
-                data = r.json()
-            except Exception as e:
-                print(f"  [Marché/PAP] {ville['ville']} p{page} : {e}")
-                break
-
-            items = data.get("annonces") or []
-            if not items:
-                break
-
-            for item in items:
-                loyer   = item.get("prix")
-                surface = item.get("surface")
-                cat     = item.get("categorie", "").lower()
-                if not loyer or not surface:
-                    continue
-                type_bien = "appartement" if "appartement" in cat else "maison" if "maison" in cat else None
-                if not type_bien:
-                    continue
-                result.append({
-                    "loyer":       float(loyer),
-                    "surface":     float(surface),
-                    "type_bien":   type_bien,
-                    "ville":       item.get("ville") or ville["ville"],
-                    "code_postal": item.get("cp")   or ville["code_postal"],
-                })
-
-            if page >= data.get("nb_pages", 1):
-                break
-            page += 1
-            time.sleep(1)
-        time.sleep(0.5)
-    return result
-
-
-def main(conn, progress_callback=None):
-    """Scrape les locations, calcule les médianes, sauvegarde en cache."""
+def main(conn, villes: list[dict] = None, progress_callback=None):
+    """Scrape les locations LeBonCoin, calcule les médianes, sauvegarde en cache."""
     def _emit(pct, msg):
-        print(f"  [Marché] {msg}")
+        _logger.info("[Marché] %s", msg)
         if progress_callback:
             progress_callback(pct, msg)
 
-    try:
-        from config import VILLES
-    except ImportError:
-        _emit(100, "config.py introuvable — marché locatif ignoré.")
-        return
+    if villes is None:
+        try:
+            from config import VILLES
+            villes = VILLES
+        except ImportError:
+            _emit(100, "config.py introuvable — marché locatif ignoré.")
+            return
 
-    session = crequests.Session(impersonate="chrome124")
-    toutes: list[dict] = []
+    _emit(10, "LeBonCoin locations…")
+    lbc, blocked = _fetch_leboncoin_locations(villes)
+    if blocked:
+        _emit(70, "  ⚠ IP bloquée (HTTP 403) — marché locatif indisponible. Réessayez dans quelques minutes.")
+    else:
+        _emit(70, f"  LeBonCoin : {len(lbc)} annonces de location")
 
-    _emit(5, "LeBonCoin locations…")
-    lbc = _fetch_leboncoin_locations(VILLES, session)
-    toutes.extend(lbc)
-    _emit(40, f"  LeBonCoin : {len(lbc)} annonces")
-
-    _emit(45, "PAP locations…")
-    pap = _fetch_pap_locations(VILLES, session)
-    toutes.extend(pap)
-    _emit(80, f"  PAP : {len(pap)} annonces — total : {len(toutes)}")
-
-    medianes = calculer_medianes(toutes)
+    medianes = calculer_medianes(lbc)
     _emit(90, f"  {len(medianes)} segments de marché calculés")
 
     n = sauvegarder_medianes(medianes, conn)

@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(SPEC), 'scraper'))
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 webview_datas, webview_binaries, webview_hiddenimports = collect_all('webview')
+scraper_site_hiddenimports = collect_submodules('scrapers')
 
 a = Analysis(
     ['app.py'],
@@ -15,10 +19,8 @@ a = Analysis(
         'werkzeug.middleware.proxy_fix',
         # Scraper multi-sites
         'main', 'db', 'filtrage', 'fingerprint', 'ia', 'calculs', 'utils',
-        'scrapers', 'scrapers.base', 'scrapers.leboncoin', 'scrapers.pap',
-        'scrapers.seloger', 'scrapers.logicimmo', 'scrapers.bienici',
-        'scrapers.orpi', 'scrapers.century21', 'scrapers.laforet',
-        'scrapers.notaires', 'scrapers.bellesdemeures',
+        'enrich', 'logger', 'marche_locatif',
+        'scrapers',
         # Anthropic SDK
         'anthropic', 'httpx', 'httpcore', 'anyio', 'sniffio',
         'certifi', 'charset_normalizer', 'distro',
@@ -26,8 +28,6 @@ a = Analysis(
         'pystray', 'pystray._win32',
         # PIL
         'PIL', 'PIL.Image', 'PIL.PngImagePlugin', 'PIL.JpegImagePlugin',
-        # HTML parsing
-        'bs4', 'lxml', 'lxml.etree', 'lxml.html',
         # Curl / réseau
         'curl_cffi', 'curl_cffi.requests',
         # Email
@@ -36,6 +36,7 @@ a = Analysis(
         'sqlite3',
         # WebView
         *webview_hiddenimports,
+        *scraper_site_hiddenimports,
         *collect_submodules('webview'),
     ],
     hookspath=[],

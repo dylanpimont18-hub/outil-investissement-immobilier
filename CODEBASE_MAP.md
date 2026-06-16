@@ -11,10 +11,13 @@ Pas de fonctions exportées — exécuté directement par `python app.py` ou PyI
 ---
 
 ## server.py
-Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + export PDF.
+Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + export PDF + import/export portefeuille.
 - `api_scan` POST — lance scan partiel sur une ville ; accepte `{ville, code_postal, rayon_km}`
 - `api_scan_full` POST — réinitialise DB puis scan complet ; même body que `api_scan`
-- `_run_scanner(full, ville, code_postal, rayon_km)` — thread worker : inject `rayon_km` dans `villes_override`
+- `_run_scanner(full, ville, code_postal, rayon_km)` — thread worker : purge sys.modules scrapers avant reload, inject `rayon_km` dans `villes_override`
+- `api_portfolio_export` POST — sauvegarde `{portfolio}` dans `exports/portefeuille-YYYY-MM-DD.json`
+- `api_portfolio_import_list` GET — liste les `.json` dans `exports/`
+- `api_portfolio_import` POST — lit `{filename}` dans `exports/` et retourne le JSON
 - `_query_results_data(conn, ...)` — SELECT biens + jointure annonces + sous-requêtes `baisse`/`date_baisse` (historique_prix)
 - `api_enrich` POST — déclenche enrichissement IA des biens
 - `api_status` GET — statut du scan en cours (progress, logs)
@@ -25,6 +28,8 @@ Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + expo
 - `api_portfolio_diagnostic` POST `/api/portfolio-diagnostic` — accepte `{ bien: {...} }` (bien unique), retourne 3-5 recommandations JSON via Claude API
 - `api_generate_pdf` POST `/api/generate-pdf` — génère un PDF via Edge headless, sauvegarde dans ~/Downloads, retourne `{saved_to, filename}`
 - `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
+- `api_loyer_marche` POST `/api/loyer-marche` — accepte `{ville, type_bien, surface}`, retourne `{loyerMedian, nbSamples}` depuis `loyers_marche` table
+- `api_loyer_marche_refresh` POST `/api/loyer-marche/refresh` — accepte `{ville, code_postal, type_bien}`, lance `marche_locatif.main()` pour cette ville (~15-30 s), retourne `{ok: true}`
 
 ---
 
@@ -43,20 +48,30 @@ Orchestration UI complète : état, rendu, sync multi-fenêtres, routing des pan
 - `createAssetId()` — génère un ID unique pour une étude
 - `getPanelMode()` — détecte si on est dans la vue analysis ou workspace
 - Portfolio biens détenus (`STORAGE_KEYS.ownedAssets` = `investissementWebOwnedAssets`) :
-  - `loadOwnedAssets()` / `saveOwnedAssets()` / `createOwnedAsset(nom, ville)` / `getOwnedAsset(id)` / `updateOwnedAsset(id, patch)` / `deleteOwnedAsset(id)` — CRUD biens
+  - `loadOwnedAssets()` / `saveOwnedAssets()` / `createOwnedAsset(nom, ville)` / `getOwnedAsset(id)` / `updateOwnedAsset(id, patch)` / `deleteOwnedAsset(id)` — CRUD biens ; asset inclut `codePostal` (top-level)
   - `updateOwnedAcquisition(id, patch)` / `updateOwnedCredit(id, patch)` / `updateOwnedPostAchat(id, patch)` — patch sous-objets
   - `addOwnedTravail(assetId, travail)` / `deleteOwnedTravail(assetId, travailId)` — CRUD travaux
-  - `addOwnedNote(assetId, text)` — ajout note horodatée
+  - `addOwnedNote(assetId, text)` / `deleteOwnedNote(assetId, noteId)` — ajout/suppression note horodatée (id généré à la création)
   - `addOwnedScenario(assetId)` / `updateOwnedScenarioVar(assetId, scenarioId, key, val)` / `updateOwnedScenarioNom(assetId, scenarioId, nom)` / `deleteOwnedScenario(assetId, scenarioId)` — CRUD scénarios
   - `renderCollections()` — dispatcher vue liste ↔ vue détaillée
   - `renderOwnedPortfolioList()` — liste biens + KPIs consolidés + état vide
   - `openOwnedDetail(assetId)` / `closeOwnedDetail()` — navigation vue liste ↔ vue détaillée
   - `renderOwnedDetail()` — header fiche + câblage accordéons
-  - `renderAccordionAcquisition(asset)` — formulaire données figées + crédit
-  - `renderAccordionPostAchat(asset)` — charges, travaux CRUD, notes
+  - `renderAccordionAcquisition(asset)` — formulaire données figées + crédit + valeurEstimee/dateEstimation
+  - `renderAccordionPostAchat(asset)` — Évolution charges (P0-A+P0-B), CF breakdown, travaux, loyers réels, déficits, notes ; utilise `state.ownedYearFilters[asset.id]` (filtre par bien)
   - `renderAccordionSimulateur(asset)` — matrice scénarios avec CF net-net recalculé
+  - `renderOwnedCrdChart(asset)` — graphique "Capital restant dû" (#owned-crd-chart, canvas pleine largeur)
+  - `renderOwnedDashboard(list, tmi, regime)` — dashboard dirigeant : snapshot 4 KPIs, alertes, objectifs (rendu dans #owned-dashboard-wrap)
+  - `addOwnedLoyerReel(assetId, entry)` / `deleteOwnedLoyerReel(assetId, mois)` — CRUD loyers réels
+  - `addOwnedDeficitFoncier(assetId, entry)` / `deleteOwnedDeficitFoncier(assetId, annee)` — CRUD déficits fonciers
+  - `loadPortfolioGoals()` / `savePortfolioGoals(goals)` — objectifs portefeuille (`investissementWebPortfolioGoals`)
+  - `openCompteResultatModal(assetId)` — modal compte de résultat annuel (sélecteur d'année)
+  - `openSimulationTravauxModal(assetId)` — modal simulation travaux (déductibles ou non)
+  - `openCapaciteEmpruntModal()` — modal capacité d'emprunt (mensualite résiduelle → montant empruntable)
+  - `openObjectifsModal()` — modal saisie objectifs CF + patrimoine + date
+  - `openRapportAnnuelModal()` — modal rapport texte annuel avec bouton copier
   - `callOwnedDiagnosticIA(assetId)` — appel `POST /api/portfolio-diagnostic` + drawer résultat
-  - `initOwnedPortfolioEvents()` — câblage des events du portefeuille (modal ajout, retour, IA, drawer)
+  - `initOwnedPortfolioEvents()` — câblage des events du portefeuille (modal ajout, retour, IA, drawer, délégation actions détail)
 
 ---
 
@@ -69,10 +84,23 @@ Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
 - `computeResaleTimeline(...)` — projection plus-value à la revente
 - `calculateTMI(revenus, foyer)` — calcul tranche marginale d'imposition
 - `getHouseholdTaxParts(adults, enfants)` — nombre de parts fiscales du foyer
-- `capitalRestantDu(mensualite, dateFinStr)` — capital restant dû à une date
+- `capitalRestantDu(mensualite, dateFinStr)` — capital restant dû à une date (approximation linéaire)
 - `CSG_CRDS_RATE` — constante 17.2%
 - `buildFinancialModel(prixNet, loyerMensuel, inputs, tmi)` — modèle financier bas niveau (exporté ; utilisé par `computeOwnedAssetCF`)
-- `computeOwnedAssetCF(asset, scenario, tmi)` — CF net-net mensuel d'un bien détenu selon un scénario ; retourne `{ cfNetNet, mensualiteTotale, chargesMensuelles, impotsAnnee, loyerEffectif, rentaBrute, dscr }`
+- `computeOwnedAssetCF(asset, scenario, tmi)` — CF net-net mensuel d'un bien détenu selon un scénario ; lit `scenario.loyer` si renseigné (sinon `acq.loyerInitial`) ; détecte si le crédit est encore actif ; DSCR = NOI/dette ; retourne `{ cfNetNet, mensualiteTotale, chargesMensuelles, impotsAnnee, loyerEffectif, rentaBrute, dscr }`
+- `computeOwnedAssetTimeline(asset, tmi, regimeOverride)` — timeline CF + recettes/dépenses par an depuis anneeAchat
+- `computeAmortizationSchedule(montant, tauxAnnuel, dureeAns, anneeDebut)` — plan d'amortissement annuel `{ schedule: [{ annee, interets, capital, crdDebut, crdFin }], mensualite }`
+- `computePatrimoineNet(asset)` — `{ valeurEstimee, crd, patrimoineNet, dateEstimation }` en utilisant schedule réel
+- `computeEndettementGlobal(assets, revenusMensuels, creditsHorsImmo)` — `{ totalMensualites, tauxEndettement, capaciteResiduelle, prochainCreditTermine }` — inclut les crédits hors immo actifs
+- `computeCFBreakdown(asset, tmi, regime, targetYear)` — décomposition CF cascade : loyerBrut→vacance→charges→crédit→impôts→cfNetNet
+- `computeRegimeComparison(asset, tmi, targetYears)` — `{ byRegime, optimal }` comparatif CF par régime et par année cible
+- `computeCapaciteEmprunt(mensualiteMax, dureeAns, tauxPct, apport)` — `{ montantEmpruntable, prixAchatMax }` (frais notaire 8%)
+- `getOptimalRegime(asset, tmi)` — `{ optimal, optimalCF, allCFs }` régime max CF net-net
+- `computeRevenusLocatifsBruts(assets)` — total revenus locatifs bruts €/an (pour plafond micro-foncier 15k)
+- `computeTresorerieReelle(asset, tmi, regime)` — `{ tauxOccupation, cfReelMoyen, cfPrevisionnel, ecart }` sur 12 derniers loyers réels
+- `computeCompteResultat(asset, annee, tmi, regime)` — compte de résultat complet de l'année `{ recettesBrutes, chargesDeductibles, resultatFoncier, impots, resultatNet, capitalRembourse, cfReel, ... }`
+- `computePortfolioAlerts(assets, tmi, regime, revenusMensuels)` — alertes dynamiques : CF négatif, DSCR < 1, micro-foncier > 15k, endettement, crédit terminé, valeur manquante
+- `computeSimulationTravaux(asset, montantTravaux, annee, deductible, tmi, regime)` — impact CF et économie fiscale des travaux
 
 ---
 
@@ -155,7 +183,7 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 
 ## scraper/main.py
 Orchestrateur du scrape multi-sites Centre-Val de Loire.
-- `main(progress_callback, villes_override)` — scrape → filtre → IA → stockage SQLite
+- `main(progress_callback, villes_override, force_marche)` — scrape → filtre → IA → stockage SQLite ; détecte blocage 403 en < 5s et émet warning dans logs UI
 - `_hydrate_descriptions(scraper, annonces, emit, pct)` — récupère descriptions manquantes en parallèle (ThreadPoolExecutor 3 workers, 1s/req)
 
 ---
@@ -220,5 +248,5 @@ Registre des scrapers disponibles.
 ---
 
 ## scraper/scrapers/leboncoin.py
-Scraper LeBonCoin via parsing `__NEXT_DATA__` avec pagination.
+Scraper LeBonCoin via parsing `__NEXT_DATA__` avec pagination. Impersonate chrome131, délais aléatoires 2–5s initial + 6–10s entre pages.
 - `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(loc_param, page)` ; si `ville.get("rayon_km")`, construit `locations={cp}__{rayon_m}` dans l'URL

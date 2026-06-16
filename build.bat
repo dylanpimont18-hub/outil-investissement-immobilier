@@ -2,26 +2,28 @@
 chcp 65001 >nul
 echo.
 echo ====================================================
-echo   Spark Investissement — Build
+echo   Spark Investissement - Build
 echo ====================================================
 echo.
 
 cd /d "%~dp0"
 
 :: Convertit Logo_site.png en .ico pour l'exe
-echo [1/4] Création de l'icône...
+echo [1/4] Creation de l'icone...
 python -c "from PIL import Image; img = Image.open('Logo_site.png').convert('RGBA'); img.save('spark.ico')"
 if errorlevel 1 (
-    echo ERREUR : PIL manquant. Lance : pip install pillow
-    pause & exit /b 1
+  echo ERREUR : PIL manquant. Lance : pip install pillow
+  pause
+  exit /b 1
 )
 
 :: Compilation PyInstaller
 echo [2/4] Compilation avec PyInstaller...
 python -m PyInstaller spark.spec --clean --noconfirm --distpath .
 if errorlevel 1 (
-    echo ERREUR : PyInstaller a échoué.
-    pause & exit /b 1
+  echo ERREUR : PyInstaller a echoue.
+  pause
+  exit /b 1
 )
 
 :: Copie des fichiers statiques dans Spark\
@@ -54,18 +56,22 @@ if exist data\communes_centre_val.json copy /Y data\communes_centre_val.json "%D
 if not exist "%DEST%\vendor\leaflet" mkdir "%DEST%\vendor\leaflet"
 if exist vendor\leaflet\leaflet.js  copy /Y vendor\leaflet\leaflet.js  "%DEST%\vendor\leaflet\" >nul
 if exist vendor\leaflet\leaflet.css copy /Y vendor\leaflet\leaflet.css "%DEST%\vendor\leaflet\" >nul
+if exist vendor\fonts (
+  if not exist "%DEST%\vendor\fonts" mkdir "%DEST%\vendor\fonts"
+  copy /Y vendor\fonts\*.ttf "%DEST%\vendor\fonts\" >nul
+)
 
 :: Raccourci bureau (PowerShell)
 echo.
-echo Création du raccourci bureau...
+echo Creation du raccourci bureau...
 powershell -NoProfile -Command ^
   "$s=(New-Object -COM WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Spark Investissement.lnk');$s.TargetPath='%CD%\Spark\Spark.exe';$s.WorkingDirectory='%CD%\Spark';$s.IconLocation='%CD%\Spark\Spark.exe';$s.Save()"
 
 echo.
 echo ====================================================
-echo   Build terminé !
-echo   → Spark\Spark.exe
-echo   → Raccourci créé sur le bureau
+echo   Build termine !
+echo   - Spark\Spark.exe
+echo   - Raccourci cree sur le bureau
 echo ====================================================
 echo.
 pause

@@ -187,8 +187,15 @@ def _run_scanner(full: bool, ville: str = None, code_postal: str = None, rayon_k
 
     try:
         import importlib
+
+        # Purge all cached scraper sub-modules so file edits take effect without restart
+        for mod_name in list(sys.modules.keys()):
+            if mod_name in ("main", "db", "filtrage", "ia", "calculs", "utils",
+                            "marche_locatif", "fingerprint", "enrich",
+                            "scrapers", "logger") or mod_name.startswith("scrapers."):
+                del sys.modules[mod_name]
+
         import main as scraper_main
-        importlib.reload(scraper_main)
 
         # Patch DB path to scraper dir
         import db as scraper_db
@@ -209,7 +216,11 @@ def _run_scanner(full: bool, ville: str = None, code_postal: str = None, rayon_k
             villes_override[0]["rayon_km"] = rayon_km
         _invalidate_results_cache()
         _update_state(running=True, progress=0, log="Scan lancé…", error=None)
-        scraper_main.main(villes_override=villes_override, progress_callback=progress_callback)
+        scraper_main.main(
+            villes_override=villes_override,
+            progress_callback=progress_callback,
+            force_marche=True,
+        )
         _invalidate_results_cache()
         _update_state(finished=True)
     except Exception as e:
@@ -401,6 +412,38 @@ def _read_bien_detail(
     return dict(row) if row else None
 
 
+def _read_marche(ville: str = None, code_postal: str = None):
+    """Retourne les loyers médians depuis loyers_marche pour une ville donnée."""
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+
+    import db as scraper_db
+    db_path = Path(SCRAPER_DIR) / "biens.db"
+    if not db_path.exists():
+        return []
+
+    conn = scraper_db.init_db(db_path)
+    try:
+        if code_postal:
+            rows = conn.execute("""
+                SELECT ville, code_postal, type_bien, nb_pieces,
+                       surface_min, surface_max, loyer_median, nb_annonces, date_collecte
+                FROM loyers_marche
+                WHERE code_postal = ?
+                ORDER BY type_bien, nb_pieces, surface_min
+            """, (code_postal,)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT ville, code_postal, type_bien, nb_pieces,
+                       surface_min, surface_max, loyer_median, nb_annonces, date_collecte
+                FROM loyers_marche
+                ORDER BY ville, type_bien, nb_pieces, surface_min
+            """).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 @app.after_request
 def after_request(response):
     if request.path.startswith("/api/"):
@@ -532,6 +575,14 @@ def api_bien_detail(bien_id: int):
     return jsonify(data)
 
 
+@app.route("/api/marche", methods=["GET"])
+def api_marche():
+    ville = (request.args.get("ville") or "").strip() or None
+    code_postal = (request.args.get("code_postal") or "").strip() or None
+    rows = _read_marche(ville=ville, code_postal=code_postal)
+    return jsonify({"rows": rows})
+
+
 @app.route("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
@@ -639,6 +690,58 @@ def api_portfolio_diagnostic():
         return jsonify({'error': str(e)}), 502
 
 
+EXPORTS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "exports"
+
+
+def _ensure_exports_dir():
+    EXPORTS_DIR.mkdir(exist_ok=True)
+
+
+@app.route("/api/portfolio/export", methods=["POST"])
+def api_portfolio_export():
+    data = request.get_json(force=True, silent=True) or {}
+    portfolio = data.get("portfolio")
+    if portfolio is None:
+        return jsonify({"error": "portfolio_missing"}), 400
+    _ensure_exports_dir()
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"portefeuille-{date_str}.json"
+    dest = EXPORTS_DIR / filename
+    counter = 1
+    while dest.exists():
+        dest = EXPORTS_DIR / f"portefeuille-{date_str}-{counter}.json"
+        counter += 1
+    dest.write_text(json.dumps(portfolio, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"filename": dest.name, "path": str(dest)})
+
+
+@app.route("/api/portfolio/import/list", methods=["GET"])
+def api_portfolio_import_list():
+    _ensure_exports_dir()
+    files = sorted(
+        [f.name for f in EXPORTS_DIR.glob("*.json")],
+        reverse=True
+    )
+    return jsonify({"files": files})
+
+
+@app.route("/api/portfolio/import", methods=["POST"])
+def api_portfolio_import():
+    data = request.get_json(force=True, silent=True) or {}
+    filename = (data.get("filename") or "").strip()
+    if not filename or "/" in filename or "\\" in filename or not filename.endswith(".json"):
+        return jsonify({"error": "invalid_filename"}), 400
+    _ensure_exports_dir()
+    path = EXPORTS_DIR / filename
+    if not path.exists():
+        return jsonify({"error": "not_found"}), 404
+    try:
+        content = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return jsonify({"error": "parse_error"}), 422
+    return jsonify({"portfolio": content})
+
+
 _pdf_html_store: dict = {}
 
 
@@ -740,6 +843,63 @@ def api_generate_pdf():
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"saved_to": str(dest), "filename": dest.name})
+
+
+@app.route('/api/loyer-marche', methods=['POST'])
+def api_loyer_marche():
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+    import db as scraper_db
+    from calculs import get_loyer_marche
+
+    body = request.get_json(silent=True) or {}
+    ville = body.get('ville', '')
+    type_bien = body.get('type_bien', 'appartement')
+    surface = body.get('surface')
+
+    if not ville or surface is None:
+        return jsonify({'error': 'ville et surface requis'}), 400
+
+    db_path = Path(SCRAPER_DIR) / 'biens.db'
+    if not db_path.exists():
+        return jsonify({'error': 'Base de données scraper introuvable'}), 404
+
+    conn = scraper_db.init_db(db_path)
+    try:
+        result = get_loyer_marche(ville, type_bien, float(surface), conn)
+        if result is None:
+            return jsonify({'error': 'Aucune donnée de marché disponible pour ces critères'}), 404
+        loyer_median, nb_samples = result
+        return jsonify({'loyerMedian': loyer_median, 'nbSamples': nb_samples})
+    finally:
+        conn.close()
+
+
+@app.route('/api/loyer-marche/refresh', methods=['POST'])
+def api_loyer_marche_refresh():
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+    import db as scraper_db
+    from marche_locatif import main as marche_main
+
+    body = request.get_json(silent=True) or {}
+    ville = body.get('ville', '').strip()
+    code_postal = body.get('code_postal', '').strip()
+    type_bien = body.get('type_bien', 'appartement')
+
+    if not ville or not code_postal:
+        return jsonify({'error': 'ville et code_postal requis'}), 400
+
+    db_path = Path(SCRAPER_DIR) / 'biens.db'
+    conn = scraper_db.init_db(db_path)
+    try:
+        marche_main(conn, villes=[{'ville': ville, 'code_postal': code_postal}])
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

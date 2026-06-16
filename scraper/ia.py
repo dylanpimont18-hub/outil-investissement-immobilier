@@ -10,6 +10,9 @@ import time
 import anthropic
 
 from config import ANTHROPIC_API_KEY
+from logger import get_logger
+
+_logger = get_logger("spark.ia")
 
 _SYSTEM = """\
 Tu es expert en investissement immobilier locatif en France. \
@@ -89,13 +92,18 @@ def _build_request(annonce: dict, idx: int) -> dict:
     }
 
 
+_MAX_POLLS = 120  # 120 × 30 s = 60 min maximum avant abandon
+
+
 def enrichir_batch(
     annonces: list[dict],
     poll_interval: int = 30,
+    max_polls: int = _MAX_POLLS,
 ) -> list[dict]:
     """
     Envoie toutes les annonces en un seul batch Anthropic.
     Retourne les annonces enrichies dans le même ordre.
+    Lève RuntimeError si le batch ne se termine pas avant max_polls sondages.
     """
     if not annonces:
         return []
@@ -103,21 +111,38 @@ def enrichir_batch(
     client   = _get_client()
     requests = [_build_request(a, i) for i, a in enumerate(annonces)]
 
-    print(f"  [Batch IA] Envoi {len(requests)} requêtes…")
-    batch    = client.messages.batches.create(requests=requests)
+    _logger.info("Batch IA : envoi de %d requêtes…", len(requests))
+    try:
+        batch = client.messages.batches.create(requests=requests)
+    except anthropic.APIStatusError as e:
+        _logger.error("Batch IA : échec création (HTTP %s) — %s", e.status_code, e.message)
+        raise
     batch_id = batch.id
-    print(f"  [Batch IA] ID : {batch_id}")
+    _logger.info("Batch IA : ID %s", batch_id)
 
-    # Polling jusqu'à la fin du traitement
-    while True:
-        batch  = client.messages.batches.retrieve(batch_id)
+    # Polling avec borne maximale
+    for poll in range(1, max_polls + 1):
+        try:
+            batch  = client.messages.batches.retrieve(batch_id)
+        except anthropic.RateLimitError:
+            _logger.warning("Batch IA : rate limit — attente 60 s (poll %d/%d)", poll, max_polls)
+            time.sleep(60)
+            continue
+        except anthropic.APIStatusError as e:
+            _logger.error("Batch IA : erreur API HTTP %s — %s", e.status_code, e.message)
+            raise
+
         counts = batch.request_counts
         done   = counts.succeeded + counts.errored + counts.canceled + counts.expired
         total  = done + counts.processing
-        print(f"  [Batch IA] {batch.processing_status} — {done}/{total}")
+        _logger.info("Batch IA : %s — %d/%d (poll %d/%d)", batch.processing_status, done, total, poll, max_polls)
+
         if batch.processing_status == "ended":
             break
         time.sleep(poll_interval)
+    else:
+        _logger.error("Batch IA : timeout — %d sondages × %d s écoulés sans résultat", max_polls, poll_interval)
+        raise RuntimeError(f"Batch Anthropic {batch_id} non terminé après {max_polls * poll_interval // 60} min")
 
     # Lecture des résultats
     ia_results: dict[str, dict] = {}
@@ -128,11 +153,11 @@ def enrichir_batch(
                 text = re.sub(r"^```(?:json)?\s*", "", text.strip())
                 text = re.sub(r"\s*```$", "", text).strip()
                 ia_results[result.custom_id] = json.loads(text)
-            except Exception as e:
-                print(f"  [Batch IA] Parse erreur {result.custom_id}: {e}")
+            except (json.JSONDecodeError, IndexError) as e:
+                _logger.warning("Batch IA : erreur parsing %s — %s", result.custom_id, e)
                 ia_results[result.custom_id] = {}
         else:
-            print(f"  [Batch IA] Échec {result.custom_id}: {result.result.type}")
+            _logger.warning("Batch IA : résultat %s en échec (%s)", result.custom_id, result.result.type)
             ia_results[result.custom_id] = {}
 
     return [_appliquer(dict(a), ia_results.get(f"a{i}", {})) for i, a in enumerate(annonces)]

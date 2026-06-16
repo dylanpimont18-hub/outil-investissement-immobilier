@@ -15,7 +15,7 @@ class BaseScraper(ABC):
     site: str = ""
 
     def __init__(self):
-        self._session = crequests.Session(impersonate="chrome124")
+        self._session = crequests.Session(impersonate="chrome131")
 
     # ── Interface publique ────────────────────────────────────────────────────
 

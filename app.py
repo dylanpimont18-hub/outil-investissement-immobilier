@@ -44,7 +44,7 @@ PORT = 8080
 
 # ── Démarrage Flask en arrière-plan ──────────────────────────────────────────
 def _run_flask():
-    _srv.app.run(host='127.0.0.1', port=PORT, debug=False, use_reloader=False)
+    _srv.app.run(host='127.0.0.1', port=PORT, debug=False, use_reloader=False, threaded=True)
 
 threading.Thread(target=_run_flask, daemon=True).start()
 
