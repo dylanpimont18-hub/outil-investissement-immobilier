@@ -10933,3 +10933,25 @@ html[data-theme='dark'] .glossaire-overlay { background: rgba(0,0,0,0.6); }
 .owned-import-file-item__name { font-family: var(--font-mono); font-size: 12px; flex: 1; }
 .owned-import-note { font-size: 11px; color: var(--text-tertiary); margin-bottom: 12px; }
 .owned-import-empty { font-size: 12px; color: var(--text-tertiary); font-style: italic; }
+
+/* ─── SLIDE ANIMATIONS liste ↔ détail ────────────────────────────────── */
+@keyframes slideInRight {
+    from { transform: translateX(32px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes slideOutLeft {
+    from { transform: translateX(0);    opacity: 1; }
+    to   { transform: translateX(-32px); opacity: 0; }
+}
+@keyframes slideInLeft {
+    from { transform: translateX(-32px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes slideOutRight {
+    from { transform: translateX(0);    opacity: 1; }
+    to   { transform: translateX(32px); opacity: 0; }
+}
+.owned-slide-in-right  { animation: slideInRight  .18s ease both; }
+.owned-slide-out-left  { animation: slideOutLeft  .15s ease both; }
+.owned-slide-in-left   { animation: slideInLeft   .18s ease both; }
+.owned-slide-out-right { animation: slideOutRight .15s ease both; }

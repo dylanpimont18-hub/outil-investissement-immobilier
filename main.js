@@ -4677,21 +4677,33 @@ function openOwnedDetail(assetId) {
             }
         }
     }
-    nodes.ownedListView.hidden = true;
-    nodes.ownedDetailView.hidden = false;
-    renderOwnedDetail();
+    nodes.ownedListView.classList.add('owned-slide-out-left');
+    setTimeout(() => {
+        nodes.ownedListView.hidden = true;
+        nodes.ownedListView.classList.remove('owned-slide-out-left');
+        nodes.ownedDetailView.hidden = false;
+        nodes.ownedDetailView.classList.add('owned-slide-in-right');
+        renderOwnedDetail();
+        setTimeout(() => nodes.ownedDetailView.classList.remove('owned-slide-in-right'), 200);
+    }, 140);
 }
 
 function closeOwnedDetail() {
     state.activeOwnedAssetId = null;
     const navEl = document.getElementById('owned-detail-nav');
     if (navEl) navEl.remove();
-    nodes.ownedDetailView.hidden = true;
-    nodes.ownedListView.hidden = false;
-    renderOwnedPortfolioList();
-    requestAnimationFrame(() => {
-        window.scrollTo({ top: state._listScrollY || 0, behavior: 'instant' });
-    });
+    nodes.ownedDetailView.classList.add('owned-slide-out-right');
+    setTimeout(() => {
+        nodes.ownedDetailView.hidden = true;
+        nodes.ownedDetailView.classList.remove('owned-slide-out-right');
+        nodes.ownedListView.hidden = false;
+        nodes.ownedListView.classList.add('owned-slide-in-left');
+        renderOwnedPortfolioList();
+        setTimeout(() => nodes.ownedListView.classList.remove('owned-slide-in-left'), 200);
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: state._listScrollY || 0, behavior: 'instant' });
+        });
+    }, 120);
 }
 
 function renderOwnedProjectionContent(asset) {
