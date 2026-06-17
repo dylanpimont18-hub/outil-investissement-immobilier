@@ -44,7 +44,8 @@ const STORAGE_KEYS = {
     guidedMode: 'investissementWebGuidedMode',
     sparkMode: 'investissementWebSparkMode',
     ownedAssets: 'investissementWebOwnedAssets',
-    ownedOrder: 'investissementWebOwnedOrder'
+    ownedOrder: 'investissementWebOwnedOrder',
+    ownedCompact: 'investissementWebOwnedCompact'
 };
 
 // --- Portfolio biens détenus ---
@@ -481,6 +482,7 @@ const state = {
     ownedYearFilters: JSON.parse(localStorage.getItem('investissementWebOwnedYearFilters') || '{}'),
     ownedLoyerPage: {},
     ownedOrder: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder) || '[]'),
+    ownedCompact: localStorage.getItem(STORAGE_KEYS.ownedCompact) === '1',
 };
 
 let analysisWindowRef = null;
@@ -3932,6 +3934,15 @@ function initOwnedPortfolioEvents() {
         });
     }
 
+    const densityBtn = document.getElementById('owned-density-btn');
+    if (densityBtn) {
+        densityBtn.addEventListener('click', () => {
+            state.ownedCompact = !state.ownedCompact;
+            localStorage.setItem(STORAGE_KEYS.ownedCompact, state.ownedCompact ? '1' : '0');
+            renderOwnedPortfolioList();
+        });
+    }
+
     const importBtn = document.getElementById('owned-import-btn');
     if (importBtn) {
         importBtn.addEventListener('click', openOwnedImportModal);
@@ -4302,6 +4313,10 @@ function renderOwnedPortfolioList() {
     }
 
     if (nodes.ownedListTable) {
+        const densityBtn = document.getElementById('owned-density-btn');
+        if (densityBtn) densityBtn.textContent = state.ownedCompact ? '⊞ Complet' : '≡ Compact';
+        nodes.ownedListTable.classList.toggle('owned-list-table--compact', !!state.ownedCompact);
+
         if (!list.length) {
             nodes.ownedListTable.innerHTML = `
                 <div class="owned-empty-state">
@@ -4331,8 +4346,8 @@ function renderOwnedPortfolioList() {
                             <th></th>
                             <th>Bien</th>
                             <th style="text-align:right">CF net/mois</th>
-                            <th style="text-align:right">Rdt brut</th>
-                            <th style="text-align:right">DSCR</th>
+                            <th style="text-align:right" class="owned-col-hideable">Rdt brut</th>
+                            <th style="text-align:right" class="owned-col-hideable">DSCR</th>
                             <th>Statut</th>
                             <th></th>
                         </tr>
@@ -4389,8 +4404,8 @@ function renderOwnedPortfolioList() {
                                 <td class="owned-table-num owned-table-num--${cfTone}">
                                     ${cfMens >= 0 ? '+' : ''}${Math.round(cfMens).toLocaleString('fr-FR')} €
                                 </td>
-                                <td class="owned-table-num">${r.rentaBrute.toFixed(1).replace('.', ',')} %</td>
-                                <td class="owned-table-num">${r.dscr.toFixed(2).replace('.', ',')}</td>
+                                <td class="owned-table-num owned-col-hideable">${r.rentaBrute.toFixed(1).replace('.', ',')} %</td>
+                                <td class="owned-table-num owned-col-hideable">${r.dscr.toFixed(2).replace('.', ',')}</td>
                                 <td>
                                     <span class="owned-status-badge owned-status-badge--${statusTone}">
                                         ${statusLabel}

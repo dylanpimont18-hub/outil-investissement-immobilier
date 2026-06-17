@@ -9676,6 +9676,7 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 .owned-synthese__defisca-cf--negative { color: #F85149; font-weight: 700; }
 
 .owned-list-table { width: 100%; }
+.owned-list-table--compact .owned-col-hideable { display: none; }
 
 .owned-list-table table {
     width: 100%;
