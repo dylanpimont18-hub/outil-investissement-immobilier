@@ -4597,9 +4597,12 @@ function renderOwnedDetail() {
             <div class="owned-detail-title__meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · Acquis ${asset.anneeAchat}` : ''}</div>
         `;
         const nameEl = nodes.ownedDetailTitle.querySelector('[data-rename-asset]');
-        if (nameEl) {
+        if (nameEl && !nameEl.dataset.renameWired) {
+            nameEl.dataset.renameWired = '1';
             const originalName = asset.nom;
+            let _escaping = false;
             nameEl.addEventListener('blur', () => {
+                if (_escaping) { _escaping = false; return; }
                 const newName = nameEl.textContent.trim();
                 if (!newName) { nameEl.textContent = originalName; return; }
                 if (newName === originalName) return;
@@ -4608,7 +4611,7 @@ function renderOwnedDetail() {
             });
             nameEl.addEventListener('keydown', e => {
                 if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
-                if (e.key === 'Escape') { nameEl.textContent = originalName; nameEl.blur(); }
+                if (e.key === 'Escape') { _escaping = true; nameEl.textContent = originalName; nameEl.blur(); }
             });
         }
     }
