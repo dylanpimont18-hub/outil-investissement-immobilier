@@ -4711,11 +4711,14 @@ function renderOwnedDetail() {
                 ${!nextAsset ? 'disabled' : ''}
                 title="${nextAsset ? escapeHtml(nextAsset.nom) : ''}">›</button>
     `;
-    navEl.querySelectorAll('[data-nav-asset]:not([disabled])').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (btn.dataset.navAsset) openOwnedDetail(btn.dataset.navAsset);
+    if (!navEl.dataset.navWired) {
+        navEl.dataset.navWired = '1';
+        navEl.addEventListener('click', e => {
+            const btn = e.target.closest('[data-nav-asset]');
+            if (!btn || btn.disabled || !btn.dataset.navAsset) return;
+            openOwnedDetail(btn.dataset.navAsset);
         });
-    });
+    }
 
     if (nodes.ownedDiagnosticBtn) {
         const hasData = (asset.acquisition?.prix || 0) > 0;
