@@ -9784,6 +9784,21 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     font-weight: 700;
     color: var(--text-primary);
 }
+.owned-detail-title__name[contenteditable] {
+    cursor: text;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: -2px -6px;
+    outline: none;
+    transition: background .15s;
+}
+.owned-detail-title__name[contenteditable]:hover {
+    background: var(--surface-2, rgba(0,0,0,.06));
+}
+.owned-detail-title__name[contenteditable]:focus {
+    background: var(--surface-2, rgba(0,0,0,.06));
+    box-shadow: 0 0 0 2px var(--accent);
+}
 
 .owned-detail-title__meta {
     font-size: 0.78rem;

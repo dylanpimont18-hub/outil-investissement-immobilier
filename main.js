@@ -4589,9 +4589,28 @@ function renderOwnedDetail() {
 
     if (nodes.ownedDetailTitle) {
         nodes.ownedDetailTitle.innerHTML = `
-            <div class="owned-detail-title__name">${escapeHtml(asset.nom)}</div>
+            <div class="owned-detail-title__name"
+                 contenteditable="true"
+                 data-rename-asset="${escapeHtml(asset.id)}"
+                 spellcheck="false"
+                 title="Cliquer pour renommer">${escapeHtml(asset.nom)}</div>
             <div class="owned-detail-title__meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · Acquis ${asset.anneeAchat}` : ''}</div>
         `;
+        const nameEl = nodes.ownedDetailTitle.querySelector('[data-rename-asset]');
+        if (nameEl) {
+            const originalName = asset.nom;
+            nameEl.addEventListener('blur', () => {
+                const newName = nameEl.textContent.trim();
+                if (!newName) { nameEl.textContent = originalName; return; }
+                if (newName === originalName) return;
+                updateOwnedAsset(asset.id, { nom: newName });
+                renderOwnedPortfolioList();
+            });
+            nameEl.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+                if (e.key === 'Escape') { nameEl.textContent = originalName; nameEl.blur(); }
+            });
+        }
     }
 
     if (nodes.ownedDiagnosticBtn) {
