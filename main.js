@@ -4537,6 +4537,7 @@ function closeOwnedDeleteModal() {
 }
 
 function openOwnedDetail(assetId) {
+    state._listScrollY = window.scrollY;
     state.activeOwnedAssetId = assetId;
     // Initialiser chargesAnnuelles si vide à partir des valeurs plates existantes
     const _a = getOwnedAsset(assetId);
@@ -4565,6 +4566,9 @@ function closeOwnedDetail() {
     nodes.ownedDetailView.hidden = true;
     nodes.ownedListView.hidden = false;
     renderOwnedPortfolioList();
+    requestAnimationFrame(() => {
+        window.scrollTo({ top: state._listScrollY || 0, behavior: 'instant' });
+    });
 }
 
 function renderOwnedProjectionContent(asset) {
