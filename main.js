@@ -4616,6 +4616,8 @@ function openOwnedDetail(assetId) {
 
 function closeOwnedDetail() {
     state.activeOwnedAssetId = null;
+    const navEl = document.getElementById('owned-detail-nav');
+    if (navEl) navEl.remove();
     nodes.ownedDetailView.hidden = true;
     nodes.ownedListView.hidden = false;
     renderOwnedPortfolioList();
@@ -4668,6 +4670,37 @@ function renderOwnedDetail() {
             });
         }
     }
+
+    // Navigation prev/next
+    const orderedList = getOrderedAssetList();
+    const currentIdx = orderedList.findIndex(a => a.id === assetId);
+    const prevAsset = currentIdx > 0 ? orderedList[currentIdx - 1] : null;
+    const nextAsset = currentIdx < orderedList.length - 1 ? orderedList[currentIdx + 1] : null;
+
+    let navEl = document.getElementById('owned-detail-nav');
+    if (!navEl) {
+        navEl = document.createElement('div');
+        navEl.id = 'owned-detail-nav';
+        navEl.className = 'owned-detail-nav';
+        const header = document.querySelector('.owned-detail-header');
+        if (header) header.insertBefore(navEl, header.querySelector('#owned-back-btn').nextSibling);
+    }
+    navEl.innerHTML = `
+        <button class="btn btn--ghost btn--sm owned-nav-btn"
+                data-nav-asset="${prevAsset ? escapeHtml(prevAsset.id) : ''}"
+                ${!prevAsset ? 'disabled' : ''}
+                title="${prevAsset ? escapeHtml(prevAsset.nom) : ''}">‹</button>
+        <span class="owned-nav-pos">${currentIdx + 1} / ${orderedList.length}</span>
+        <button class="btn btn--ghost btn--sm owned-nav-btn"
+                data-nav-asset="${nextAsset ? escapeHtml(nextAsset.id) : ''}"
+                ${!nextAsset ? 'disabled' : ''}
+                title="${nextAsset ? escapeHtml(nextAsset.nom) : ''}">›</button>
+    `;
+    navEl.querySelectorAll('[data-nav-asset]:not([disabled])').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.navAsset) openOwnedDetail(btn.dataset.navAsset);
+        });
+    });
 
     if (nodes.ownedDiagnosticBtn) {
         const hasData = (asset.acquisition?.prix || 0) > 0;

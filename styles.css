@@ -9789,6 +9789,19 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     flex-wrap: wrap;
 }
 
+.owned-detail-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.owned-nav-pos {
+    font-size: .75rem;
+    color: var(--text-muted);
+    min-width: 40px;
+    text-align: center;
+}
+.owned-nav-btn { min-width: 28px; }
+
 .owned-detail-title { flex: 1; }
 
 .owned-detail-title__name {
