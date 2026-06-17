@@ -483,6 +483,7 @@ const state = {
     ownedLoyerPage: {},
     ownedOrder: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder) || '[]'),
     ownedCompact: localStorage.getItem(STORAGE_KEYS.ownedCompact) === '1',
+    ownedExpandedIds: new Set(),
 };
 
 let analysisWindowRef = null;
@@ -4393,10 +4394,14 @@ function renderOwnedPortfolioList() {
                             } else {
                                 statusTone = 'ras'; statusLabel = 'RAS';
                             }
-                            return `
+                            const isExpanded = state.ownedExpandedIds.has(asset.id);
+                            const mainRow = `
                             <tr data-asset-id="${escapeHtml(asset.id)}" draggable="true">
                                 <td class="owned-col-drag owned-drag-handle" title="Glisser pour réordonner">⠿</td>
-                                <td style="padding:6px 4px 6px 0;width:52px">${donutHtml}</td>
+                                <td style="padding:6px 4px 6px 0;width:52px;display:flex;align-items:center;gap:4px">
+                                    <button class="owned-expand-btn" data-expand-id="${escapeHtml(asset.id)}" title="Aperçu rapide">${isExpanded ? '▾' : '▸'}</button>
+                                    ${donutHtml}
+                                </td>
                                 <td>
                                     <div class="owned-table-name">${escapeHtml(asset.nom)}</div>
                                     <div class="owned-table-meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · ${asset.anneeAchat}` : ''}${regimeAlertHtml ? ' ' + regimeAlertHtml : ''}</div>
@@ -4416,6 +4421,35 @@ function renderOwnedPortfolioList() {
                                 </td>
                             </tr>
                             `;
+                            const expandedRow = isExpanded ? `
+<tr class="owned-expanded-row" data-expanded-for="${escapeHtml(asset.id)}">
+    <td colspan="8">
+        <div class="owned-expanded-content">
+            <div class="owned-expanded-metric">
+                <span class="owned-expanded-label">CF net/mois</span>
+                <span class="owned-expanded-value owned-expanded-value--${cfTone}">${cfMens >= 0 ? '+' : ''}${Math.round(cfMens).toLocaleString('fr-FR')} €</span>
+            </div>
+            <div class="owned-expanded-metric">
+                <span class="owned-expanded-label">Rdt brut</span>
+                <span class="owned-expanded-value">${r.rentaBrute.toFixed(1)} %</span>
+            </div>
+            <div class="owned-expanded-metric">
+                <span class="owned-expanded-label">DSCR</span>
+                <span class="owned-expanded-value owned-expanded-value--${r.dscr >= 1.2 ? 'positive' : r.dscr >= 1 ? 'watch' : 'negative'}">${r.dscr.toFixed(2)}</span>
+            </div>
+            <div class="owned-expanded-metric">
+                <span class="owned-expanded-label">Prix d'achat</span>
+                <span class="owned-expanded-value">${(asset.acquisition?.prix || 0).toLocaleString('fr-FR')} €</span>
+            </div>
+            <div class="owned-expanded-metric">
+                <span class="owned-expanded-label">Loyer initial</span>
+                <span class="owned-expanded-value">${(asset.acquisition?.loyerInitial || 0).toLocaleString('fr-FR')} €/mois</span>
+            </div>
+            <button class="btn btn--ghost btn--sm" style="margin-left:auto" data-open-asset="${escapeHtml(asset.id)}">Ouvrir →</button>
+        </div>
+    </td>
+</tr>` : '';
+                            return mainRow + expandedRow;
                         }).join('')}
                     </tbody>
                 </table>
@@ -4431,7 +4465,7 @@ function renderOwnedPortfolioList() {
 
             nodes.ownedListTable.querySelectorAll('tr[data-asset-id]').forEach(row => {
                 row.addEventListener('click', e => {
-                    if (e.target.closest('[data-action]') || e.target.closest('.owned-year-btn')) return;
+                    if (e.target.closest('[data-action]') || e.target.closest('.owned-year-btn') || e.target.closest('.owned-expand-btn')) return;
                     openOwnedDetail(row.dataset.assetId);
                 });
             });
@@ -4441,6 +4475,25 @@ function renderOwnedPortfolioList() {
                     e.stopPropagation();
                     openOwnedDeleteModal(btn.dataset.id);
                 });
+            });
+
+            // Expand row toggle
+            nodes.ownedListTable.querySelectorAll('.owned-expand-btn').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const id = btn.dataset.expandId;
+                    if (state.ownedExpandedIds.has(id)) {
+                        state.ownedExpandedIds.delete(id);
+                    } else {
+                        state.ownedExpandedIds.add(id);
+                    }
+                    renderOwnedPortfolioList();
+                });
+            });
+
+            // "Ouvrir →" button in expanded row
+            nodes.ownedListTable.querySelectorAll('[data-open-asset]').forEach(btn => {
+                btn.addEventListener('click', () => openOwnedDetail(btn.dataset.openAsset));
             });
 
             // Drag-to-reorder

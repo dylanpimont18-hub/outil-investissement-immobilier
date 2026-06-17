@@ -9725,6 +9725,35 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 .owned-status-badge--watch    { background: color-mix(in srgb, #ff9500 15%, transparent); color: #ff9500; }
 .owned-status-badge--negative { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 
+.owned-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 2px 4px;
+    font-size: 10px;
+    line-height: 1;
+    border-radius: 3px;
+    transition: color .12s;
+    flex-shrink: 0;
+}
+.owned-expand-btn:hover { color: var(--text); }
+.owned-expanded-row > td { padding: 0; border-top: none; }
+.owned-expanded-content {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 12px 12px 40px;
+    background: var(--surface-2, rgba(0,0,0,.03));
+    border-bottom: 1px solid var(--border);
+}
+.owned-expanded-metric { display: flex; flex-direction: column; gap: 2px; }
+.owned-expanded-label { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.owned-expanded-value { font-size: .9rem; font-weight: 600; font-family: var(--font-mono, monospace); }
+.owned-expanded-value--positive { color: var(--positive, #22c55e); }
+.owned-expanded-value--watch { color: var(--watch, #f59e0b); }
+.owned-expanded-value--negative { color: var(--negative, #ef4444); }
+
 .owned-empty-state {
     text-align: center;
     padding: 48px 24px;
