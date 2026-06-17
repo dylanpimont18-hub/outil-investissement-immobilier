@@ -9731,6 +9731,18 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 }
 .owned-empty-state p { margin-bottom: 16px; font-size: 0.9rem; }
 
+.owned-col-drag { width: 24px; }
+.owned-drag-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 14px;
+    user-select: none;
+    text-align: center;
+}
+.owned-drag-handle:active { cursor: grabbing; }
+.owned-row--dragging { opacity: .4; }
+.owned-row--dragover > td { background: var(--accent-subtle, rgba(197,160,89,.12)); }
+
 .owned-add-modal {
     position: fixed;
     inset: 0;

@@ -43,7 +43,8 @@ const STORAGE_KEYS = {
     syncTick: 'investissementWebSyncTick',
     guidedMode: 'investissementWebGuidedMode',
     sparkMode: 'investissementWebSparkMode',
-    ownedAssets: 'investissementWebOwnedAssets'
+    ownedAssets: 'investissementWebOwnedAssets',
+    ownedOrder: 'investissementWebOwnedOrder'
 };
 
 // --- Portfolio biens détenus ---
@@ -479,6 +480,7 @@ const state = {
     ownedYearFilter: 1,
     ownedYearFilters: JSON.parse(localStorage.getItem('investissementWebOwnedYearFilters') || '{}'),
     ownedLoyerPage: {},
+    ownedOrder: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder) || '[]'),
 };
 
 let analysisWindowRef = null;
@@ -4241,11 +4243,23 @@ function renderOwnedDonutSVG(recettes, depenses, positive) {
     </div>`;
 }
 
+function getOrderedAssetList() {
+    const assets = loadOwnedAssets();
+    const list = Object.values(assets);
+    const order = state.ownedOrder || [];
+    if (!order.length) return list;
+    const orderMap = Object.fromEntries(order.map((id, i) => [id, i]));
+    return [...list].sort((a, b) => {
+        const ia = orderMap[a.id] ?? Infinity;
+        const ib = orderMap[b.id] ?? Infinity;
+        return ia - ib;
+    });
+}
+
 function renderOwnedPortfolioList() {
     if (!nodes.ownedListView || !nodes.ownedDetailView) return;
 
-    const assets = loadOwnedAssets();
-    const list = Object.values(assets);
+    const list = getOrderedAssetList();
     const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
     renderOwnedRegimeSelector();
@@ -4313,6 +4327,7 @@ function renderOwnedPortfolioList() {
                 <table>
                     <thead>
                         <tr>
+                            <th class="owned-col-drag"></th>
                             <th></th>
                             <th>Bien</th>
                             <th style="text-align:right">CF net/mois</th>
@@ -4364,7 +4379,8 @@ function renderOwnedPortfolioList() {
                                 statusTone = 'ras'; statusLabel = 'RAS';
                             }
                             return `
-                            <tr data-asset-id="${escapeHtml(asset.id)}">
+                            <tr data-asset-id="${escapeHtml(asset.id)}" draggable="true">
+                                <td class="owned-col-drag owned-drag-handle" title="Glisser pour réordonner">⠿</td>
                                 <td style="padding:6px 4px 6px 0;width:52px">${donutHtml}</td>
                                 <td>
                                     <div class="owned-table-name">${escapeHtml(asset.nom)}</div>
@@ -4409,6 +4425,41 @@ function renderOwnedPortfolioList() {
                 btn.addEventListener('click', e => {
                     e.stopPropagation();
                     openOwnedDeleteModal(btn.dataset.id);
+                });
+            });
+
+            // Drag-to-reorder
+            let _dragSrcId = null;
+            nodes.ownedListTable.querySelectorAll('tr[data-asset-id]').forEach(tr => {
+                tr.addEventListener('dragstart', e => {
+                    _dragSrcId = tr.dataset.assetId;
+                    tr.classList.add('owned-row--dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                tr.addEventListener('dragend', () => {
+                    tr.classList.remove('owned-row--dragging');
+                    nodes.ownedListTable.querySelectorAll('.owned-row--dragover').forEach(r => r.classList.remove('owned-row--dragover'));
+                });
+                tr.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    nodes.ownedListTable.querySelectorAll('.owned-row--dragover').forEach(r => r.classList.remove('owned-row--dragover'));
+                    if (tr.dataset.assetId !== _dragSrcId) tr.classList.add('owned-row--dragover');
+                });
+                tr.addEventListener('drop', e => {
+                    e.preventDefault();
+                    const targetId = tr.dataset.assetId;
+                    if (!_dragSrcId || _dragSrcId === targetId) return;
+                    const currentList = getOrderedAssetList();
+                    const ids = currentList.map(a => a.id);
+                    const fromIdx = ids.indexOf(_dragSrcId);
+                    const toIdx = ids.indexOf(targetId);
+                    if (fromIdx < 0 || toIdx < 0) return;
+                    ids.splice(fromIdx, 1);
+                    ids.splice(toIdx, 0, _dragSrcId);
+                    state.ownedOrder = ids;
+                    localStorage.setItem(STORAGE_KEYS.ownedOrder, JSON.stringify(ids));
+                    renderOwnedPortfolioList();
                 });
             });
         }
