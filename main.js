@@ -4429,39 +4429,41 @@ function renderOwnedPortfolioList() {
             });
 
             // Drag-to-reorder
-            let _dragSrcId = null;
-            nodes.ownedListTable.querySelectorAll('tr[data-asset-id]').forEach(tr => {
-                tr.addEventListener('dragstart', e => {
-                    _dragSrcId = tr.dataset.assetId;
-                    tr.classList.add('owned-row--dragging');
-                    e.dataTransfer.effectAllowed = 'move';
+            (() => {
+                let _dragSrcId = null;
+                nodes.ownedListTable.querySelectorAll('tr[data-asset-id]').forEach(tr => {
+                    tr.addEventListener('dragstart', e => {
+                        _dragSrcId = tr.dataset.assetId;
+                        tr.classList.add('owned-row--dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                    });
+                    tr.addEventListener('dragend', () => {
+                        tr.classList.remove('owned-row--dragging');
+                        nodes.ownedListTable.querySelectorAll('.owned-row--dragover').forEach(r => r.classList.remove('owned-row--dragover'));
+                    });
+                    tr.addEventListener('dragover', e => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        nodes.ownedListTable.querySelectorAll('.owned-row--dragover').forEach(r => r.classList.remove('owned-row--dragover'));
+                        if (tr.dataset.assetId !== _dragSrcId) tr.classList.add('owned-row--dragover');
+                    });
+                    tr.addEventListener('drop', e => {
+                        e.preventDefault();
+                        const targetId = tr.dataset.assetId;
+                        if (!_dragSrcId || _dragSrcId === targetId) return;
+                        const currentList = getOrderedAssetList();
+                        const ids = currentList.map(a => a.id);
+                        const fromIdx = ids.indexOf(_dragSrcId);
+                        const toIdx = ids.indexOf(targetId);
+                        if (fromIdx < 0 || toIdx < 0) return;
+                        ids.splice(fromIdx, 1);
+                        ids.splice(toIdx, 0, _dragSrcId);
+                        state.ownedOrder = ids;
+                        localStorage.setItem(STORAGE_KEYS.ownedOrder, JSON.stringify(ids));
+                        renderOwnedPortfolioList();
+                    });
                 });
-                tr.addEventListener('dragend', () => {
-                    tr.classList.remove('owned-row--dragging');
-                    nodes.ownedListTable.querySelectorAll('.owned-row--dragover').forEach(r => r.classList.remove('owned-row--dragover'));
-                });
-                tr.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    nodes.ownedListTable.querySelectorAll('.owned-row--dragover').forEach(r => r.classList.remove('owned-row--dragover'));
-                    if (tr.dataset.assetId !== _dragSrcId) tr.classList.add('owned-row--dragover');
-                });
-                tr.addEventListener('drop', e => {
-                    e.preventDefault();
-                    const targetId = tr.dataset.assetId;
-                    if (!_dragSrcId || _dragSrcId === targetId) return;
-                    const currentList = getOrderedAssetList();
-                    const ids = currentList.map(a => a.id);
-                    const fromIdx = ids.indexOf(_dragSrcId);
-                    const toIdx = ids.indexOf(targetId);
-                    if (fromIdx < 0 || toIdx < 0) return;
-                    ids.splice(fromIdx, 1);
-                    ids.splice(toIdx, 0, _dragSrcId);
-                    state.ownedOrder = ids;
-                    localStorage.setItem(STORAGE_KEYS.ownedOrder, JSON.stringify(ids));
-                    renderOwnedPortfolioList();
-                });
-            });
+            })();
         }
     }
     renderOwnedPortfolioCharts(list, tmi, regime);
