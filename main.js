@@ -4657,6 +4657,8 @@ function closeOwnedDeleteModal() {
     if (nodes.ownedDeleteModalInput) nodes.ownedDeleteModalInput.value = '';
 }
 
+let _ownedTransitionTimer = null;
+
 function openOwnedDetail(assetId) {
     state._listScrollY = window.scrollY;
     state.activeOwnedAssetId = assetId;
@@ -4677,8 +4679,10 @@ function openOwnedDetail(assetId) {
             }
         }
     }
+    if (_ownedTransitionTimer) { clearTimeout(_ownedTransitionTimer); _ownedTransitionTimer = null; }
     nodes.ownedListView.classList.add('owned-slide-out-left');
-    setTimeout(() => {
+    _ownedTransitionTimer = setTimeout(() => {
+        _ownedTransitionTimer = null;
         nodes.ownedListView.hidden = true;
         nodes.ownedListView.classList.remove('owned-slide-out-left');
         nodes.ownedDetailView.hidden = false;
@@ -4692,8 +4696,10 @@ function closeOwnedDetail() {
     state.activeOwnedAssetId = null;
     const navEl = document.getElementById('owned-detail-nav');
     if (navEl) navEl.remove();
+    if (_ownedTransitionTimer) { clearTimeout(_ownedTransitionTimer); _ownedTransitionTimer = null; }
     nodes.ownedDetailView.classList.add('owned-slide-out-right');
-    setTimeout(() => {
+    _ownedTransitionTimer = setTimeout(() => {
+        _ownedTransitionTimer = null;
         nodes.ownedDetailView.hidden = true;
         nodes.ownedDetailView.classList.remove('owned-slide-out-right');
         nodes.ownedListView.hidden = false;
