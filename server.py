@@ -1,8 +1,10 @@
 import json
 import os
+import re
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +13,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -695,6 +698,78 @@ EXPORTS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "exports"
 
 def _ensure_exports_dir():
     EXPORTS_DIR.mkdir(exist_ok=True)
+
+
+DOCUMENTS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "documents"
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+MAX_DOCUMENT_SIZE = 20 * 1024 * 1024
+
+
+def _safe_bien_id(bien_id: str) -> bool:
+    return bool(bien_id) and bool(_SAFE_ID_RE.match(bien_id))
+
+
+@app.route("/api/documents/<bien_id>/upload", methods=["POST"])
+def api_documents_upload(bien_id):
+    if not _safe_bien_id(bien_id):
+        return jsonify({"error": "invalid_bien_id"}), 400
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "file_missing"}), 400
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "invalid_extension"}), 400
+
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > MAX_DOCUMENT_SIZE:
+        return jsonify({"error": "file_too_large"}), 400
+
+    bien_dir = DOCUMENTS_DIR / bien_id
+    bien_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.pdf"
+    file.save(bien_dir / filename)
+    return jsonify({"filename": filename})
+
+
+@app.route("/api/documents/<bien_id>/<filename>", methods=["GET"])
+def api_documents_get(bien_id, filename):
+    if not _safe_bien_id(bien_id):
+        return jsonify({"error": "invalid_bien_id"}), 400
+    safe_filename = secure_filename(filename)
+    if safe_filename != filename or not filename.lower().endswith(".pdf"):
+        return jsonify({"error": "invalid_filename"}), 400
+
+    bien_dir = DOCUMENTS_DIR / bien_id
+    if not (bien_dir / filename).exists():
+        return jsonify({"error": "not_found"}), 404
+    return send_from_directory(bien_dir, filename, mimetype="application/pdf")
+
+
+@app.route("/api/documents/<bien_id>/<filename>", methods=["DELETE"])
+def api_documents_delete(bien_id, filename):
+    if not _safe_bien_id(bien_id):
+        return jsonify({"error": "invalid_bien_id"}), 400
+    safe_filename = secure_filename(filename)
+    if safe_filename != filename:
+        return jsonify({"error": "invalid_filename"}), 400
+
+    path = DOCUMENTS_DIR / bien_id / filename
+    if path.exists():
+        path.unlink()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/documents/<bien_id>", methods=["DELETE"])
+def api_documents_delete_all(bien_id):
+    if not _safe_bien_id(bien_id):
+        return jsonify({"error": "invalid_bien_id"}), 400
+    bien_dir = DOCUMENTS_DIR / bien_id
+    if bien_dir.exists():
+        import shutil
+        shutil.rmtree(bien_dir)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/portfolio/export", methods=["POST"])

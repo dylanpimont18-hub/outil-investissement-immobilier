@@ -108,6 +108,7 @@ function deleteOwnedAsset(id) {
     const all = loadOwnedAssets();
     delete all[id];
     saveOwnedAssets(all);
+    fetch(`/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
 }
 
 function updateOwnedAcquisition(id, patch) {
@@ -140,17 +141,35 @@ function addOwnedTravail(assetId, travail) {
         description: travail.description || '',
         montant: Math.max(0, Number(travail.montant) || 0),
         tag: ['deductible', 'non-deductible', 'a-classifier'].includes(travail.tag) ? travail.tag : 'a-classifier',
+        commentaire: travail.commentaire || '',
+        pdfFilename: travail.pdfFilename || null,
         credit: travail.credit || null
     };
     all[assetId].postAchat.travaux.push(entry);
     saveOwnedAssets(all);
+    return entry;
 }
 
 function deleteOwnedTravail(assetId, travailId) {
     const all = loadOwnedAssets();
     if (!all[assetId]) return;
+    const entry = (all[assetId].postAchat.travaux || []).find(t => t.id === travailId);
     all[assetId].postAchat.travaux = all[assetId].postAchat.travaux.filter(t => t.id !== travailId);
     saveOwnedAssets(all);
+    if (entry?.pdfFilename) {
+        fetch(`/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(entry.pdfFilename)}`, { method: 'DELETE' }).catch(() => {});
+    }
+}
+
+async function uploadOwnedDocument(assetId, file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/documents/${encodeURIComponent(assetId)}/upload`, { method: 'POST', body: fd });
+    const json = await res.json();
+    if (!res.ok || !json.filename) {
+        throw new Error(json.error || 'upload_failed');
+    }
+    return json.filename;
 }
 
 function addOwnedNote(assetId, text) {
@@ -4981,6 +5000,45 @@ function renderOwnedCfTable(asset) {
     `;
 }
 
+function openDocumentPreview(assetId, filename) {
+    let overlay = document.getElementById('document-preview-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'document-preview-overlay';
+        overlay.className = 'document-preview-overlay';
+        overlay.innerHTML = `
+            <div class="document-preview-dialog">
+                <button type="button" class="document-preview-close" aria-label="Fermer">✕</button>
+                <embed class="document-preview-embed" type="application/pdf">
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true; });
+        overlay.querySelector('.document-preview-close').addEventListener('click', () => { overlay.hidden = true; });
+    }
+    overlay.querySelector('.document-preview-embed').src = `/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(filename)}`;
+    overlay.hidden = false;
+}
+
+function printSelectedDocuments(assetId, filenames) {
+    if (!filenames.length) return;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const embeds = filenames.map(f => `<embed src="/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(f)}" type="application/pdf" class="print-doc-embed">`).join('');
+    win.document.write(`
+        <!doctype html><html><head><title>Impression des factures</title>
+        <style>
+            body { margin: 0; }
+            .print-doc-embed { width: 100%; height: 100vh; display: block; break-after: page; }
+            .print-doc-embed:last-child { break-after: auto; }
+        </style>
+        </head><body>${embeds}</body></html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
+}
+
 function renderOwnedTravauxTab(asset) {
     const el = nodes.ownedTravauxContent || document.getElementById('owned-travaux-content');
     if (!el) return;
@@ -4990,24 +5048,49 @@ function renderOwnedTravauxTab(asset) {
     const TAG_CSS = { 'deductible': 'tag--green', 'non-deductible': 'tag--grey', 'a-classifier': 'tag--orange' };
 
     const currentYear = new Date().getFullYear();
-    const sorted = [...(post.travaux || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const totalDed = (post.travaux || [])
         .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
         .reduce((s, t) => s + t.montant, 0);
 
+    const byYear = {};
+    for (const t of (post.travaux || [])) {
+        const y = t.date ? new Date(t.date).getFullYear() : 'sans-date';
+        (byYear[y] = byYear[y] || []).push(t);
+    }
+    const years = Object.keys(byYear).sort((a, b) => (b === 'sans-date' ? -1 : a === 'sans-date' ? 1 : b - a));
+
+    const yearBlocksHtml = years.length ? years.map(y => {
+        const rows = byYear[y].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const yearTotal = rows.reduce((s, t) => s + t.montant, 0);
+        const isCurrent = String(y) === String(currentYear);
+        return `
+        <details class="owned-travaux-year" ${isCurrent ? 'open' : ''}>
+            <summary class="owned-travaux-year__summary">
+                <span>${y === 'sans-date' ? 'Sans date' : y}</span>
+                <strong>${Math.round(yearTotal).toLocaleString('fr-FR')} €</strong>
+            </summary>
+            <div class="owned-travaux-list">
+                ${rows.map(t => `
+                    <div class="owned-travaux-row">
+                        <input type="checkbox" class="owned-travaux-select" data-select-travail="${escapeHtml(t.id)}" ${t.pdfFilename ? '' : 'disabled title="Aucun PDF attaché"'}>
+                        <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
+                        <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
+                        <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
+                        <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
+                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le PDF">📄</button>` : '<span></span>'}
+                        <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
+                    </div>
+                `).join('')}
+            </div>
+        </details>`;
+    }).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun frais enregistré.</p>';
+
     el.innerHTML = `
-        <div class="owned-section-title">Travaux</div>
-        <div class="owned-travaux-list">
-            ${sorted.length ? sorted.map(t => `
-                <div class="owned-travaux-row">
-                    <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
-                    <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}</span>
-                    <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
-                    <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
-                    <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
-                </div>
-            `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun travail enregistré.</p>'}
+        <div class="owned-section-title">Frais &amp; justificatifs</div>
+        <div class="owned-travaux-toolbar">
+            <button type="button" class="btn btn--ghost btn--sm" data-action="print-selection" disabled>🖨 Imprimer la sélection</button>
         </div>
+        ${yearBlocksHtml}
         ${totalDed > 0 ? `<div class="owned-travaux-totals"><span>Déductible ${currentYear} : <strong>${Math.round(totalDed).toLocaleString('fr-FR')} €</strong></span></div>` : ''}
         <form class="owned-travaux-form" data-form="add-travail-tab" novalidate>
             <input type="date" name="date" class="variables-input" required placeholder="Date" style="flex:0 0 140px">
@@ -5018,9 +5101,40 @@ function renderOwnedTravauxTab(asset) {
                 <option value="deductible">Déductible</option>
                 <option value="non-deductible">Non déductible</option>
             </select>
+            <input type="text" name="commentaire" class="variables-input" placeholder="Commentaire (optionnel)" style="flex:1;min-width:120px">
+            <input type="file" name="pdf" accept="application/pdf" class="variables-input" style="flex:0 0 160px">
             <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
         </form>
     `;
+
+    const updateSelectionToolbar = () => {
+        const printBtn = el.querySelector('[data-action="print-selection"]');
+        const checked = el.querySelectorAll('.owned-travaux-select:checked');
+        if (printBtn) printBtn.disabled = checked.length === 0;
+    };
+
+    el.querySelectorAll('.owned-travaux-select').forEach(cb => {
+        cb.addEventListener('change', updateSelectionToolbar);
+    });
+
+    el.querySelector('[data-action="print-selection"]')?.addEventListener('click', () => {
+        const id = state.activeOwnedAssetId;
+        if (!id) return;
+        const fresh = getOwnedAsset(id);
+        const checkedIds = [...el.querySelectorAll('.owned-travaux-select:checked')].map(cb => cb.dataset.selectTravail);
+        const filenames = (fresh.postAchat.travaux || [])
+            .filter(t => checkedIds.includes(t.id) && t.pdfFilename)
+            .map(t => t.pdfFilename);
+        printSelectedDocuments(id, filenames);
+    });
+
+    el.querySelectorAll('[data-preview-pdf]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (!id) return;
+            openDocumentPreview(id, btn.dataset.previewPdf);
+        });
+    });
 
     el.querySelectorAll('[data-delete-travail-tab]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -5036,18 +5150,32 @@ function renderOwnedTravauxTab(asset) {
         });
     });
 
-    el.querySelector('[data-form="add-travail-tab"]')?.addEventListener('submit', e => {
+    el.querySelector('[data-form="add-travail-tab"]')?.addEventListener('submit', async e => {
         e.preventDefault();
-        const fd = new FormData(e.target);
+        const form = e.target;
+        const fd = new FormData(form);
         const id = state.activeOwnedAssetId;
         if (!id) return;
+        const file = fd.get('pdf');
+        let pdfFilename = null;
+        if (file && file.size > 0) {
+            try {
+                pdfFilename = await uploadOwnedDocument(id, file);
+            } catch {
+                showToast('Échec de l\'import du PDF', 'negative');
+                return;
+            }
+        }
         addOwnedTravail(id, {
             date: fd.get('date'),
             description: fd.get('description')?.trim(),
             montant: Number(fd.get('montant')),
-            tag: fd.get('tag')
+            tag: fd.get('tag'),
+            commentaire: fd.get('commentaire')?.trim(),
+            pdfFilename
         });
-        e.target.reset();
+        form.reset();
+        showToast('Frais ajouté');
         const fresh = getOwnedAsset(id);
         renderOwnedTravauxTab(fresh);
         renderAccordionPostAchat(fresh);
@@ -5574,6 +5702,11 @@ function renderCFBreakdownHTML(bd, yr) {
             <span class="cf-breakdown__label">Charges (taxe, copro, PNO, gestion)</span>
             <span class="cf-breakdown__value cf-breakdown__value--neg">−${fmt(bd.charges)}</span>
         </div>
+        ${bd.travaux > 0 ? `<div class="cf-breakdown__row">
+            <span class="cf-breakdown__op">−</span>
+            <span class="cf-breakdown__label">Travaux de l'année</span>
+            <span class="cf-breakdown__value cf-breakdown__value--neg">−${fmt(bd.travaux)}</span>
+        </div>` : ''}
         ${bd.mensualiteCredit > 0 ? `<div class="cf-breakdown__row">
             <span class="cf-breakdown__op">−</span>
             <span class="cf-breakdown__label">Mensualités crédit</span>

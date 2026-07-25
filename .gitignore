@@ -6,6 +6,9 @@ Spark/
 # Secrets locaux
 scraper/config.py
 
+# Documents utilisateur (factures PDF importées, générés localement)
+documents/
+
 # Python
 __pycache__/
 *.pyc

@@ -1909,11 +1909,16 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
     const investBrut = prixAcquisition + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
     const apportInitial = Math.max(0, investBrut - montantCredit);
 
-    const travauxParAnnee = {};
+    const travauxDeductiblesParAnnee = {};
+    const travauxAutresParAnnee = {};
     for (const t of (post.travaux || [])) {
         if (!t.date || !t.montant) continue;
         const y = new Date(t.date).getFullYear();
-        travauxParAnnee[y] = (travauxParAnnee[y] || 0) + t.montant;
+        if (t.tag === 'deductible') {
+            travauxDeductiblesParAnnee[y] = (travauxDeductiblesParAnnee[y] || 0) + t.montant;
+        } else {
+            travauxAutresParAnnee[y] = (travauxAutresParAnnee[y] || 0) + t.montant;
+        }
     }
 
     let capitalRestant = montantCredit;
@@ -1933,7 +1938,11 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
         const gestionPct = chargesEntry ? (chargesEntry.gestionLocative ?? post.gestionLocative ?? 0) : (post.gestionLocative ?? 0);
         const assurancePNO = chargesEntry ? (chargesEntry.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
         const chargesCopro = chargesEntry ? (chargesEntry.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
-        const chargesAnnee = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersAnnuels * (gestionPct / 100));
+        const travauxDeductiblesAnnee = travauxDeductiblesParAnnee[y] || 0;
+        const travauxAutresAnnee = travauxAutresParAnnee[y] || 0;
+        // Les travaux déductibles réduisent l'assiette imposable en foncier réel / SCI-IS
+        // (ignorés en micro-foncier, où l'abattement forfaitaire 30% remplace toute déduction réelle).
+        const chargesAnnee = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersAnnuels * (gestionPct / 100)) + travauxDeductiblesAnnee;
 
         let interetsAnnee = 0;
         let debtService = 0;
@@ -1975,10 +1984,11 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
         carryForwardDeficit = taxResult.newCarryForward;
         const impotsAnnee = taxResult.tax;
 
-        const travauxAnnee = travauxParAnnee[y] || 0;
-        const cfAnnuel = loyersAnnuels - debtService - chargesAnnee - impotsAnnee;
+        // travauxDeductiblesAnnee est déjà inclus dans chargesAnnee ; seule la part non
+        // déductible doit encore être retranchée du cash-flow (dépense réelle sans effet fiscal).
+        const cfAnnuel = loyersAnnuels - debtService - chargesAnnee - impotsAnnee - travauxAutresAnnee;
         const recettesAnnee = loyersAnnuels;
-        const depensesAnnee = debtService + chargesAnnee + impotsAnnee + travauxAnnee + (y === anneeAchat ? apportInitial : 0);
+        const depensesAnnee = debtService + chargesAnnee + impotsAnnee + travauxAutresAnnee + (y === anneeAchat ? apportInitial : 0);
 
         cumulCF += cfAnnuel;
         recettesCum += recettesAnnee;
@@ -2113,6 +2123,9 @@ export function computeCFBreakdown(asset, tmi, regime, targetYear = 1) {
     const gestion = loyersEncaisses * (gestionPct / 100);
     const charges = taxeFonciere + (chargesCopro * 12) + assurancePNO + gestion;
 
+    const travauxAnnee = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === targetAbsYear);
+    const travauxTotal = travauxAnnee.reduce((s, t) => s + t.montant, 0);
+
     const montant = credit.montant || 0;
     const nMois = (credit.duree || 0) * 12;
     const tauxM = ((credit.taux || 0) / 100) / 12;
@@ -2123,13 +2136,14 @@ export function computeCFBreakdown(asset, tmi, regime, targetYear = 1) {
     const creditActif = (credit.duree || 0) > 0 && targetAbsYear < anneeAchat + (credit.duree || 0);
     const mensualiteCredit = creditActif ? (mensCredit + assurMens) * 12 : 0;
 
-    const impots = loyersEncaisses - mensualiteCredit - charges - row.cfAnnuel;
+    const impots = loyersEncaisses - mensualiteCredit - charges - travauxTotal - row.cfAnnuel;
 
     return {
         loyerBrut: Math.round(loyerBrut),
         vacanceEuros: Math.round(vacanceEuros),
         loyersEncaisses: Math.round(loyersEncaisses),
         charges: Math.round(charges),
+        travaux: Math.round(travauxTotal),
         chargesDetail: {
             taxeFonciere: Math.round(taxeFonciere),
             chargesCopro: Math.round(chargesCopro * 12),

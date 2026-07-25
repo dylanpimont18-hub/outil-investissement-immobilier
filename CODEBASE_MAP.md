@@ -30,6 +30,10 @@ Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + expo
 - `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
 - `api_loyer_marche` POST `/api/loyer-marche` — accepte `{ville, type_bien, surface}`, retourne `{loyerMedian, nbSamples}` depuis `loyers_marche` table
 - `api_loyer_marche_refresh` POST `/api/loyer-marche/refresh` — accepte `{ville, code_postal, type_bien}`, lance `marche_locatif.main()` pour cette ville (~15-30 s), retourne `{ok: true}`
+- `api_documents_upload` POST `/api/documents/<bien_id>/upload` — sauvegarde un PDF (multipart `file`, max 20 Mo) dans `documents/<bien_id>/<uuid>.pdf`, retourne `{filename}`
+- `api_documents_get` GET `/api/documents/<bien_id>/<filename>` — sert le PDF inline (`Content-Type: application/pdf`) pour aperçu/impression
+- `api_documents_delete` DELETE `/api/documents/<bien_id>/<filename>` — supprime un PDF précis
+- `api_documents_delete_all` DELETE `/api/documents/<bien_id>` — supprime tout le dossier documents d'un bien (appelé à la suppression du bien)
 
 ---
 
@@ -47,10 +51,15 @@ Orchestration UI complète : état, rendu, sync multi-fenêtres, routing des pan
 - `showToast(msg)` — notification temporaire
 - `createAssetId()` — génère un ID unique pour une étude
 - `getPanelMode()` — détecte si on est dans la vue analysis ou workspace
+- `isEssentialDataMissing()` / `buildNeutralAnalysisPlaceholder()` — état neutre ("Renseignez le prix et le loyer") tant que `prix`/`loyer` ne sont pas saisis, utilisé par `buildWorkspaceHero`/`buildAnalysisStickySummary`/`buildAnalysisAcquisitionDecision`
+- `skipProfileModal()` — ferme le modal Profil (bouton "Plus tard" / Échap) sans marquer `profileConfigured` — le badge topbar reste en attente
 - Portfolio biens détenus (`STORAGE_KEYS.ownedAssets` = `investissementWebOwnedAssets`) :
   - `loadOwnedAssets()` / `saveOwnedAssets()` / `createOwnedAsset(nom, ville)` / `getOwnedAsset(id)` / `updateOwnedAsset(id, patch)` / `deleteOwnedAsset(id)` — CRUD biens ; asset inclut `codePostal` (top-level)
   - `updateOwnedAcquisition(id, patch)` / `updateOwnedCredit(id, patch)` / `updateOwnedPostAchat(id, patch)` — patch sous-objets
-  - `addOwnedTravail(assetId, travail)` / `deleteOwnedTravail(assetId, travailId)` — CRUD travaux
+  - `addOwnedTravail(assetId, travail)` / `deleteOwnedTravail(assetId, travailId)` — CRUD travaux (frais documentés : `date`, `description`, `montant`, `tag`, `commentaire`, `pdfFilename` — suppression déclenche aussi la suppression du PDF associé côté serveur)
+  - `uploadOwnedDocument(assetId, file)` — upload un PDF vers `/api/documents/<assetId>/upload`, retourne le `filename` stocké
+  - `openDocumentPreview(assetId, filename)` / `printSelectedDocuments(assetId, filenames)` — aperçu inline (overlay `<embed>`) et impression multi-PDF (nouvel onglet + `window.print()`)
+  - `renderOwnedTravauxTab(asset)` — onglet "Frais & justificatifs" : classeur par année (`<details>`), upload/aperçu/sélection PDF, câblé sur `#owned-travaux-content`
   - `addOwnedNote(assetId, text)` / `deleteOwnedNote(assetId, noteId)` — ajout/suppression note horodatée (id généré à la création)
   - `addOwnedScenario(assetId)` / `updateOwnedScenarioVar(assetId, scenarioId, key, val)` / `updateOwnedScenarioNom(assetId, scenarioId, nom)` / `deleteOwnedScenario(assetId, scenarioId)` — CRUD scénarios
   - `renderCollections()` — dispatcher vue liste ↔ vue détaillée
@@ -88,11 +97,11 @@ Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
 - `CSG_CRDS_RATE` — constante 17.2%
 - `buildFinancialModel(prixNet, loyerMensuel, inputs, tmi)` — modèle financier bas niveau (exporté ; utilisé par `computeOwnedAssetCF`)
 - `computeOwnedAssetCF(asset, scenario, tmi)` — CF net-net mensuel d'un bien détenu selon un scénario ; lit `scenario.loyer` si renseigné (sinon `acq.loyerInitial`) ; détecte si le crédit est encore actif ; DSCR = NOI/dette ; retourne `{ cfNetNet, mensualiteTotale, chargesMensuelles, impotsAnnee, loyerEffectif, rentaBrute, dscr }`
-- `computeOwnedAssetTimeline(asset, tmi, regimeOverride)` — timeline CF + recettes/dépenses par an depuis anneeAchat
+- `computeOwnedAssetTimeline(asset, tmi, regimeOverride)` — timeline CF + recettes/dépenses par an depuis anneeAchat ; les travaux `tag:'deductible'` de l'année réduisent l'assiette imposable (régimes `reel`/`sci-is`, ignoré en `micro-foncier`) et sont retranchés du CF réel, les non-déductibles n'affectent que le CF (pas l'impôt)
 - `computeAmortizationSchedule(montant, tauxAnnuel, dureeAns, anneeDebut)` — plan d'amortissement annuel `{ schedule: [{ annee, interets, capital, crdDebut, crdFin }], mensualite }`
 - `computePatrimoineNet(asset)` — `{ valeurEstimee, crd, patrimoineNet, dateEstimation }` en utilisant schedule réel
 - `computeEndettementGlobal(assets, revenusMensuels, creditsHorsImmo)` — `{ totalMensualites, tauxEndettement, capaciteResiduelle, prochainCreditTermine }` — inclut les crédits hors immo actifs
-- `computeCFBreakdown(asset, tmi, regime, targetYear)` — décomposition CF cascade : loyerBrut→vacance→charges→crédit→impôts→cfNetNet
+- `computeCFBreakdown(asset, tmi, regime, targetYear)` — décomposition CF cascade : loyerBrut→vacance→charges→travaux(année)→crédit→impôts→cfNetNet (`bd.travaux` = somme des travaux datés dans `targetYear`, déductibles ou non)
 - `computeRegimeComparison(asset, tmi, targetYears)` — `{ byRegime, optimal }` comparatif CF par régime et par année cible
 - `computeCapaciteEmprunt(mensualiteMax, dureeAns, tauxPct, apport)` — `{ montantEmpruntable, prixAchatMax }` (frais notaire 8%)
 - `getOptimalRegime(asset, tmi)` — `{ optimal, optimalCF, allCFs }` régime max CF net-net
@@ -148,14 +157,16 @@ Composants UI réutilisables : graphes, tableaux comparatifs, validation, toasts
 ## index.html
 Structure DOM statique — tous les panels et formulaires pré-déclarés.
 - Panels principaux : `#workspace-panel`, `#analysis-panel`, `#collection-panel`, `#feasibility-panel`, `#scanner-panel`
-- Formulaires : `#variables-form`, `#profile-form`, `#profile-modal`
+- Formulaires : `#variables-form`, `#profile-form`, `#profile-modal` (bouton `#profile-skip` = "Plus tard", visible tant que profil non configuré)
 - Zones de rendu : `#analysis-sticky-summary`, `#analysis-metrics`
+- Analyse — sections avancées (Robustesse, Scénarios de stress, Régimes fiscaux, Journal, Projection/matrice, Cash-flow annuel, Comparatif des leviers) en `<details>` repliées par défaut, masquées en Vue rapide via `.analysis-section--{robustesse,scenarios,regime,journal,visuals}` + `.analysis-forward`/`.analysis-section--sensitivity`/`.analysis-section--cashflow` (CSS `[data-analysis-view="quick"]`)
 - Champ optionnel : `#annee-achat` (dans fieldset Identité — active les conseils temporels)
 - Portefeuille biens détenus (dans `#collection-panel`) :
   - Vue liste : `#owned-list-view`, `#owned-kpi-banner`, `#owned-list-table`, `#owned-add-btn`
   - Modal ajout : `#owned-add-modal`, `#owned-add-form`, `#owned-add-nom`, `#owned-add-ville`
   - Vue détaillée : `#owned-detail-view`, `#owned-back-btn`, `#owned-detail-title`, `#owned-diagnostic-btn`
   - Accordéons : `#acc-acquisition`, `#acc-acquisition-body`, `#acc-acquisition-content`, `#acc-postachat`, `#acc-simulateur`
+  - Onglet Travaux : `#owned-travaux-content` (rendu par `renderOwnedTravauxTab`, formulaire `[data-form="add-travail-tab"]` avec champ PDF)
   - Drawer IA : `#owned-ai-drawer`, `#owned-ai-overlay`, `#owned-ai-drawer-content`
 
 ---
@@ -168,7 +179,9 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 - Scanner workspace : `.scanner-workspace-hero`, `.scanner-command-panel`, `.scanner-command-card`, `.scanner-rayon-group`, `.scanner-options-dropdown`
 - Scanner table : `.scanner-dpe-badge--a/b/c/d/e/f/g`, `.scanner-price-drop`, `.scanner-dist-badge--near/mid/far`, `.scanner-freshness`, `.scanner-score-decision`
 - Scanner stats : `.workspace-hero-mini-card.scanner-stat--gold/pos/warn`, `.scanner-stat--insight`
-- Portefeuille biens détenus : `.owned-list-header`, `.owned-kpi-banner`, `.owned-kpi-card`, `.owned-list-table`, `.owned-add-modal`, `.owned-detail-header`, `.owned-accordion`, `.owned-accordion__header[aria-expanded]`, `.owned-form-grid`, `.owned-travaux-row`, `.owned-notes-add`, `.owned-simulator-table`
+- Portefeuille biens détenus : `.owned-list-header`, `.owned-kpi-banner`, `.owned-kpi-card`, `.owned-list-table`, `.owned-add-modal`, `.owned-detail-header`, `.owned-accordion`, `.owned-accordion__header[aria-expanded]`, `.owned-form-grid`, `.owned-travaux-row` (grille 7 colonnes : checkbox/date/desc/montant/tag/pdf/suppr.), `.owned-travaux-year` (`<details>` classeur par année), `.owned-notes-add`, `.owned-simulator-table`
+- Aperçu PDF : `.document-preview-overlay`, `.document-preview-dialog`, `.document-preview-embed` (overlay plein écran, `<embed>` vers `/api/documents/...`)
+- Analyse : `.analysis-neutral-card` (état neutre avant saisie prix/loyer), `.analysis-block > summary` (habillage des sections `<details>`)
 - Portfolio zones : `.portfolio-zone`, `.portfolio-donut-wrap`, `.portfolio-alerts`, `.portfolio-alert--red/orange`
 - Portfolio conseils : `.advice-card`, `.advice-card--red/orange/info`, `.advice-group`
 - Portfolio fiches : `.portfolio-fiche`, `.portfolio-fiche__verdict--green/orange/red`, `.portfolio-fiche__kpi`
@@ -247,6 +260,10 @@ Registre des scrapers disponibles.
 
 ---
 
+## scraper/browser.py
+Singleton Playwright + stealth partagé par tous les scrapers. Lance Chromium headless une seule fois par run, ferme via atexit.
+- `browser_page()` — context manager : yield une page Playwright avec stealth appliqué (navigator.webdriver=false, locale fr-FR, UA Chrome 131)
+
 ## scraper/scrapers/leboncoin.py
-Scraper LeBonCoin via parsing `__NEXT_DATA__` avec pagination. Impersonate chrome131, délais aléatoires 2–5s initial + 6–10s entre pages.
-- `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(loc_param, page)` ; si `ville.get("rayon_km")`, construit `locations={cp}__{rayon_m}` dans l'URL
+Scraper LeBonCoin via parsing `__NEXT_DATA__` avec Playwright+stealth (remplace curl_cffi). Délais aléatoires 2–5s initial + 6–10s entre pages.
+- `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(loc_param, page)`, `fetch_description(url)`

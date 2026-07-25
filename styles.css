@@ -9987,7 +9987,7 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 
 .owned-travaux-row {
     display: grid;
-    grid-template-columns: 110px 1fr 90px 120px 24px;
+    grid-template-columns: 20px 110px 1fr 90px 120px 28px 24px;
     gap: 8px;
     align-items: center;
     padding: 5px 0;
@@ -9996,6 +9996,60 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 }
 
 .owned-travaux-row:last-child { border-bottom: none; }
+
+.owned-travaux-year { margin-bottom: 6px; }
+.owned-travaux-year__summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 6px 4px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    list-style: none;
+}
+.owned-travaux-year__summary::-webkit-details-marker { display: none; }
+.owned-travaux-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.owned-travaux-pdf-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 0;
+    line-height: 1;
+}
+
+.document-preview-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.document-preview-overlay[hidden] { display: none; }
+.document-preview-dialog {
+    position: relative;
+    width: min(900px, 92vw);
+    height: 90vh;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.document-preview-embed { width: 100%; height: 100%; border: none; }
+.document-preview-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+    background: var(--surface-strong, #e2e8f0);
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+}
 
 .owned-travaux-date { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-secondary); }
 .owned-travaux-desc { color: var(--text-primary); }
