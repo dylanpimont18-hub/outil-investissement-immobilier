@@ -1648,6 +1648,20 @@ html[data-theme='light'] #profile-save { color: #1C2128; }
     margin-bottom: 12px;
 }
 
+.analysis-neutral-card {
+    padding: 32px 24px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--muted);
+}
+.analysis-neutral-card h2 {
+    font-size: 1.1rem;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
 .analysis-columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -8777,8 +8791,38 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 /* Sections masquées en Vue rapide */
 #analysis-panel[data-analysis-view="quick"] .analysis-forward,
 #analysis-panel[data-analysis-view="quick"] .analysis-section--sensitivity,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--cashflow {
+#analysis-panel[data-analysis-view="quick"] .analysis-section--cashflow,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--visuals,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--robustesse,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--scenarios,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--regime,
+#analysis-panel[data-analysis-view="quick"] .analysis-section--journal {
     display: none;
+}
+
+/* Grille 2 colonnes → 1 colonne quand un des deux enfants est masqué en Vue rapide */
+#analysis-panel[data-analysis-view="quick"] .analysis-columns--action {
+    grid-template-columns: 1fr;
+}
+
+/* Style des <summary> des sections repliables (habillage identique aux anciens <h4>) */
+.analysis-block > summary {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    color: var(--accent-gold);
+    text-transform: uppercase;
+    cursor: pointer;
+    list-style: none;
+}
+.analysis-block > summary::-webkit-details-marker { display: none; }
+.analysis-block[open] > summary { margin-bottom: 14px; }
+.analysis-block > summary .analysis-block-note {
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    color: var(--muted);
+    margin-top: 4px;
 }
 
 /* === PORTEFEUILLE REFONTE === */

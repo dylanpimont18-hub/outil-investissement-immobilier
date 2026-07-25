@@ -303,15 +303,15 @@ const VARIABLE_DEFAULTS = {
     'statut-bien': 'candidate',
     ville: 'Ville à préciser',
     adresse: '',
-    prix: 107000,
+    prix: 0,
     nego: 0,
-    loyer: 700,
+    loyer: 0,
     notaire: 8,
-    travaux: 5000,
-    meubles: 4000,
+    travaux: 0,
+    meubles: 0,
     agence: 0,
     dpe: 'D',
-    'loyer-marche': 700,
+    'loyer-marche': 0,
     'copro-risque': 'stable',
     'source-loyer': 'estimated',
     'source-charges': 'estimated',
@@ -592,6 +592,7 @@ const nodes = {
     assetDetailContent: document.getElementById('asset-detail-content'),
     profileModal: document.getElementById('profile-modal'),
     profileClose: document.getElementById('profile-close'),
+    profileSkip: document.getElementById('profile-skip'),
     profileSave: document.getElementById('profile-save'),
     profileModalNote: document.getElementById('profile-modal-note'),
     profileSelect: document.getElementById('profile-select'),
@@ -1297,8 +1298,27 @@ function getWorkspaceModeLabel({ useLocalFallback = false } = {}) {
     return 'Vue séparée';
 }
 
+function isEssentialDataMissing() {
+    const prix = Number(state.variablesData?.prix) || 0;
+    const loyer = Number(state.variablesData?.loyer) || 0;
+    return prix <= 0 || loyer <= 0;
+}
+
+function buildNeutralAnalysisPlaceholder() {
+    return `
+        <div class="analysis-neutral-card">
+            <h2>Renseignez le prix et le loyer</h2>
+            <p>L'analyse démarre dès que le prix affiché et le loyer cible sont renseignés dans le formulaire ci-dessous.</p>
+        </div>
+    `;
+}
+
 function buildWorkspaceHero(analysisModel, { tmi, composition, useLocalFallback = false } = {}) {
     if (!nodes.workspaceHero) {
+        return;
+    }
+    if (isEssentialDataMissing()) {
+        nodes.workspaceHero.innerHTML = buildNeutralAnalysisPlaceholder();
         return;
     }
 
@@ -2655,6 +2675,10 @@ function confirmProfileModal() {
     dismissProfileModal();
 }
 
+function skipProfileModal() {
+    dismissProfileModal();
+}
+
 function closeProfileModal() {
     if (!canDismissProfileModal()) {
         return;
@@ -2935,6 +2959,10 @@ function buildAnalysisMetrics(analysisModel) {
 }
 
 function buildAnalysisStickySummary(analysisModel) {
+    if (isEssentialDataMissing()) {
+        nodes.analysisStickySummary.innerHTML = buildNeutralAnalysisPlaceholder();
+        return;
+    }
     const { acquisitionDecision, confidenceModel, scenarioModel } = analysisModel;
     const negotiationGap = Math.max(0, acquisitionDecision.negotiationToTenable || 0);
 
@@ -2982,6 +3010,10 @@ function buildAnalysisStickySummary(analysisModel) {
 }
 
 function buildAnalysisAcquisitionDecision(analysisModel) {
+    if (isEssentialDataMissing()) {
+        nodes.analysisAcquisitionDecision.innerHTML = buildNeutralAnalysisPlaceholder();
+        return;
+    }
     const { acquisitionDecision, acquisitionChecklist, confidenceModel, scenarioModel } = analysisModel;
 
     nodes.analysisAcquisitionDecision.innerHTML = `
@@ -6385,6 +6417,7 @@ function renderModalState() {
     nodes.profileComposition.textContent = getProfileComposition(state.profileData);
     nodes.profileModal.dataset.onboarding = state.profileConfigured ? 'false' : 'true';
     nodes.profileClose.hidden = !state.profileConfigured;
+    if (nodes.profileSkip) nodes.profileSkip.hidden = state.profileConfigured;
     nodes.profileModalNote.textContent = state.profileConfigured
         ? `Cadre actif : ${profile.note}`
         : `Étape requise : ${profile.note}`;
@@ -6631,6 +6664,7 @@ function bindEvents() {
     nodes.screenToggle.addEventListener('click', handleScreenToggle);
     nodes.profileTrigger.addEventListener('click', openProfileModal);
     nodes.profileClose.addEventListener('click', () => closeProfileModal());
+    nodes.profileSkip?.addEventListener('click', () => skipProfileModal());
     nodes.profileSave.addEventListener('click', () => {
         if (state.profileConfigured) {
             closeProfileModal();
@@ -6648,7 +6682,7 @@ function bindEvents() {
 
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && state.isProfileModalOpen) {
-            closeProfileModal();
+            skipProfileModal();
             return;
         }
 
