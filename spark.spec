@@ -2,6 +2,9 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(SPEC), 'scraper'))
 
+with open(os.path.join(os.path.dirname(SPEC), 'VERSION'), encoding='utf-8') as _f:
+    _version = _f.read().strip()
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 webview_datas, webview_binaries, webview_hiddenimports = collect_all('webview')
@@ -53,7 +56,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Spark',
+    name=f'Spark-{_version}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

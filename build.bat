@@ -8,8 +8,20 @@ echo.
 
 cd /d "%~dp0"
 
+set /p VERSION=<VERSION
+
+:: Verification (tests) - abandon du build si un test echoue
+echo [1/5] Verification (tests)...
+set CALLED_FROM_BUILD=1
+call ".\verify.bat"
+if errorlevel 1 (
+  echo ERREUR : la verification a echoue. Build abandonne.
+  pause
+  exit /b 1
+)
+
 :: Convertit Logo_site.png en .ico pour l'exe
-echo [1/4] Creation de l'icone...
+echo [2/5] Creation de l'icone...
 python -c "from PIL import Image; img = Image.open('Logo_site.png').convert('RGBA'); img.save('spark.ico')"
 if errorlevel 1 (
   echo ERREUR : PIL manquant. Lance : pip install pillow
@@ -18,7 +30,7 @@ if errorlevel 1 (
 )
 
 :: Compilation PyInstaller
-echo [2/4] Compilation avec PyInstaller...
+echo [3/5] Compilation avec PyInstaller (version %VERSION%)...
 python -m PyInstaller spark.spec --clean --noconfirm --distpath .
 if errorlevel 1 (
   echo ERREUR : PyInstaller a echoue.
@@ -26,22 +38,29 @@ if errorlevel 1 (
   exit /b 1
 )
 
+set EXE_PATH=Spark\Spark-%VERSION%.exe
+if not exist "%EXE_PATH%" (
+  echo ERREUR : %EXE_PATH% introuvable apres compilation. Build abandonne.
+  pause
+  exit /b 1
+)
+
 :: Copie des fichiers statiques dans Spark\
-echo [3/4] Copie des fichiers statiques...
+echo [4/5] Copie des fichiers statiques...
 set DEST=Spark
-copy /Y index.html     "%DEST%\" >nul
-copy /Y main.js        "%DEST%\" >nul
-copy /Y calculs.js     "%DEST%\" >nul
-copy /Y pdf.js         "%DEST%\" >nul
-copy /Y ui.js          "%DEST%\" >nul
-copy /Y scanner.js     "%DEST%\" >nul
-copy /Y styles.css     "%DEST%\" >nul
-copy /Y Logo_site.png  "%DEST%\" >nul
-copy /Y server.py      "%DEST%\" >nul
+copy /Y VERSION         "%DEST%\" >nul
+copy /Y index.html      "%DEST%\" >nul
+copy /Y main.js         "%DEST%\" >nul
+copy /Y calculs.js      "%DEST%\" >nul
+copy /Y pdf.js          "%DEST%\" >nul
+copy /Y ui.js           "%DEST%\" >nul
+copy /Y scanner.js      "%DEST%\" >nul
+copy /Y styles.css      "%DEST%\" >nul
+copy /Y Logo_site.png   "%DEST%\" >nul
+copy /Y server.py       "%DEST%\" >nul
 if exist charte_graphique.txt copy /Y charte_graphique.txt "%DEST%\" >nul
 
 :: Copie du dossier scraper (source Python + config)
-echo [4/4] Copie du dossier scraper...
 if not exist "%DEST%\scraper" mkdir "%DEST%\scraper"
 copy /Y scraper\*.py "%DEST%\scraper\" >nul
 if exist scraper\config.example.py copy /Y scraper\config.example.py "%DEST%\scraper\" >nul
@@ -63,14 +82,22 @@ if exist vendor\fonts (
 
 :: Raccourci bureau (PowerShell)
 echo.
-echo Creation du raccourci bureau...
+echo [5/5] Creation du raccourci bureau + archive versionnee...
 powershell -NoProfile -Command ^
-  "$s=(New-Object -COM WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Spark Investissement.lnk');$s.TargetPath='%CD%\Spark\Spark.exe';$s.WorkingDirectory='%CD%\Spark';$s.IconLocation='%CD%\Spark\Spark.exe';$s.Save()"
+  "$s=(New-Object -COM WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Spark Investissement.lnk');$s.TargetPath='%CD%\%EXE_PATH%';$s.WorkingDirectory='%CD%\Spark';$s.IconLocation='%CD%\%EXE_PATH%';$s.Save()"
+
+:: Archive zip versionnee du dossier Spark\ (alternative simple a un installeur, cf. CHANGELOG.md)
+powershell -NoProfile -Command "Compress-Archive -Path '%CD%\Spark\*' -DestinationPath '%CD%\Spark-%VERSION%.zip' -Force"
+
+for %%F in ("%EXE_PATH%") do set EXE_SIZE=%%~zF
+set /a EXE_SIZE_MB=%EXE_SIZE% / 1048576
 
 echo.
 echo ====================================================
 echo   Build termine !
-echo   - Spark\Spark.exe
+echo   - Version    : %VERSION%
+echo   - Executable : %EXE_PATH%  (~%EXE_SIZE_MB% Mo)
+echo   - Archive    : Spark-%VERSION%.zip
 echo   - Raccourci cree sur le bureau
 echo ====================================================
 echo.

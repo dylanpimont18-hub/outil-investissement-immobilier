@@ -2,6 +2,7 @@
 build/
 dist/
 Spark/
+Spark-*.zip
 
 # Secrets locaux
 scraper/config.py
