@@ -33,6 +33,8 @@ a = Analysis(
         'PIL', 'PIL.Image', 'PIL.PngImagePlugin', 'PIL.JpegImagePlugin',
         # Curl / réseau
         'curl_cffi', 'curl_cffi.requests',
+        # HTTP (géocodage Nominatim)
+        'requests', 'urllib3', 'idna',
         # Email
         'smtplib', 'email.mime.multipart', 'email.mime.text',
         # SQLite

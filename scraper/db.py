@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS geocodes (
     PRIMARY KEY (ville, code_postal)
 );
 
+-- Cache de géocodage à l'adresse précise (portefeuille de biens détenus).
+-- Distinct de `geocodes`, qui ne descend qu'au niveau ville + code postal.
+CREATE TABLE IF NOT EXISTS geocodes_adresse (
+    adresse TEXT PRIMARY KEY,
+    lat     REAL,
+    lng     REAL
+);
+
 CREATE INDEX IF NOT EXISTS idx_biens_fingerprint ON biens(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_biens_url         ON biens(url);
 CREATE INDEX IF NOT EXISTS idx_biens_cp          ON biens(code_postal);

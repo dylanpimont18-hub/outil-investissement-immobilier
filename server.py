@@ -539,6 +539,133 @@ def api_pending_count():
         conn.close()
 
 
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_USER_AGENT = "SparkInvestissement/1.0 (application de bureau, usage personnel)"
+# Nominatim (instance publique) limite à 1 requête/seconde. On garde une petite marge.
+NOMINATIM_MIN_INTERVAL = 1.1
+_nominatim_lock = threading.Lock()
+_nominatim_last_call = 0.0
+
+
+def _geocode_db():
+    """Ouvre biens.db avec le schéma à jour (crée les tables de géocodage au besoin)."""
+    if SCRAPER_DIR not in sys.path:
+        sys.path.insert(0, SCRAPER_DIR)
+    import db as scraper_db
+    return scraper_db.init_db(Path(SCRAPER_DIR) / "biens.db")
+
+
+def _nominatim_lookup(query: str):
+    """Interroge Nominatim en respectant sa limite de débit. Retourne (lat, lng) ou (None, None)."""
+    global _nominatim_last_call
+    import requests
+
+    with _nominatim_lock:
+        elapsed = time.monotonic() - _nominatim_last_call
+        if elapsed < NOMINATIM_MIN_INTERVAL:
+            time.sleep(NOMINATIM_MIN_INTERVAL - elapsed)
+        try:
+            resp = requests.get(
+                NOMINATIM_URL,
+                params={"q": query, "format": "json", "limit": 1},
+                headers={"User-Agent": NOMINATIM_USER_AGENT},
+                timeout=10,
+            )
+        finally:
+            _nominatim_last_call = time.monotonic()
+
+    if resp.status_code != 200:
+        return None, None
+    data = resp.json()
+    if not data:
+        return None, None
+    try:
+        return float(data[0]["lat"]), float(data[0]["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None, None
+
+
+@app.route("/api/geocode/address", methods=["POST"])
+def api_geocode_address():
+    """Géocode une adresse précise (portefeuille). Cache en base, y compris les échecs."""
+    payload = request.get_json(silent=True) or {}
+    adresse = (payload.get("adresse") or "").strip()
+    if not adresse:
+        return jsonify({"error": "adresse requise"}), 400
+
+    conn = _geocode_db()
+    try:
+        row = conn.execute(
+            "SELECT lat, lng FROM geocodes_adresse WHERE adresse = ?", (adresse,)
+        ).fetchone()
+        if row is not None:
+            return jsonify({"lat": row["lat"], "lng": row["lng"], "cached": True})
+
+        try:
+            lat, lng = _nominatim_lookup(adresse)
+        except Exception as exc:  # réseau coupé, timeout, JSON invalide…
+            return jsonify({"error": str(exc)}), 502
+
+        # On mémorise aussi les échecs (lat/lng NULL) pour ne pas re-solliciter
+        # Nominatim à chaque frappe sur une adresse introuvable.
+        conn.execute(
+            "INSERT OR REPLACE INTO geocodes_adresse (adresse, lat, lng) VALUES (?, ?, ?)",
+            (adresse, lat, lng),
+        )
+        conn.commit()
+        return jsonify({"lat": lat, "lng": lng, "cached": False})
+    finally:
+        conn.close()
+
+
+@app.route("/api/geocode/batch", methods=["POST"])
+def api_geocode_batch():
+    """Géocode une liste de {ville, code_postal} (carte du scanner). Cache en base."""
+    entries = request.get_json(silent=True) or []
+    if not isinstance(entries, list):
+        return jsonify({"error": "liste attendue"}), 400
+
+    conn = _geocode_db()
+    out = {}
+    try:
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            ville = (entry.get("ville") or "").strip()
+            code_postal = (entry.get("code_postal") or "").strip()
+            if not ville:
+                continue
+            key = f"{ville}|{code_postal}"
+            if key in out:
+                continue
+
+            row = conn.execute(
+                "SELECT lat, lng FROM geocodes WHERE ville = ? AND code_postal = ?",
+                (ville, code_postal),
+            ).fetchone()
+            if row is not None:
+                out[key] = {"lat": row["lat"], "lng": row["lng"]}
+                continue
+
+            query = f"{code_postal} {ville}, France".strip()
+            try:
+                lat, lng = _nominatim_lookup(query)
+            except Exception:
+                # Une ville injoignable ne doit pas faire échouer tout le lot.
+                out[key] = {"lat": None, "lng": None}
+                continue
+
+            conn.execute(
+                "INSERT OR REPLACE INTO geocodes (ville, code_postal, lat, lng) VALUES (?, ?, ?, ?)",
+                (ville, code_postal, lat, lng),
+            )
+            conn.commit()
+            out[key] = {"lat": lat, "lng": lng}
+        return jsonify(out)
+    finally:
+        conn.close()
+
+
 @app.route("/api/status", methods=["GET"])
 def api_status():
     with _lock:

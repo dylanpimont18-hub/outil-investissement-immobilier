@@ -140,13 +140,6 @@
                                             <option value="immeuble">Immeuble de rapport</option>
                                         </select>
                                     </label>
-                                    <label class="asset-identity-field" for="statut-bien">
-                                        <span class="asset-identity-label">Statut</span>
-                                        <select id="statut-bien" name="statut-bien" class="variables-input">
-                                            <option value="candidate">À étudier</option>
-                                            <option value="owned">Déjà au portefeuille</option>
-                                        </select>
-                                    </label>
                                     <label class="asset-identity-field" for="annee-achat">
                                         <span class="asset-identity-label">Année d'achat</span>
                                         <input id="annee-achat" name="annee-achat" type="number" class="variables-input"
@@ -328,7 +321,7 @@
                                 <div class="variables-grid variables-grid--single">
                                     <label class="variables-field" for="regime">
                                         <span class="status-label" data-tooltip="Régime fiscal : détermine comment les revenus fonciers sont imposés. Micro-foncier = abattement 30 %, Foncier réel = déduction des charges réelles, SCI-IS = imposition société avec amortissement.">Régime <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Régime fiscal de la location : Micro-foncier (abattement 30 %), Réel (déduction charges réelles), SCI IS (imposition société).">?</button>
-                                            <button type="button" class="field-regime-info" id="btn-regime-modal" title="Détails des régimes fiscaux">ⓘ</button></span>
+                                            <button type="button" class="field-regime-info" id="btn-regime-modal" title="Détails des régimes fiscaux" aria-label="Détails des régimes fiscaux">ⓘ</button></span>
                                         <select id="regime" name="regime" class="variables-input">
                                             <option value="micro-foncier">Micro-foncier</option>
                                             <option value="reel">Foncier réel</option>
@@ -632,6 +625,7 @@
 
             <section id="collection-panel" class="workspace-panel" aria-label="Portefeuille">
 
+    <div class="owned-regime-slider-label" data-tooltip="Régime fiscal appliqué à tous les calculs du portefeuille (dashboard, alertes, comptes de résultat). Le bloc « Comparaison des régimes » plus bas, lui, affiche les 3 régimes côte à côte pour le bien sélectionné.">Régime fiscal du portefeuille</div>
     <div id="owned-regime-slider-anchor"></div>
     <!-- Vue liste (défaut) -->
     <div id="owned-list-view">
@@ -649,6 +643,15 @@
         </div>
         <div id="owned-dashboard-wrap"></div>
         <div id="owned-kpi-banner" class="owned-kpi-banner"></div>
+        <!-- Carte des biens détenus (géocodés depuis leur adresse) -->
+        <section id="owned-map-section" class="owned-map-section" hidden>
+            <div class="owned-section-title">Carte du portefeuille</div>
+            <div class="owned-map-shell">
+                <div id="owned-map" class="owned-map-canvas"></div>
+                <div id="owned-map-empty" class="owned-map-empty" hidden></div>
+            </div>
+            <div id="owned-map-unloc" class="owned-map-unloc"></div>
+        </section>
         <div id="owned-portfolio-charts" class="owned-charts-row owned-portfolio-charts" hidden></div>
         <div id="owned-list-table" class="owned-list-table"></div>
         <div id="owned-portfolio-cf-consolidated"></div>
@@ -1212,8 +1215,15 @@
                         </label>
 
                         <label class="profile-field profile-field--wide" for="profile-income">
-                            <span class="status-label">Revenus annuels du foyer</span>
-                            <input id="profile-income" name="profile-income" type="number" class="profile-input" min="0" step="1000" inputmode="numeric">
+                            <span class="status-label" data-tooltip="Revenus salariaux du foyer, hors revenus locatifs (ceux-ci varient selon les loyers et charges de chaque bien et sont calculés séparément).">Revenus salariaux du foyer</span>
+                            <div class="profile-income-row">
+                                <input id="profile-income" name="profile-income" type="number" class="profile-input" min="0" step="100" inputmode="numeric" placeholder="ex : 3 200">
+                                <div class="mode-toggle mode-toggle--sm" id="profile-income-unit-toggle" role="group" aria-label="Unité des revenus">
+                                    <button type="button" class="mode-toggle__btn" id="profile-income-unit-mensuel" data-unit="mensuel" aria-pressed="true">/mois</button>
+                                    <button type="button" class="mode-toggle__btn" id="profile-income-unit-annuel" data-unit="annuel" aria-pressed="false">/an</button>
+                                </div>
+                            </div>
+                            <span class="profile-field__hint" id="profile-income-hint"></span>
                         </label>
 
                         <label class="profile-field" for="profile-adults">
@@ -1290,11 +1300,6 @@
 
     <script type="module" src="main.js"></script>
 
-<div id="asset-detail-overlay" class="detail-overlay" aria-hidden="true"></div>
-<aside id="asset-detail-drawer" class="detail-drawer" role="complementary" aria-label="Détail portefeuille">
-    <div id="asset-detail-content" class="detail-drawer__content"></div>
-</aside>
-
 <!-- Drawer détail bien -->
 <div id="detail-overlay" class="detail-overlay" aria-hidden="true"></div>
 <aside id="detail-drawer" class="detail-drawer" role="complementary" aria-label="Détail du bien">
@@ -1346,42 +1351,6 @@
         </div>
     </div>
 </div>
-    <!-- Drawer échéancier crédit -->
-    <div id="credit-drawer-overlay" class="drawer-overlay" style="display:none" aria-hidden="true"></div>
-    <aside id="credit-drawer" class="drawer" style="display:none" role="dialog" aria-modal="true" aria-labelledby="credit-drawer-title">
-        <div class="drawer-inner">
-            <div class="drawer-head">
-                <h3 id="credit-drawer-title" class="drawer-title">Échéancier crédit</h3>
-                <button type="button" id="credit-drawer-close" class="drawer-close" aria-label="Fermer">✕</button>
-            </div>
-            <div class="drawer-body">
-                <p id="credit-drawer-asset-name" class="credit-drawer-asset-name"></p>
-                <form id="credit-drawer-form" class="credit-drawer-form" novalidate>
-                    <input type="hidden" id="credit-drawer-asset-id">
-                    <div class="form-field">
-                        <label class="form-label" for="credit-date-debut">Date de début du crédit</label>
-                        <input type="month" id="credit-date-debut" class="variables-input">
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="credit-date-fin">Date de fin du crédit</label>
-                        <input type="month" id="credit-date-fin" class="variables-input">
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="credit-mensualite">Mensualité réelle (€ / mois)</label>
-                        <input type="number" id="credit-mensualite" class="variables-input" min="0" step="10" placeholder="0">
-                    </div>
-                    <div class="form-field">
-                        <label class="form-label" for="credit-date-revente">Revente envisagée <span class="form-label-optional">(optionnel)</span></label>
-                        <input type="month" id="credit-date-revente" class="variables-input">
-                    </div>
-                    <div class="drawer-actions">
-                        <button type="button" id="credit-drawer-cancel" class="btn-secondary">Annuler</button>
-                        <button type="submit" id="credit-drawer-save" class="btn-primary">Enregistrer</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </aside>
     <!-- Drawer crédits hors immobilier -->
     <div id="autre-credit-drawer-overlay" class="drawer-overlay" style="display:none" aria-hidden="true"></div>
     <aside id="autre-credit-drawer" class="drawer" style="display:none" role="dialog" aria-modal="true" aria-labelledby="autre-credit-drawer-title">
