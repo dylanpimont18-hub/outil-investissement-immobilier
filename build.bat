@@ -8,10 +8,8 @@ echo.
 
 cd /d "%~dp0"
 
-set /p VERSION=<VERSION
-
 :: Verification (tests) - abandon du build si un test echoue
-echo [1/5] Verification (tests)...
+echo [1/6] Verification (tests)...
 set CALLED_FROM_BUILD=1
 call ".\verify.bat"
 if errorlevel 1 (
@@ -20,8 +18,22 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:: Bump automatique du patch (X.Y.Z -> X.Y.Z+1) maintenant que les tests passent.
+:: Pour un bump minor/major, editer VERSION a la main avant de relancer build.bat :
+:: l'auto-bump patch repart ensuite de la nouvelle valeur.
+echo.
+echo [2/6] Incrementation de version...
+python -c "import pathlib; p = pathlib.Path('VERSION'); parts = p.read_text(encoding='utf-8').strip().split('.'); parts[2] = str(int(parts[2]) + 1); p.write_text('.'.join(parts) + chr(10), encoding='utf-8')"
+if errorlevel 1 (
+  echo ERREUR : le bump de version a echoue.
+  pause
+  exit /b 1
+)
+set /p VERSION=<VERSION
+echo   Nouvelle version : %VERSION%
+
 :: Convertit Logo_site.png en .ico pour l'exe
-echo [2/5] Creation de l'icone...
+echo [3/6] Creation de l'icone...
 python -c "from PIL import Image; img = Image.open('Logo_site.png').convert('RGBA'); img.save('spark.ico')"
 if errorlevel 1 (
   echo ERREUR : PIL manquant. Lance : pip install pillow
@@ -30,7 +42,7 @@ if errorlevel 1 (
 )
 
 :: Compilation PyInstaller
-echo [3/5] Compilation avec PyInstaller (version %VERSION%)...
+echo [4/6] Compilation avec PyInstaller (version %VERSION%)...
 python -m PyInstaller spark.spec --clean --noconfirm --distpath .
 if errorlevel 1 (
   echo ERREUR : PyInstaller a echoue.
@@ -46,7 +58,7 @@ if not exist "%EXE_PATH%" (
 )
 
 :: Copie des fichiers statiques dans Spark\
-echo [4/5] Copie des fichiers statiques...
+echo [5/6] Copie des fichiers statiques...
 set DEST=Spark
 copy /Y VERSION         "%DEST%\" >nul
 copy /Y index.html      "%DEST%\" >nul
@@ -82,7 +94,7 @@ if exist vendor\fonts (
 
 :: Raccourci bureau (PowerShell)
 echo.
-echo [5/5] Creation du raccourci bureau + archive versionnee...
+echo [6/6] Creation du raccourci bureau + archive versionnee...
 powershell -NoProfile -Command ^
   "$s=(New-Object -COM WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Spark Investissement.lnk');$s.TargetPath='%CD%\%EXE_PATH%';$s.WorkingDirectory='%CD%\Spark';$s.IconLocation='%CD%\%EXE_PATH%';$s.Save()"
 
