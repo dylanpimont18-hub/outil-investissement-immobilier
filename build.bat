@@ -62,11 +62,10 @@ echo [5/6] Copie des fichiers statiques...
 set DEST=Spark
 copy /Y VERSION         "%DEST%\" >nul
 copy /Y index.html      "%DEST%\" >nul
-copy /Y main.js         "%DEST%\" >nul
-copy /Y calculs.js      "%DEST%\" >nul
-copy /Y pdf.js          "%DEST%\" >nul
-copy /Y ui.js           "%DEST%\" >nul
-copy /Y scanner.js      "%DEST%\" >nul
+:: Tous les modules JS de la racine (main, calculs, owned-portfolio, utils, pdf, ui, scanner).
+:: Copie par joker : une liste figee avait ete oubliee lors de l'extraction de
+:: owned-portfolio.js / utils.js, ce qui produisait un exe sans le module Portefeuille.
+copy /Y *.js            "%DEST%\" >nul
 copy /Y styles.css      "%DEST%\" >nul
 copy /Y Logo_site.png   "%DEST%\" >nul
 copy /Y server.py       "%DEST%\" >nul
