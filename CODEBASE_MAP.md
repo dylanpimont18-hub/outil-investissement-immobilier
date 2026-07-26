@@ -6,6 +6,7 @@
 
 ## app.py
 Entrée desktop : lance Flask en thread (`threaded=True`) + fenêtre PyWebView + icône barre système.
+- `__version__` — lu depuis le fichier `VERSION` à la racine (source de vérité unique, aussi lue par `server.py`/`spark.spec`/`build.bat`), `'dev'` si absent.
 Pas de fonctions exportées — exécuté directement par `python app.py` ou PyInstaller.
 
 ---
@@ -267,3 +268,28 @@ Singleton Playwright + stealth partagé par tous les scrapers. Lance Chromium he
 ## scraper/scrapers/leboncoin.py
 Scraper LeBonCoin via parsing `__NEXT_DATA__` avec Playwright+stealth (remplace curl_cffi). Délais aléatoires 2–5s initial + 6–10s entre pages.
 - `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(loc_param, page)`, `fetch_description(url)`
+
+---
+
+## VERSION
+Fichier texte à la racine, source de vérité unique du numéro de version (`X.Y.Z`). Lu indépendamment par `app.py` (`__version__`), `server.py` (`/api/version`), `spark.spec` (nom de l'exe) et `build.bat` (raccourci + résumé) — pas d'import possible entre eux vu l'ordre de chargement des modules.
+
+---
+
+## CHANGELOG.md
+Journal des versions (format Keep a Changelog) — à mettre à jour à chaque release.
+
+---
+
+## verify.bat
+Vérification locale : `pytest tests/` puis `tests/test_frais_fiscalite.mjs` et `tests/test_regimes_fiscaux.mjs`, s'arrête net (exit non-zero) au premier échec. Appelé par `build.bat` en première étape (variable `CALLED_FROM_BUILD` pour ne pas `pause` en mode non-interactif).
+
+---
+
+## build.bat
+Build de production : appelle `verify.bat` (abandonne si échec), compile via `spark.spec` (exe nommé `Spark-<version>.exe` d'après `VERSION`), copie les fichiers statiques dans `Spark\`, crée le raccourci bureau et une archive `Spark-<version>.zip`.
+
+---
+
+## spark.spec
+Config PyInstaller. Lit `VERSION` à la racine pour nommer l'exe `Spark-<version>.exe` ; le dossier `COLLECT` reste nommé `Spark` (stable d'une version à l'autre).
