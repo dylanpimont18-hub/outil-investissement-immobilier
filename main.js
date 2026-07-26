@@ -2929,39 +2929,11 @@ function buildAnalysisMetrics(analysisModel) {
             barPct: Math.min(100, (metrics.dscr / 1.5) * 100)
         },
         {
-            label: 'Offre plafond',
-            value: formatPlainCurrency(acquisitionDecision.maxOfferPrice),
-            rawValue: acquisitionDecision.maxOfferPrice,
-            cssClass: acquisitionDecision.currentPrice <= acquisitionDecision.maxOfferPrice + 500 ? 'is-positive' : 'is-watch',
-            barPct: Math.min(100, Math.max(0, (acquisitionDecision.maxOfferPrice / (acquisitionDecision.currentPrice || 1)) * 100))
-        },
-        {
-            label: 'Score décision',
-            value: `${acquisitionDecision.score}/100`,
-            rawValue: acquisitionDecision.score,
-            cssClass: getDecisionClass(acquisitionDecision.tone),
-            barPct: acquisitionDecision.score
-        },
-        {
             label: 'Fiabilité',
             value: `${confidenceModel.score}/100`,
             rawValue: confidenceModel.score,
             cssClass: getDecisionClass(confidenceModel.tone),
             barPct: confidenceModel.score
-        },
-        {
-            label: 'Seuil favorable',
-            value: formatPlainCurrency(acquisitionDecision.solidOfferPrice),
-            rawValue: acquisitionDecision.solidOfferPrice,
-            cssClass: acquisitionDecision.currentPrice <= acquisitionDecision.solidOfferPrice + 500 ? 'is-positive' : 'is-neutral',
-            barPct: Math.min(100, Math.max(0, (acquisitionDecision.solidOfferPrice / (acquisitionDecision.currentPrice || 1)) * 100))
-        },
-        {
-            label: 'Résistance',
-            value: scenarioModel.label,
-            rawValue: 0,
-            cssClass: getDecisionClass(scenarioModel.tone),
-            barPct: 50
         }
     ];
 
@@ -2983,48 +2955,17 @@ function buildAnalysisStickySummary(analysisModel) {
         nodes.analysisStickySummary.innerHTML = buildNeutralAnalysisPlaceholder();
         return;
     }
-    const { acquisitionDecision, confidenceModel, scenarioModel } = analysisModel;
-    const negotiationGap = Math.max(0, acquisitionDecision.negotiationToTenable || 0);
+    const { acquisitionDecision } = analysisModel;
 
     nodes.analysisStickySummary.innerHTML = `
         <div class="analysis-sticky-card analysis-sticky-card--${acquisitionDecision.tone}">
-            <div class="analysis-sticky-copy">
-                <div class="analysis-sticky-overline">
-                    <span class="status-label">Tableau de bord décisionnel</span>
-                    <div class="analysis-sticky-pill-row">
-                        <strong class="status-pill status-pill--${confidenceModel.tone}">Fiabilité ${confidenceModel.label}</strong>
-                        <strong class="status-pill status-pill--${scenarioModel.tone}">Stress ${scenarioModel.label}</strong>
-                    </div>
-                </div>
-                <div class="analysis-sticky-head">
-                    <div class="analysis-sticky-main">
-                        <strong class="decision-badge decision-badge--${acquisitionDecision.tone}">${acquisitionDecision.label}</strong>
-                        <p class="analysis-sticky-note">${escapeHtml(acquisitionDecision.summary)}</p>
-                    </div>
-                    <div class="analysis-sticky-action">
-                        <span>Action</span>
-                        <strong>${escapeHtml(acquisitionDecision.action)}</strong>
-                    </div>
-                </div>
-            </div>
-            <div class="analysis-sticky-kpis">
-                <article class="analysis-sticky-kpi">
-                    <span>Score</span>
-                    <strong>${acquisitionDecision.score}/100</strong>
-                </article>
-                <article class="analysis-sticky-kpi">
-                    <span>Offre cible</span>
-                    <strong>${formatPlainCurrency(acquisitionDecision.maxOfferPrice)}</strong>
-                </article>
-                <article class="analysis-sticky-kpi">
-                    <span>Prix affiché</span>
-                    <strong>${formatPlainCurrency(acquisitionDecision.currentPrice)}</strong>
-                </article>
-                <article class="analysis-sticky-kpi">
-                    <span>Baisse à viser</span>
-                    <strong>${negotiationGap > 0 ? formatPlainCurrency(negotiationGap) : 'Aucune'}</strong>
-                </article>
-            </div>
+            <strong class="decision-badge decision-badge--${acquisitionDecision.tone}">${acquisitionDecision.label}</strong>
+            <span class="analysis-sticky-score">${acquisitionDecision.score}<small>/100</small></span>
+            <span class="analysis-sticky-divider"></span>
+            <span class="analysis-sticky-action-inline">
+                <span>Action</span>
+                <strong>${escapeHtml(acquisitionDecision.action)}</strong>
+            </span>
         </div>
     `;
 }
@@ -3243,7 +3184,6 @@ function buildAnalysisSummary(analysisModel, tmi, parts, composition) {
     nodes.analysisSummary.innerHTML = `
         <div class="decision-card">
             <div class="decision-head">
-                <span class="status-label">Décision d'exploitation</span>
                 <strong class="decision-badge decision-badge--${decision.tone}">${decision.label}</strong>
             </div>
             <p class="analysis-verdict">${decision.summary}</p>
