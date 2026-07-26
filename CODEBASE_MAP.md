@@ -177,6 +177,7 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 - Variables root : `--bg`, `--surface`, `--accent-gold`, `--success`, `--danger`, `--warning`, `--primary-rgb`
 - Thèmes : `html[data-theme='dark']` / `html[data-theme='light']`
 - Composants : `.workspace`, `.panel-head`, `.variables-form`, `.verdict-*`, `.score-*`
+- Piège `position: sticky` cassé : tout ancêtre avec `overflow` ≠ `visible` (même `hidden` sans scroll réel) transforme cet ancêtre en conteneur de scroll et casse le sticky des descendants — utiliser `overflow: clip` à la place (même rendu visuel, pas l'effet de bord). Déjà rencontré sur `body` (sidebar, commit `9ce4b59`) et sur `.workspace-panel` (`.analysis-sticky-summary`, `.owned-tabs`).
 - Scanner workspace : `.scanner-workspace-hero`, `.scanner-command-panel`, `.scanner-command-card`, `.scanner-rayon-group`, `.scanner-options-dropdown`
 - Scanner table : `.scanner-dpe-badge--a/b/c/d/e/f/g`, `.scanner-price-drop`, `.scanner-dist-badge--near/mid/far`, `.scanner-freshness`, `.scanner-score-decision`
 - Scanner stats : `.workspace-hero-mini-card.scanner-stat--gold/pos/warn`, `.scanner-stat--insight`
