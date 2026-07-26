@@ -292,10 +292,10 @@ def _query_results_data(
                 CASE WHEN a.id IS NULL THEN 0 ELSE 1 END AS ia_enrichi,
                 (SELECT hp.prix_ancien - b.prix
                    FROM historique_prix hp WHERE hp.bien_id = b.id AND hp.prix_ancien > b.prix
-                   ORDER BY hp.prix_ancien - b.prix DESC LIMIT 1) AS baisse,
+                   ORDER BY hp.prix_ancien DESC LIMIT 1) AS baisse,
                 (SELECT hp.date_changement
                    FROM historique_prix hp WHERE hp.bien_id = b.id AND hp.prix_ancien > b.prix
-                   ORDER BY hp.prix_ancien - b.prix DESC LIMIT 1) AS date_baisse
+                   ORDER BY hp.prix_ancien DESC LIMIT 1) AS date_baisse
             FROM biens b
             LEFT JOIN annonces a ON a.bien_id = b.id
         """

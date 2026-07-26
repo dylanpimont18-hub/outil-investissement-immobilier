@@ -23,6 +23,11 @@ sys.modules['config'] = _config
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scraper'))
 import calculs as C  # noqa: E402
 
+# `calculs.py` copied the values it needs via `from config import (...)` above —
+# remove the stub so it doesn't leak into other test modules collected later
+# in the same pytest process (it lacks ANTHROPIC_API_KEY, which scraper/ia.py needs).
+del sys.modules['config']
+
 
 class TestMensualiteCredit(unittest.TestCase):
     def test_credit_only_matches_js_formula(self):
