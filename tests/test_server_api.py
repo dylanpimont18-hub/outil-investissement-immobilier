@@ -126,6 +126,16 @@ def test_api_results_rejects_offset_without_limit():
     assert resp.get_json()["error"] == "invalid_offset_without_limit"
 
 
+def test_api_version_reads_version_file():
+    client = server.app.test_client()
+
+    resp = client.get("/api/version")
+
+    assert resp.status_code == 200
+    expected = (Path(server.STATIC_DIR) / "VERSION").read_text(encoding="utf-8").strip()
+    assert resp.get_json() == {"version": expected}
+
+
 def test_read_results_uses_short_cache(monkeypatch):
     calls = []
     server._invalidate_results_cache()

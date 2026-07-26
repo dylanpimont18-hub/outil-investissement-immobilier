@@ -591,6 +591,15 @@ def index():
     return send_from_directory(STATIC_DIR, "index.html")
 
 
+@app.route("/api/version")
+def api_version():
+    try:
+        version = (Path(STATIC_DIR) / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = "dev"
+    return jsonify({"version": version})
+
+
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)

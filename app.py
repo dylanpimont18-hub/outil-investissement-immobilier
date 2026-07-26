@@ -27,6 +27,13 @@ else:
 
 os.chdir(BASE_DIR)
 
+# ── Version (source de vérité : fichier VERSION, lu aussi par server.py / spark.spec / build.bat) ──
+try:
+    with open(os.path.join(BASE_DIR, 'VERSION'), encoding='utf-8') as _f:
+        __version__ = _f.read().strip()
+except OSError:
+    __version__ = 'dev'
+
 # ── Import server et patch des chemins ───────────────────────────────────────
 # On patche les variables de module AVANT que Flask utilise les routes,
 # car Python résout les noms globaux à l'appel des fonctions, pas à leur définition.
