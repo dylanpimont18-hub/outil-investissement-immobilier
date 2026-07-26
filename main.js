@@ -517,6 +517,7 @@ const nodes = {
     themeToggle: document.getElementById('theme-toggle'),
     screenToggle: document.getElementById('screen-toggle'),
     profileTrigger: document.getElementById('profile-trigger'),
+    topbarVersion: document.getElementById('topbar-version'),
     topbarStudyName: document.getElementById('topbar-study-name'),
     topbarStudyMeta: document.getElementById('topbar-study-meta'),
     topbarProfileLabel: document.getElementById('topbar-profile-label'),
@@ -7122,6 +7123,15 @@ initAccordion();
 initTutoBar();
 initGlossaire();
 initSliders();
+
+fetch('/api/version')
+    .then((res) => res.json())
+    .then((data) => {
+        if (nodes.topbarVersion && data && data.version) {
+            nodes.topbarVersion.textContent = `v${data.version}`;
+        }
+    })
+    .catch(() => {});
 
 // Modal régimes fiscaux
 const btnRegimeModal = document.getElementById('btn-regime-modal');
