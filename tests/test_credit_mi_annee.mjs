@@ -10,7 +10,10 @@ import {
 // la première (et potentiellement la dernière) année d'amortissement devient alors une tranche
 // partielle de moins de 12 mois, au lieu d'être comptée comme une année pleine.
 
-const tmi = 30;
+const tmi = 30; // pour les appels à computeOwnedAssetCF (taux courant, TMI figé inchangé)
+// pour les fonctions qui reconstruisent une année fiscale précise (résolvent le TMI par année) :
+// income 60000€/1 part, sans historique, résout aussi à TMI=30% quelle que soit l'année.
+const profileData = { income: 60000, adults: 1, children: 0 };
 
 function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     return {
@@ -80,8 +83,8 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     const assetJanvier = makeAsset({ dateAchat: '2024-01', credit });
     const assetJuin = makeAsset({ dateAchat: '2024-06', credit });
 
-    const { years: yearsJanvier } = computeOwnedAssetTimeline(assetJanvier, tmi, 'micro-foncier');
-    const { years: yearsJuin } = computeOwnedAssetTimeline(assetJuin, tmi, 'micro-foncier');
+    const { years: yearsJanvier } = computeOwnedAssetTimeline(assetJanvier, profileData, 'micro-foncier');
+    const { years: yearsJuin } = computeOwnedAssetTimeline(assetJuin, profileData, 'micro-foncier');
 
     const cf2024Janvier = yearsJanvier.find(y => y.year === 2024).cfAnnuel;
     const cf2024Juin = yearsJuin.find(y => y.year === 2024).cfAnnuel;
@@ -101,7 +104,7 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
 {
     const credit = { montant: 100000, duree: 15, taux: 3.2, assurance: 0.3, assuranceMode: 'crd' };
     const asset = makeAsset({ dateAchat: '2023-04', credit });
-    const bd = computeCFBreakdown(asset, tmi, 'micro-foncier', 2); // targetYear=2 => année civile 2024, pleine
+    const bd = computeCFBreakdown(asset, profileData, 'micro-foncier', 2); // targetYear=2 => année civile 2024, pleine
     assert.ok(bd.creditDetail, 'creditDetail doit être exposé');
     const sommeDetail = bd.creditDetail.interets + bd.creditDetail.capital + bd.creditDetail.assurance;
     assert.ok(Math.abs(sommeDetail - bd.mensualiteCredit) <= 1, `interets+capital+assurance (${sommeDetail}) doit égaler mensualiteCredit (${bd.mensualiteCredit}) à l'arrondi près`);
@@ -137,7 +140,7 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
 {
     const credit = { montant: 120000, duree: 10, taux: 3, assurance: 0 };
     const assetJuin = makeAsset({ loyer: 900, dateAchat: '2024-06', credit });
-    const { years } = computeOwnedAssetTimeline(assetJuin, tmi, 'micro-foncier');
+    const { years } = computeOwnedAssetTimeline(assetJuin, profileData, 'micro-foncier');
     const row2024 = years.find(y => y.year === 2024);
 
     // Acheté en juin : seuls juin→décembre (7 mois) doivent compter, soit 900*7 = 6300 €,
@@ -153,7 +156,7 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
 {
     const credit = { montant: 120000, duree: 10, taux: 3, assurance: 0 };
     const assetJuin = makeAsset({ loyer: 900, dateAchat: '2024-06', credit });
-    const bd = computeCFBreakdown(assetJuin, tmi, 'micro-foncier', 1); // targetYear=1 => année d'achat, 2024
+    const bd = computeCFBreakdown(assetJuin, profileData, 'micro-foncier', 1); // targetYear=1 => année d'achat, 2024
     const loyerAttendu7Mois = 900 * 7;
     assert.ok(Math.abs(bd.loyersEncaisses - loyerAttendu7Mois) < 1, `loyersEncaisses (détail exploitation) doit être proratisé à 7 mois (${loyerAttendu7Mois}€), trouvé ${bd.loyersEncaisses}€`);
     console.log('Test 8 OK — computeCFBreakdown proratise aussi le loyer de l\'année d\'achat =', bd.loyersEncaisses, '€');
@@ -165,7 +168,7 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
 {
     const credit = { montant: 120000, duree: 10, taux: 3, assurance: 0 };
     const assetJuin = makeAsset({ loyer: 900, dateAchat: '2024-06', credit });
-    const cr = computeCompteResultat(assetJuin, 2024, tmi, 'micro-foncier');
+    const cr = computeCompteResultat(assetJuin, 2024, profileData, 'micro-foncier');
     const loyerAttendu7Mois = 900 * 7;
     assert.ok(Math.abs(cr.loyersTheoriques - loyerAttendu7Mois) < 1, `loyersTheoriques (compte de resultat) doit être proratisé à 7 mois (${loyerAttendu7Mois}€), trouvé ${cr.loyersTheoriques}€`);
     console.log('Test 9 OK — computeCompteResultat proratise aussi le loyer de l\'année d\'achat =', cr.loyersTheoriques, '€ (au lieu de', 900 * 12, '€ pour une année pleine)');
@@ -234,16 +237,16 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
         }
     };
 
-    const cr2024 = computeCompteResultat(assetJuin, 2024, tmi, 'reel');
+    const cr2024 = computeCompteResultat(assetJuin, 2024, profileData, 'reel');
     assert.ok(Math.abs(cr2024.taxeFonciere - 700) < 1, `taxe foncière 2024 (achat juin, 7 mois) doit être proratisée à 700€ (1200×7/12), trouvé ${cr2024.taxeFonciere}€`);
     assert.ok(Math.abs(cr2024.chargesCopro - 350) < 1, `charges copro 2024 doivent être proratisées à 350€ (50×7), trouvé ${cr2024.chargesCopro}€`);
     assert.ok(Math.abs(cr2024.assurancePNO - 140) < 1, `assurance PNO 2024 doit être proratisée à 140€ (240×7/12), trouvé ${cr2024.assurancePNO}€`);
 
-    const cr2025 = computeCompteResultat(assetJuin, 2025, tmi, 'reel');
+    const cr2025 = computeCompteResultat(assetJuin, 2025, profileData, 'reel');
     assert.equal(cr2025.taxeFonciere, 1200, `taxe foncière 2025 (année pleine) doit rester 1200€, trouvé ${cr2025.taxeFonciere}€`);
     assert.equal(cr2025.chargesCopro, 600, `charges copro 2025 (année pleine) doivent rester 600€ (50×12), trouvé ${cr2025.chargesCopro}€`);
 
-    const { years } = computeOwnedAssetTimeline(assetJuin, tmi, 'reel');
+    const { years } = computeOwnedAssetTimeline(assetJuin, profileData, 'reel');
     const row2024 = years.find(y => y.year === 2024);
     // Même proratisation appliquée à computeOwnedAssetTimeline (pas seulement computeCompteResultat) :
     // loyer 7 mois (6300€) − charges proratisées (700+350+140=1190€), taxées à tmi(30%)+CSG(17,2%).

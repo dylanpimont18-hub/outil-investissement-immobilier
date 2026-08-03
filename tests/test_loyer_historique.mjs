@@ -5,10 +5,13 @@ import { resolveLoyerVacance, computeCFBreakdown, computeOwnedAssetTimeline } fr
 // postAchat.loyerHistorique remplace le suivi mensuel des loyers encaissés.
 // Le loyer applicable à une date est la dernière entrée dont le mois est <= à cette date.
 
-function makeAsset({ loyerInitial = 0, loyerHistorique = null, lots = null, anneeAchat = 2024 } = {}) {
+// Profil sans historique de revenu (income fallback) : TMI stable, ces tests portent sur le loyer.
+const profileData = { income: 60000, adults: 1, children: 0 };
+
+function makeAsset({ loyerInitial = 0, loyerHistorique = null, lots = null, dateAchat = '2024-01' } = {}) {
     const asset = {
         id: 'test-loyer',
-        anneeAchat,
+        dateAchat,
         acquisition: {
             prix: 100000, fraisAgence: 0, fraisNotaire: 0, loyerInitial,
             credit: { montant: 0, duree: 0, taux: 0, assurance: 0 }
@@ -91,13 +94,13 @@ function makeAsset({ loyerInitial = 0, loyerHistorique = null, lots = null, anne
 // --- Test 6 : la projection annuelle reflète bien les évolutions de loyer ---
 {
     const asset = makeAsset({
-        anneeAchat: 2024,
+        dateAchat: '2024-01',
         loyerHistorique: [
             { mois: '2024-01', montant: 800 },
             { mois: '2026-01', montant: 1000 },
         ]
     });
-    const { years } = computeOwnedAssetTimeline(asset, 30, 'micro-foncier');
+    const { years } = computeOwnedAssetTimeline(asset, profileData, 'micro-foncier');
     const y2024 = years.find(y => y.year === 2024);
     const y2026 = years.find(y => y.year === 2026);
     assert.equal(y2024.recettesAnnee, 800 * 12, `2024 doit encaisser 12 × 800 €, trouvé ${y2024.recettesAnnee}`);
@@ -108,14 +111,14 @@ function makeAsset({ loyerInitial = 0, loyerHistorique = null, lots = null, anne
 // --- Test 7 : computeCFBreakdown résout le loyer sur l'année cible demandée ---
 {
     const asset = makeAsset({
-        anneeAchat: 2024,
+        dateAchat: '2024-01',
         loyerHistorique: [
             { mois: '2024-01', montant: 800 },
             { mois: '2026-01', montant: 1000 },
         ]
     });
-    const bdY1 = computeCFBreakdown(asset, 30, 'micro-foncier', 1); // 2024
-    const bdY3 = computeCFBreakdown(asset, 30, 'micro-foncier', 3); // 2026
+    const bdY1 = computeCFBreakdown(asset, profileData, 'micro-foncier', 1); // 2024
+    const bdY3 = computeCFBreakdown(asset, profileData, 'micro-foncier', 3); // 2026
     assert.equal(bdY1.loyerBrut, 800 * 12, `an 1 (2024) : loyer brut attendu ${800 * 12}, trouvé ${bdY1.loyerBrut}`);
     assert.equal(bdY3.loyerBrut, 1000 * 12, `an 3 (2026) : loyer brut attendu ${1000 * 12}, trouvé ${bdY3.loyerBrut}`);
     console.log('Test 7 OK — breakdown : an 1 =', bdY1.loyerBrut, '€/an, an 3 =', bdY3.loyerBrut, '€/an');

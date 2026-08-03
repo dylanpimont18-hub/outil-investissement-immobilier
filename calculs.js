@@ -1594,6 +1594,39 @@ export function resolveLoyerVacance(asset, moisCible = null) {
     return { loyer: asset.acquisition?.loyerInitial || 0, vacancePct };
 }
 
+// Résout le revenu du foyer applicable à une année civile donnée — même logique que
+// resolveLoyerFromHistorique (dernière entrée dont `annee` est <= à l'année cible s'applique ;
+// avant la première prise d'effet, on retient quand même la première valeur connue). Un revenu qui
+// évolue d'une année sur l'autre ne doit pas faire recalculer le TMI (et donc l'impôt) d'une année
+// fiscale déjà passée avec le revenu d'aujourd'hui. `profileData.income` reste le fallback legacy
+// tant qu'aucune entrée de `revenuHistorique` n'a été saisie — même patron que `loyerInitial` à
+// côté de `loyerHistorique`.
+export function resolveRevenuFoyer(profileData, annee) {
+    const historique = profileData?.revenuHistorique;
+    if (!historique?.length) return profileData?.income || 0;
+    const sorted = [...historique].sort((a, b) => a.annee - b.annee);
+    let applicable = null;
+    for (const entry of sorted) {
+        if (!entry || typeof entry.annee !== 'number') continue;
+        if (entry.annee <= annee) applicable = entry;
+        else break;
+    }
+    return (applicable ?? sorted[0])?.revenu ?? (profileData?.income || 0);
+}
+
+// TMI résolu pour une année civile précise à partir du profil complet — combine
+// resolveRevenuFoyer + calculateTMI, à utiliser par toute fonction qui reconstruit une année
+// fiscale ou une timeline multi-année (le TMI doit varier avec le revenu de CETTE année-là, pas
+// rester figé sur le revenu actuel). Les fonctions "taux courant" (computeOwnedAssetCF...) gardent
+// elles un TMI figé, résolu une fois par l'appelant sur l'année courante — sémantique différente,
+// voir docs/superpowers/specs/2026-08-04-revenus-historises-profil.md.
+export function resolveTmiFoyer(profileData, annee) {
+    return calculateTMI(resolveRevenuFoyer(profileData, annee), {
+        adults: profileData?.adults || 2,
+        children: profileData?.children || 0
+    });
+}
+
 export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
@@ -1720,7 +1753,7 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
     };
 }
 
-export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
+export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = null) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
@@ -1846,8 +1879,13 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
             'gestion': gestionPct,
             'regime': regimeOverride || 'micro-foncier',
         };
+        // TMI résolu pour CETTE année précise (revenu du foyer historisé) — pas un TMI figé sur le
+        // revenu actuel : sinon une année déjà passée serait retaxée avec le revenu d'aujourd'hui.
+        // Au-delà de la dernière entrée connue, resolveRevenuFoyer retombe naturellement sur le
+        // dernier revenu connu (comportement de projection identique à avant pour les années futures).
+        const tmiAnnee = resolveTmiFoyer(profileData, y);
         const taxResult = computeAnnualTaxEstimate(
-            prixAcquisition, loyersAnnuels, chargesAnneeTax, inputs, tmi,
+            prixAcquisition, loyersAnnuels, chargesAnneeTax, inputs, tmiAnnee,
             interetsAnnee, assuranceAnnee, yearsElapsed + 1, carryForwardDeficit
         );
         carryForwardDeficit = taxResult.newCarryForward;
@@ -2058,14 +2096,14 @@ export function computeEndettementGlobal(assets, revenusMensuels, creditsHorsImm
 // d'échéance connue dans le modèle de données : elles sont réparties en 1/12 du montant annuel.
 // Les impôts n'ont pas de notion mensuelle (calculés à l'année sur le revenu global) : on prend
 // 1/12 de l'impôt annuel déjà reconstruit par l'appel récursif sans targetMonth.
-export function computeCFBreakdown(asset, tmi, regime, targetYear = 1, targetMonth = null) {
+export function computeCFBreakdown(asset, profileData, regime, targetYear = 1, targetMonth = null) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
     const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
     const targetAbsYear = anneeAchat + targetYear - 1;
 
-    const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+    const { years } = computeOwnedAssetTimeline(asset, profileData, regime);
     const row = years.find(y => y.year === targetAbsYear) || years[years.length - 1];
     if (!row) return null;
 
@@ -2131,7 +2169,7 @@ export function computeCFBreakdown(asset, tmi, regime, targetYear = 1, targetMon
     }
 
     const impots = targetMonth
-        ? (computeCFBreakdown(asset, tmi, regime, targetYear, null)?.impots || 0) / 12
+        ? (computeCFBreakdown(asset, profileData, regime, targetYear, null)?.impots || 0) / 12
         : loyersEncaisses - mensualiteCredit - charges - travauxTotal - row.cfAnnuel;
     const cfNetNet = targetMonth
         ? loyersEncaisses - mensualiteCredit - charges - travauxTotal - impots
@@ -2160,12 +2198,12 @@ export function computeCFBreakdown(asset, tmi, regime, targetYear = 1, targetMon
     };
 }
 
-export function computeRegimeComparison(asset, tmi, targetYears = [1, 3, 5, 10]) {
+export function computeRegimeComparison(asset, profileData, targetYears = [1, 3, 5, 10]) {
     const regimes = ['micro-foncier', 'reel', 'sci-is'];
     const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
     const result = {};
     for (const regime of regimes) {
-        const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+        const { years } = computeOwnedAssetTimeline(asset, profileData, regime);
         result[regime] = {};
         for (const yr of targetYears) {
             const absYear = anneeAchat + yr - 1;
@@ -2220,7 +2258,10 @@ export function computeRevenusLocatifsBruts(assets) {
 // computeTresorerieReelle a été retiré avec le suivi mensuel des loyers encaissés
 // (spec 2026-07-27) : il ne se calculait qu'à partir de postAchat.loyersReels.
 
-export function computeCompteResultat(asset, annee, tmi, regime) {
+export function computeCompteResultat(asset, annee, profileData, regime) {
+    // TMI de l'année déclarée (pas le revenu actuel) : un revenu qui évolue ne doit pas retaxer
+    // une année fiscale déjà passée avec le revenu d'aujourd'hui.
+    const tmi = resolveTmiFoyer(profileData, annee);
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
@@ -2328,9 +2369,9 @@ export function computeCompteResultat(asset, annee, tmi, regime) {
 const PLAFOND_DEFICIT_REVENU_GLOBAL = 10700;
 const FORFAIT_FRAIS_GESTION_PAR_LOCAL = 20;
 
-export function computeDeclaration2044(assets, annee, tmi) {
+export function computeDeclaration2044(assets, annee, profileData) {
     const lignes = assets.map(asset => {
-        const cr = computeCompteResultat(asset, annee, tmi, 'reel');
+        const cr = computeCompteResultat(asset, annee, profileData, 'reel');
         const nbLocaux = (asset.lots && asset.lots.length) ? asset.lots.length : 1;
         const case211 = cr.recettesBrutes;
         const case221 = cr.gestionLocative;
@@ -2392,7 +2433,7 @@ export function computeDeclaration2044(assets, annee, tmi) {
 //   revenu global (le surplus est reporté sur les revenus fonciers des 10 années suivantes, pas pris
 //   en compte ici)
 // - sci-is : taxé à l'IS, hors périmètre de l'IR du foyer — retourné à part (isTotal)
-export function computeRevenuFoncierPortefeuille(assets, annee, tmi, regime) {
+export function computeRevenuFoncierPortefeuille(assets, annee, profileData, regime) {
     if (!assets.length) {
         return { revenuFoncierImposable: 0, lignes: [], isTotal: 0, deficit: null };
     }
@@ -2405,12 +2446,12 @@ export function computeRevenuFoncierPortefeuille(assets, annee, tmi, regime) {
     }
 
     if (regime === 'micro-foncier') {
-        const lignes = assets.map(a => computeCompteResultat(a, annee, tmi, 'micro-foncier'));
+        const lignes = assets.map(a => computeCompteResultat(a, annee, profileData, 'micro-foncier'));
         const revenuFoncierImposable = lignes.reduce((s, l) => s + l.baseImposable, 0);
         return { revenuFoncierImposable: Math.round(revenuFoncierImposable), lignes, isTotal: 0, deficit: null };
     }
 
-    const decl = computeDeclaration2044(assets, annee, tmi);
+    const decl = computeDeclaration2044(assets, annee, profileData);
     const revenuFoncierImposable = decl.case420 >= 0 ? decl.case420 : -(decl.deficit?.imputableRevenuGlobal || 0);
     return { revenuFoncierImposable, lignes: decl.lignes, isTotal: 0, deficit: decl.deficit };
 }
@@ -2426,9 +2467,9 @@ export function computeRevenuFoncierPortefeuille(assets, annee, tmi, regime) {
 // Limite assumée : ne connaît que ce qui est saisi dans l'app depuis l'année d'achat — un déficit
 // réel antérieur à la saisie du bien (ou basé sur des charges non ressaisies rétroactivement)
 // n'est pas repris. Affiché comme avertissement dans l'UI (owned-portfolio.js).
-export function computeDeficitFoncierHistorique(asset, tmi) {
+export function computeDeficitFoncierHistorique(asset, profileData) {
     const currentYear = new Date().getFullYear();
-    const { years } = computeOwnedAssetTimeline(asset, tmi, 'reel');
+    const { years } = computeOwnedAssetTimeline(asset, profileData, 'reel');
     const PLAFOND = PLAFOND_DEFICIT_REVENU_GLOBAL;
     const EXPIRATION_ANS = 10;
 
@@ -2475,10 +2516,14 @@ export function computeDeficitFoncierHistorique(asset, tmi) {
     return { lignes: lignesFormatees.sort((a, b) => b.annee - a.annee), stockTotal: Math.round(stockTotal) };
 }
 
-export function computePortfolioAlerts(assets, tmi, regime, revenusMensuels) {
+export function computePortfolioAlerts(assets, profileData, regime, revenusMensuels) {
     const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
     const alerts = [];
     const now = new Date();
+    // Alertes CF/DSCR/régime optimal : taux courant, donc TMI de l'année en cours (comme
+    // computeOwnedAssetCF). Le déficit foncier historique, lui, reçoit profileData directement
+    // plus bas — il a besoin du TMI de chaque année passée, pas d'une seule valeur figée.
+    const tmi = resolveTmiFoyer(profileData, now.getFullYear());
 
     const revenusBruts = computeRevenusLocatifsBruts(assets);
     if (revenusBruts > 15000 && regime === 'micro-foncier') {
@@ -2546,7 +2591,7 @@ export function computePortfolioAlerts(assets, tmi, regime, revenusMensuels) {
         // renderAccordionPostAchat) qui marque l'entrée "Expiré" dès anciennete >= 10 — l'alerte ne
         // doit donc pas se déclencher à anciennete === 10, sous peine d'annoncer "expire dans 0 an"
         // pour une ligne déjà affichée comme expirée juste en dessous.
-        for (const d of computeDeficitFoncierHistorique(asset, tmi).lignes) {
+        for (const d of computeDeficitFoncierHistorique(asset, profileData).lignes) {
             const anciennete = now.getFullYear() - d.annee;
             if (d.restant > 0 && anciennete >= 8 && anciennete <= 9) {
                 const anneesRestantes = 10 - anciennete;
@@ -2564,7 +2609,7 @@ export function computePortfolioAlerts(assets, tmi, regime, revenusMensuels) {
     return alerts;
 }
 
-export function computeSimulationTravaux(asset, montantTravaux, annee, deductible, tmi, regime) {
+export function computeSimulationTravaux(asset, montantTravaux, annee, deductible, profileData, regime) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
@@ -2597,13 +2642,16 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
         const resultatFoncier = loyersAnnuels - totalChargesAvecTravaux;
         if (resultatFoncier < 0) {
             deficitCree = Math.abs(resultatFoncier);
-            economieFiscale3ans = Math.min(10700, deficitCree) * (tmi / 100);
+            // TMI de l'année simulée (annee), pas l'actuel : le déficit se crée cette année-là.
+            economieFiscale3ans = Math.min(10700, deficitCree) * (resolveTmiFoyer(profileData, annee) / 100);
         }
     }
 
     const sc = (asset.scenarios || []).find(s => s.id === 'realiste') || (asset.scenarios || [])[0];
     const vars = sc?.variables || {};
-    const cfBase = computeOwnedAssetCF(asset, { ...vars, regime }, tmi);
+    // cfBase reste le taux courant (comme computeOwnedAssetCF partout ailleurs) : TMI de
+    // l'année en cours, pas celle de l'année simulée `annee`.
+    const cfBase = computeOwnedAssetCF(asset, { ...vars, regime }, resolveTmiFoyer(profileData, new Date().getFullYear()));
     const impactCFMois = deductible && applicable ? -(montantTravaux / 12) + (economieFiscale3ans / 36) : -(montantTravaux / 12);
     const nouveauCFMois = cfBase.cfNetNet + impactCFMois;
 
