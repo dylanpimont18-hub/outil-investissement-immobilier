@@ -220,4 +220,37 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     console.log('Test 11 OK — assurance du mois courant =', Math.round(rowCourant.assurance), '€, mensualiteTotale computeOwnedAssetCF =', Math.round(r.mensualiteTotale), '€/mois ≈ computeEndettementGlobal =', Math.round(endettement.totalMensualites), '€/mois');
 }
 
+// --- Test 12 : taxe foncière/PNO/charges copro proratisées sur l'année d'achat, comme le loyer
+// (bug signalé par l'utilisateur sur un cas réel — "70 rue du mouton" : la taxe foncière/PNO en
+// année pleine contre un loyer proratisé à quelques mois creusait artificiellement le CF/résultat
+// affiché de l'année d'achat). Sans crédit pour isoler l'effet des seules charges annuelles.
+{
+    const assetJuin = {
+        id: 'test-charges', nom: 'Test charges proratisées', dateAchat: '2024-06',
+        acquisition: { prix: 150000, fraisAgence: 0, fraisNotaire: 0, loyerInitial: 900 },
+        postAchat: {
+            taxeFonciere: 1200, chargesCopro: 50, assurancePNO: 240, gestionLocative: 0,
+            vacance: 0, travaux: [], chargesAnnuelles: [], notes: []
+        }
+    };
+
+    const cr2024 = computeCompteResultat(assetJuin, 2024, tmi, 'reel');
+    assert.ok(Math.abs(cr2024.taxeFonciere - 700) < 1, `taxe foncière 2024 (achat juin, 7 mois) doit être proratisée à 700€ (1200×7/12), trouvé ${cr2024.taxeFonciere}€`);
+    assert.ok(Math.abs(cr2024.chargesCopro - 350) < 1, `charges copro 2024 doivent être proratisées à 350€ (50×7), trouvé ${cr2024.chargesCopro}€`);
+    assert.ok(Math.abs(cr2024.assurancePNO - 140) < 1, `assurance PNO 2024 doit être proratisée à 140€ (240×7/12), trouvé ${cr2024.assurancePNO}€`);
+
+    const cr2025 = computeCompteResultat(assetJuin, 2025, tmi, 'reel');
+    assert.equal(cr2025.taxeFonciere, 1200, `taxe foncière 2025 (année pleine) doit rester 1200€, trouvé ${cr2025.taxeFonciere}€`);
+    assert.equal(cr2025.chargesCopro, 600, `charges copro 2025 (année pleine) doivent rester 600€ (50×12), trouvé ${cr2025.chargesCopro}€`);
+
+    const { years } = computeOwnedAssetTimeline(assetJuin, tmi, 'reel');
+    const row2024 = years.find(y => y.year === 2024);
+    // Même proratisation appliquée à computeOwnedAssetTimeline (pas seulement computeCompteResultat) :
+    // loyer 7 mois (6300€) − charges proratisées (700+350+140=1190€), taxées à tmi(30%)+CSG(17,2%).
+    const cfAnnuelAttendu = 6300 - 1190 - (6300 - 1190) * (0.30 + 0.172);
+    assert.ok(Math.abs(row2024.cfAnnuel - cfAnnuelAttendu) < 1, `cfAnnuel 2024 attendu ${cfAnnuelAttendu.toFixed(2)}€ (charges proratisées), trouvé ${row2024.cfAnnuel}€`);
+
+    console.log('Test 12 OK — taxe foncière/PNO/copro proratisées sur l\'année d\'achat : 2024 (7 mois) =', cr2024.taxeFonciere, '€/', cr2024.chargesCopro, '€/', cr2024.assurancePNO, '€ vs 2025 (année pleine) =', cr2025.taxeFonciere, '€/', cr2025.chargesCopro, '€');
+}
+
 console.log('\nTous les tests crédit mi-année passent.');

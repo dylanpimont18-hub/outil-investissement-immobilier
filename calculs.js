@@ -1794,7 +1794,13 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
         const chargesCopro = chargesEntry ? (chargesEntry.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
         const travauxDeductiblesAnnee = travauxDeductiblesParAnnee[y] || 0;
         const travauxCashAnnee = travauxCashParAnnee[y] || 0;
-        const chargesAnneeBase = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersAnnuels * (gestionPct / 100));
+        // Taxe foncière/PNO (montants annuels) et charges copro (mensuelles) proratisées sur l'année
+        // d'achat comme le loyer et le crédit ci-dessus : sinon un bien acheté en cours d'année se
+        // voit imputer une taxe foncière/PNO en année pleine contre seulement quelques mois de loyer,
+        // creusant artificiellement le CF affiché de l'année d'achat (bug signalé par l'utilisateur,
+        // vérifié sur un cas réel : ramène "70 rue du mouton" de -248€ à +227€ sur 5 mois, cohérent
+        // avec le taux courant de computeOwnedAssetCF, +45€/mois).
+        const chargesAnneeBase = (taxeFonciere * moisPossedeAnnee / 12) + (chargesCopro * moisPossedeAnnee) + (assurancePNO * moisPossedeAnnee / 12) + (loyersAnnuels * (gestionPct / 100));
         // Les travaux déductibles réduisent l'assiette imposable en foncier réel / SCI-IS
         // (ignorés en micro-foncier, où l'abattement forfaitaire 30% remplace toute déduction réelle)
         // — tous les déductibles y compris ceux financés par le crédit, la déduction fiscale ne
@@ -2079,9 +2085,13 @@ export function computeCFBreakdown(asset, tmi, regime, targetYear = 1, targetMon
     const gestionPct = chargesEntry ? (chargesEntry.gestionLocative ?? post.gestionLocative ?? 0) : (post.gestionLocative ?? 0);
     const assurancePNOAnnuelle = chargesEntry ? (chargesEntry.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
     const chargesCoproMensuelle = chargesEntry ? (chargesEntry.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
-    const taxeFonciere = targetMonth ? taxeFonciereAnnuelle / 12 : taxeFonciereAnnuelle;
-    const assurancePNO = targetMonth ? assurancePNOAnnuelle / 12 : assurancePNOAnnuelle;
-    const chargesCoproTotal = targetMonth ? chargesCoproMensuelle : chargesCoproMensuelle * 12;
+    // moisPossedeAnnee vaut déjà 1 pour un mois ciblé (ligne ci-dessus) ou (13-moisAchat)/12 sur
+    // l'année d'achat, une seule formule couvre donc les deux cas — sans ça, taxe foncière/PNO/copro
+    // en année pleine contre un loyer proratisé creusait artificiellement charges/impôts/CF sur
+    // l'année d'achat (même bug que computeOwnedAssetTimeline/computeCompteResultat, corrigé ensemble).
+    const taxeFonciere = taxeFonciereAnnuelle * moisPossedeAnnee / 12;
+    const assurancePNO = assurancePNOAnnuelle * moisPossedeAnnee / 12;
+    const chargesCoproTotal = chargesCoproMensuelle * moisPossedeAnnee;
     const gestion = loyersEncaisses * (gestionPct / 100);
     const charges = taxeFonciere + chargesCoproTotal + assurancePNO + gestion;
 
@@ -2234,10 +2244,16 @@ export function computeCompteResultat(asset, annee, tmi, regime) {
 
     const chargesEntries = (post.chargesAnnuelles || []).filter(e => e.annee <= annee).sort((a, b) => b.annee - a.annee);
     const ce = chargesEntries[0] || null;
-    const taxeFonciere = ce ? (ce.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0);
     const gestionPct = ce ? (ce.gestionLocative ?? post.gestionLocative ?? 0) : (post.gestionLocative ?? 0);
-    const assurancePNO = ce ? (ce.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
-    const chargesCopro = (ce ? (ce.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0)) * 12;
+    // Taxe foncière/PNO (montants annuels) et charges copro (mensuelles) proratisées sur l'année
+    // d'achat comme le loyer ci-dessus (moisPossedeAnnee) : sinon un bien acheté en cours d'année se
+    // voit imputer une taxe foncière/PNO en année pleine contre seulement quelques mois de loyer,
+    // creusant artificiellement le résultat/CF affiché de l'année d'achat (bug signalé par
+    // l'utilisateur sur un cas réel : ramène "70 rue du mouton" de -248€ à +227€ sur 5 mois de
+    // détention, cohérent avec le taux courant de computeOwnedAssetCF).
+    const taxeFonciere = (ce ? (ce.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0)) * moisPossedeAnnee / 12;
+    const assurancePNO = (ce ? (ce.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0)) * moisPossedeAnnee / 12;
+    const chargesCopro = (ce ? (ce.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0)) * moisPossedeAnnee;
     const gestionLocative = recettesBrutes * (gestionPct / 100);
     const travauxAnneeAll = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === annee);
     const travauxDed = travauxAnneeAll.filter(t => t.tag === 'deductible').reduce((s, t) => s + (t.montant || 0), 0);
@@ -2564,9 +2580,11 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
     const yearRow = schedule.find(r => r.annee === annee);
     const interetsAnnee = yearRow?.interets || 0;
 
-    const taxeFonciere = post.taxeFonciere ?? 0;
-    const chargesCopro = (post.chargesCopro ?? 0) * 12;
-    const assurancePNO = post.assurancePNO ?? 0;
+    // Proratisées comme le loyer ci-dessus (moisPossedeAnnee) — même correctif que
+    // computeOwnedAssetTimeline/computeCompteResultat/computeCFBreakdown.
+    const taxeFonciere = (post.taxeFonciere ?? 0) * moisPossedeAnnee / 12;
+    const chargesCopro = (post.chargesCopro ?? 0) * moisPossedeAnnee;
+    const assurancePNO = (post.assurancePNO ?? 0) * moisPossedeAnnee / 12;
     const gestionLocative = loyersAnnuels * ((post.gestionLocative ?? 0) / 100);
     const assuranceAnnee = yearRow?.assurance || 0;
     const chargesBase = taxeFonciere + chargesCopro + assurancePNO + gestionLocative + assuranceAnnee;
