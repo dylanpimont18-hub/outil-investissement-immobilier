@@ -16,17 +16,115 @@ export function getHouseholdTaxParts(adults = 2, enfants = 0) {
     return parts;
 }
 
+// Barème 2026 (revenus 2025), loi de finances 2026 promulguée le 19/02/2026 — seuils
+// revalorisés de +0,9 % par rapport au barème 2025 (revenus 2024).
+const BAREME_IR = [
+    { seuil: 11600, taux: 0 },
+    { seuil: 29579, taux: 11 },
+    { seuil: 84577, taux: 30 },
+    { seuil: 181917, taux: 41 },
+    { seuil: Infinity, taux: 45 },
+];
+
+// Décote 2026, vérifiée BOI-IR-LIQ-20-20-20-20260407 (bofip.impots.gouv.fr) le 2026-07-29.
+const DECOTE_TAUX = 0.4525;
+const DECOTE_CELIBATAIRE = { seuil: 1982, base: 897 };
+const DECOTE_COUPLE = { seuil: 3277, base: 1483 };
+
+// Plafonnement des effets du quotient familial (art. 197 I 2° CGI), vérifié BOI-IR-LIQ-20-20-20-20260407
+// le 2026-07-29 : l'avantage procuré par les demi-parts liées aux enfants est plafonné à 1 807 €
+// par demi-part (donc 3 614 € par part entière, cas du 3e enfant et suivants). Ne couvre que le cas
+// standard (enfants à charge) — pas les plafonds spécifiques (parent isolé case T à 4 262 €, invalidité,
+// veuvage avec personne à charge...), non modélisés dans le profil du foyer de cette app (adults/children
+// seulement).
+const PLAFOND_PAR_DEMI_PART_ENFANT = 1807;
+
 export function calculateTMI(revenus, foyer = 0) {
     const hasObjectShape = typeof foyer === 'object' && foyer !== null;
     const adults = hasObjectShape ? foyer.adults : 2;
     const enfants = hasObjectShape ? foyer.children : foyer;
     const parts = getHouseholdTaxParts(adults, enfants);
     const quotient = Math.max(0, Number(revenus) || 0) / parts;
-    if (quotient <= 11294) return 0;
-    if (quotient <= 28797) return 11;
-    if (quotient <= 82341) return 30;
-    if (quotient <= 177106) return 41;
-    return 45;
+    const bracket = BAREME_IR.find(b => quotient <= b.seuil);
+    return bracket ? bracket.taux : 45;
+}
+
+// Applique le barème progressif tranche par tranche à un quotient (revenu ÷ parts) et remultiplie
+// par le nombre de parts fourni — factorisé pour être appelable deux fois par computeImpotFoyer
+// (une fois avec les parts complètes, une fois avec les parts de base pour le plafonnement).
+function appliquerBaremeIR(revenuGlobal, parts) {
+    const quotient = parts > 0 ? revenuGlobal / parts : 0;
+    const tranches = [];
+    let prevSeuil = 0;
+    let totalParPart = 0;
+    for (const { seuil, taux } of BAREME_IR) {
+        if (quotient <= prevSeuil) break;
+        const trancheHaut = Math.min(quotient, seuil);
+        const montantImposable = Math.max(0, trancheHaut - prevSeuil);
+        const impotTranche = montantImposable * (taux / 100);
+        tranches.push({
+            seuilBas: Math.round(prevSeuil),
+            seuilHaut: seuil === Infinity ? null : Math.round(seuil),
+            taux,
+            montantImposable: Math.round(montantImposable),
+            impot: Math.round(impotTranche),
+        });
+        totalParPart += impotTranche;
+        prevSeuil = seuil;
+    }
+    return { tranches, quotient, irBrut: totalParPart * parts };
+}
+
+// Calcule l'IR au barème progressif tranche par tranche (pas juste la TMI appliquée en taux plat),
+// avec plafonnement du quotient familial et décote — utilisé par l'onglet Impôt pour reconstituer
+// le vrai montant à payer. Limite assumée : ne couvre que le plafonnement standard (enfants à
+// charge), pas les plafonds spécifiques (parent isolé, invalidité, veuvage — voir
+// PLAFOND_PAR_DEMI_PART_ENFANT ci-dessus), le profil du foyer de cette app ne les distingue pas.
+export function computeImpotFoyer(revenuSalarial, revenuFoncierImposable, foyer = {}) {
+    const adults = Math.min(2, Math.max(1, Math.round(Number(foyer.adults) || 2)));
+    const children = Math.max(0, Math.round(Number(foyer.children) || 0));
+    const parts = getHouseholdTaxParts(adults, children);
+    const partsBase = adults; // sans les demi-parts liées aux enfants
+
+    const revenuGlobal = Math.max(0, (Number(revenuSalarial) || 0) + (Number(revenuFoncierImposable) || 0));
+
+    const complet = appliquerBaremeIR(revenuGlobal, parts);
+    let irBrut = complet.irBrut;
+    let plafonnementQF = null;
+
+    if (parts > partsBase) {
+        const base = appliquerBaremeIR(revenuGlobal, partsBase);
+        const avantage = base.irBrut - complet.irBrut;
+        const plafond = (parts - partsBase) * 2 * PLAFOND_PAR_DEMI_PART_ENFANT;
+        const applique = avantage > plafond;
+        if (applique) irBrut = base.irBrut - plafond;
+        plafonnementQF = {
+            applique,
+            avantage: Math.round(avantage),
+            plafond: Math.round(plafond),
+            irBrutSansPlafonnement: Math.round(complet.irBrut),
+        };
+    }
+
+    const decoteParams = adults >= 2 ? DECOTE_COUPLE : DECOTE_CELIBATAIRE;
+    const decote = irBrut < decoteParams.seuil ? Math.max(0, decoteParams.base - irBrut * DECOTE_TAUX) : 0;
+    const irNet = Math.max(0, Math.round(irBrut - decote));
+    const psFoncier = Math.round(Math.max(0, Number(revenuFoncierImposable) || 0) * CSG_CRDS_RATE);
+
+    return {
+        revenuSalarial: Math.round(Number(revenuSalarial) || 0),
+        revenuFoncierImposable: Math.round(Number(revenuFoncierImposable) || 0),
+        revenuGlobal: Math.round(revenuGlobal),
+        parts,
+        quotient: Math.round(complet.quotient),
+        tranches: complet.tranches,
+        plafonnementQF,
+        irBrut: Math.round(irBrut),
+        decote: Math.round(decote),
+        irNet,
+        psFoncier,
+        total: irNet + psFoncier,
+    };
 }
 
 function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationAnnuelles, inputs, tmi, interestYear, insuranceYear, year = 1, carryForwardDeficit = 0) {
@@ -160,6 +258,11 @@ function computeAvgCF3Y(prixNet, loyerMensuel, inputs, tmi) {
         let interestYear = 0;
         let insuranceYear = 0;
         let debtServiceYear = 0;
+        // Base de l'assurance pour cette année : CRD au 1er janvier si le contrat est dégressif,
+        // sinon capital initial (cotisation fixe) — voir computeAmortizationSchedule.
+        const assuranceMensAnnee = inputs['assurance-mode'] === 'crd'
+            ? (remainingCapital * (inputs['assurance'] / 100)) / 12
+            : model.coutAssuranceMensuel;
 
         for (let month = 0; month < 12; month++) {
             const monthIndex = ((year - 1) * 12) + month;
@@ -168,8 +271,8 @@ function computeAvgCF3Y(prixNet, loyerMensuel, inputs, tmi) {
             let principalMonth = tauxMensuel > 0 ? model.mensualiteCredit - interestMonth : model.mensualiteCredit;
             principalMonth = Math.max(0, Math.min(remainingCapital, principalMonth));
             interestYear += interestMonth;
-            insuranceYear += model.coutAssuranceMensuel;
-            debtServiceYear += model.mensualiteCredit + model.coutAssuranceMensuel;
+            insuranceYear += assuranceMensAnnee;
+            debtServiceYear += model.mensualiteCredit + assuranceMensAnnee;
             remainingCapital = Math.max(0, remainingCapital - principalMonth);
         }
 
@@ -1508,6 +1611,7 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
 
     const prixAcquisition = acq.prix || 0;
     const montantCredit = credit.montant || 0;
+    const dureeCredit = credit.duree || 0;
 
     // Résoudre les charges en priorisant chargesAnnuelles (entrée la plus récente ≤ aujourd'hui)
     const currentYear = new Date().getFullYear();
@@ -1518,44 +1622,99 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
     const resolvedPNO = ce ? (ce.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
     const resolvedCopro = ce ? (ce.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
 
-    const anneeAchat = asset.anneeAchat || currentYear;
-    const anneeFinCredit = anneeAchat + (credit.duree || 0);
-    const creditActif = (credit.duree || 0) > 0 && currentYear < anneeFinCredit;
+    // Mensualité + intérêts/assurance calculés depuis le mois CIVIL COURANT du planning
+    // d'amortissement réel (credit.montant), jamais reconstruits via « apport = prix - crédit » :
+    // montantCredit peut dépasser prixAcquisition dès que des frais/travaux ont été inclus dans
+    // l'emprunt (cas courant), et cette reconstruction sous-estimait alors silencieusement le
+    // capital financé (apport négatif tronqué à 0). Même logique que computeOwnedAssetTimeline.
+    //
+    // Contrairement à computeOwnedAssetTimeline (qui reconstruit un vrai historique comptable par
+    // année civile, mois d'achat inclus), computeOwnedAssetCF est LE taux courant affiché tel quel
+    // partout dans l'app sous « CF net-net / mois » (bannière, liste, dashboard, carte, tri,
+    // alertes) : il répond à « si ma situation actuelle (loyer, mensualité) se maintient, combien
+    // je touche par mois ? », pas « qu'ai-je encaissé depuis mon achat cette année civile ? ». Le
+    // loyer et rentaBrute (loyer × 12) ne sont donc jamais proratisés sur l'année d'achat — lire le
+    // mois courant de l'échéancier (au lieu du total annuel prorata / 12) garde la même logique de
+    // taux courant pour la part crédit, plutôt que d'introduire une dilution par les mois non
+    // encore possédés (ce qu'un simple prorata loyer × mois_possédés / 12 aurait fait, en
+    // contradiction avec la mensualité elle-même jamais proratisée).
+    const currentMonth = new Date().getMonth() + 1;
+    const nMoisCredit = dureeCredit * 12;
+    const tauxMCredit = ((credit.taux || 0) / 100) / 12;
+    let mensCredit = 0;
+    if (montantCredit > 0 && nMoisCredit > 0) {
+        mensCredit = tauxMCredit > 0
+            ? (montantCredit * tauxMCredit) / (1 - Math.pow(1 + tauxMCredit, -nMoisCredit))
+            : montantCredit / nMoisCredit;
+    }
+    // creditActif = le crédit a une ligne dans l'échéancier mensuel pour le mois civil courant.
+    // Dérivé directement du planning d'amortissement plutôt que d'une comparaison d'années brute :
+    // avec un crédit démarré ou soldé en cours d'année, « currentYear < anneeAchat+durée » se
+    // trompe sur l'année de démarrage/fin.
+    let interetsMoisCourant = 0;
+    let assuranceMensCredit = 0;
+    let creditActif = false;
+    if (montantCredit > 0) {
+        const { scheduleMonthly } = computeAmortizationSchedule(montantCredit, credit.taux || 0, dureeCredit, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
+        const monthRow = scheduleMonthly.find(r => r.annee === currentYear && r.mois === currentMonth);
+        if (monthRow) {
+            creditActif = true;
+            interetsMoisCourant = monthRow.interets;
+            assuranceMensCredit = monthRow.assurance;
+        }
+    }
+    // Intérêts annualisés au taux courant (mois courant × 12) pour l'estimation fiscale ci-dessous —
+    // cohérent avec loyersEncaisses/assuranceMensCredit×12, eux aussi au taux courant, pas un total
+    // d'année civile partiel.
+    const interetsAnnee = interetsMoisCourant * 12;
+    const mensualiteTotale = creditActif ? (mensCredit + assuranceMensCredit) : 0;
 
-    const inputs = {
-        'taux-input': creditActif ? (credit.taux || 0) : 0,
-        'duree': creditActif ? (credit.duree || 0) : 0,
-        'assurance': creditActif ? (credit.assurance || 0) : 0,
-        // apport = prix - crédit : montantFinance recalculé = montantCredit, base fiscale SCI-IS = prixAcquisition
-        'apport': creditActif ? Math.max(0, prixAcquisition - montantCredit) : prixAcquisition,
-        'notaire': 0,
-        'agence': 0,
-        'travaux': 0,
-        'meubles': 0,
-        'frais-bancaires': 0,
-        'vacance': scenario.vacance ?? 5,
-        'copro': scenario.chargesCopro ?? resolvedCopro,
-        'fonciere': scenario.taxeFonciere ?? resolvedTF,
-        'pno':     scenario?.assurancePNO    ?? resolvedPNO,
-        'gestion': scenario?.gestionLocative ?? resolvedGestion,
-        'regime': regimeOverride || scenario.regime || 'micro-foncier',
-    };
-
+    const vacancePct = scenario.vacance ?? 5;
     const loyer = scenario.loyer ?? resolveLoyerVacance(asset).loyer;
-    const model = buildFinancialModel(prixAcquisition, loyer, inputs, tmi);
+    const loyersEncaisses = loyer * 12 * (1 - vacancePct / 100);
+
+    const taxeFonciere = scenario.taxeFonciere ?? resolvedTF;
+    const chargesCopro = scenario.chargesCopro ?? resolvedCopro;
+    const assurancePNO = scenario?.assurancePNO ?? resolvedPNO;
+    const gestionPct = scenario?.gestionLocative ?? resolvedGestion;
+    const chargesExploitationAnnuelles = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersEncaisses * (gestionPct / 100));
+
+    // Travaux enregistrés cette année (onglet Travaux) : les déductibles réduisent l'assiette
+    // imposable (régimes réel/SCI-IS, comme dans computeOwnedAssetTimeline/computeCFBreakdown),
+    // financés ou non — la déductibilité fiscale ne dépend pas du mode de financement de la
+    // dépense. Seuls les frais payés cash (financeParCredit absent/false) retranchent en plus la
+    // trésorerie : ceux financés par le crédit immobilier principal sont déjà remboursés via
+    // mensualiteTotale au fil des années, les compter aussi ici les décompterait deux fois. Sans
+    // cette prise en compte des travaux du tout, cette fonction — utilisée par la liste, le
+    // dashboard, la carte, le tri, les alertes — ignorait entièrement les travaux de l'année,
+    // contrairement à l'onglet Exploitation qui les affiche (écart constaté : plusieurs centaines
+    // d'euros/mois dès qu'un frais est enregistré dans l'année en cours).
+    const travauxAnnee = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === currentYear);
+    const travauxDeductiblesAnnee = travauxAnnee.filter(t => t.tag === 'deductible').reduce((s, t) => s + t.montant, 0);
+    const travauxCashAnnee = travauxAnnee.filter(t => !t.financeParCredit).reduce((s, t) => s + t.montant, 0);
+
+    const regime = regimeOverride || scenario.regime || 'micro-foncier';
+    const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
+    const yearsElapsed = currentYear - anneeAchat;
+    const impotsAnnee = computeAnnualTaxEstimate(
+        prixAcquisition, loyersEncaisses, chargesExploitationAnnuelles + travauxDeductiblesAnnee,
+        { travaux: 0, 'frais-bancaires': 0, regime }, tmi, interetsAnnee, assuranceMensCredit * 12, yearsElapsed + 1
+    ).tax;
 
     const investissementTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
     const rentaBrute = investissementTotal > 0 ? ((loyer * 12) / investissementTotal) * 100 : 0;
-    const noiMensuel = (model.loyersEncaisses - model.chargesExploitationAnnuelles) / 12;
-    const dscr = model.mensualiteTotale > 0 ? noiMensuel / model.mensualiteTotale : 0;
+    const noiMensuel = (loyersEncaisses - chargesExploitationAnnuelles) / 12;
+    const dscr = mensualiteTotale > 0 ? noiMensuel / mensualiteTotale : 0;
+    const cfNet = (loyersEncaisses / 12) - mensualiteTotale - (chargesExploitationAnnuelles / 12) - (travauxCashAnnee / 12);
+    const cfNetNet = cfNet - (impotsAnnee / 12);
 
     return {
-        cfNetNet: model.cfNetNet - travauxMensualites,
-        cfNet: model.cfNet - travauxMensualites,
-        mensualiteTotale: model.mensualiteTotale + travauxMensualites,
-        chargesMensuelles: (model.chargesExploitationAnnuelles / 12) + travauxMensualites,
-        impotsAnnee: model.impotsAnnee,
-        loyerEffectif: model.loyersEncaisses / 12,
+        cfNetNet: cfNetNet - travauxMensualites,
+        cfNet: cfNet - travauxMensualites,
+        mensualiteTotale: mensualiteTotale + travauxMensualites,
+        chargesMensuelles: (chargesExploitationAnnuelles / 12) + travauxMensualites,
+        impotsAnnee,
+        loyerEffectif: loyersEncaisses / 12,
         rentaBrute,
         dscr,
     };
@@ -1574,13 +1733,13 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
     let mensCredit = 0;
     if (tauxM > 0 && nMois > 0) mensCredit = (montantCredit * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
     else if (nMois > 0) mensCredit = montantCredit / nMois;
-    const assurMens = (montantCredit * ((credit.assurance || 0) / 100)) / 12;
-    const mensualiteTotale = mensCredit + assurMens;
 
     const currentYear = new Date().getFullYear();
-    const anneeAchat = asset.anneeAchat || currentYear;
-    const anneeFinCredit = anneeAchat + dureeCredit;
-    const endYear = Math.max(currentYear + 2, anneeFinCredit);
+    const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+    // Borne haute sûre pour l'année de fin de prêt (voir preuve dans computeAmortizationSchedule :
+    // même démarré en décembre, un crédit de N ans ne peut jamais dépasser anneeAchat+N). Le vrai
+    // gate mensuel (loanMonthsElapsedTotal < nMois) est calculé dans la boucle ci-dessous.
+    const endYear = Math.max(currentYear + 2, anneeAchat + dureeCredit);
 
     // Le loyer est résolu année par année dans la boucle ci-dessous : l'historique de loyer
     // (postAchat.loyerHistorique) peut faire varier le montant d'une année sur l'autre.
@@ -1589,19 +1748,26 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
     const investBrut = prixAcquisition + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
     const apportInitial = Math.max(0, investBrut - montantCredit);
 
-    const travauxDeductiblesParAnnee = {};
-    const travauxAutresParAnnee = {};
+    // Un frais « financé par le crédit » (financeParCredit) fait partie de l'enveloppe du prêt
+    // principal — la mensualité (debtService ci-dessous) rembourse déjà cette part au fil des
+    // années. Il reste déductible fiscalement l'année où la dépense a eu lieu (déductibilité et
+    // remboursement du prêt sont deux mécanismes indépendants en droit fiscal français), mais ne
+    // doit plus être retranché une seconde fois du cash-flow comme une dépense ponctuelle.
+    const travauxDeductiblesParAnnee = {}; // assiette fiscale : tous les déductibles, financés ou non
+    const travauxCashParAnnee = {}; // trésorerie : seulement les frais payés cash (déductibles ou non)
     for (const t of (post.travaux || [])) {
         if (!t.date || !t.montant) continue;
         const y = new Date(t.date).getFullYear();
         if (t.tag === 'deductible') {
             travauxDeductiblesParAnnee[y] = (travauxDeductiblesParAnnee[y] || 0) + t.montant;
-        } else {
-            travauxAutresParAnnee[y] = (travauxAutresParAnnee[y] || 0) + t.montant;
+        }
+        if (!t.financeParCredit) {
+            travauxCashParAnnee[y] = (travauxCashParAnnee[y] || 0) + t.montant;
         }
     }
 
     let capitalRestant = montantCredit;
+    let loanMonthsElapsedTotal = 0; // mois de crédit déjà écoulés, tous exercices confondus
     let carryForwardDeficit = 0;
     const years = [];
     let cumulCF = 0;
@@ -1610,9 +1776,15 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
 
     for (let y = anneeAchat; y <= endYear; y++) {
         const yearsElapsed = y - anneeAchat;
-        const creditActif = dureeCredit > 0 && y < anneeFinCredit;
+        // Le crédit ne démarre pas forcément en janvier : l'année d'achat ne compte que les mois
+        // depuis moisAchat, les années suivantes comptent normalement depuis janvier.
+        const firstCalMonth = y === anneeAchat ? moisAchat : 1;
+        const creditActif = dureeCredit > 0 && loanMonthsElapsedTotal < nMois;
 
-        const loyersAnnuels = resolveLoyerVacance(asset, String(y)).loyer * 12 * (1 - vacancePct / 100);
+        // Comme la dette (firstCalMonth ci-dessus), le loyer de l'année d'achat ne doit compter que
+        // les mois depuis moisAchat : un bien acheté en juin n'a pas généré de loyer en janvier-mai.
+        const moisPossedeAnnee = y === anneeAchat ? (13 - moisAchat) : 12;
+        const loyersAnnuels = resolveLoyerVacance(asset, String(y)).loyer * moisPossedeAnnee * (1 - vacancePct / 100);
 
         const annualEntries = (post.chargesAnnuelles || []).filter(e => e.annee <= y).sort((a, b) => b.annee - a.annee);
         const chargesEntry = annualEntries[0] || null;
@@ -1621,29 +1793,38 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
         const assurancePNO = chargesEntry ? (chargesEntry.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
         const chargesCopro = chargesEntry ? (chargesEntry.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
         const travauxDeductiblesAnnee = travauxDeductiblesParAnnee[y] || 0;
-        const travauxAutresAnnee = travauxAutresParAnnee[y] || 0;
+        const travauxCashAnnee = travauxCashParAnnee[y] || 0;
+        const chargesAnneeBase = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersAnnuels * (gestionPct / 100));
         // Les travaux déductibles réduisent l'assiette imposable en foncier réel / SCI-IS
-        // (ignorés en micro-foncier, où l'abattement forfaitaire 30% remplace toute déduction réelle).
-        const chargesAnnee = taxeFonciere + (chargesCopro * 12) + assurancePNO + (loyersAnnuels * (gestionPct / 100)) + travauxDeductiblesAnnee;
+        // (ignorés en micro-foncier, où l'abattement forfaitaire 30% remplace toute déduction réelle)
+        // — tous les déductibles y compris ceux financés par le crédit, la déduction fiscale ne
+        // dépend pas du mode de financement de la dépense.
+        const chargesAnneeTax = chargesAnneeBase + travauxDeductiblesAnnee;
+
+        // Base de l'assurance de cette année : CRD au 1er mois actif de l'année (avant
+        // l'amortissement de l'année) si le contrat est dégressif, sinon capital initial
+        // (cotisation fixe). Accumulée mois par mois ci-dessous pour prorater correctement une
+        // année partielle (crédit démarré ou soldé en cours d'année).
+        const assuranceBaseAnnee = credit.assuranceMode === 'crd' ? capitalRestant : montantCredit;
+        const assurMensUnitaire = (assuranceBaseAnnee * ((credit.assurance || 0) / 100)) / 12;
 
         let interetsAnnee = 0;
+        let capitalAnnee = 0;
+        let assuranceAnnee = 0;
         let debtService = 0;
         if (creditActif) {
             let cap = capitalRestant;
-            for (let m = 0; m < 12; m++) {
-                if (yearsElapsed * 12 + m >= nMois || cap <= 0) break;
+            for (let cm = firstCalMonth; cm <= 12 && loanMonthsElapsedTotal < nMois && cap > 0; cm++) {
                 const intM = tauxM > 0 ? cap * tauxM : 0;
+                const capM = Math.max(0, Math.min(cap, mensCredit - intM));
                 interetsAnnee += intM;
-                cap -= Math.max(0, Math.min(cap, mensCredit - intM));
+                capitalAnnee += capM;
+                assuranceAnnee += assurMensUnitaire;
+                cap -= capM;
+                loanMonthsElapsedTotal++;
             }
-            let capTmp = capitalRestant;
-            for (let m = 0; m < 12; m++) {
-                if (yearsElapsed * 12 + m >= nMois || capTmp <= 0) break;
-                const intM = tauxM > 0 ? capTmp * tauxM : 0;
-                capTmp -= Math.max(0, Math.min(capTmp, mensCredit - intM));
-            }
-            capitalRestant = capTmp;
-            debtService = mensualiteTotale * 12;
+            capitalRestant = cap;
+            debtService = interetsAnnee + capitalAnnee + assuranceAnnee;
         }
 
         const inputs = {
@@ -1660,27 +1841,32 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
             'regime': regimeOverride || 'micro-foncier',
         };
         const taxResult = computeAnnualTaxEstimate(
-            prixAcquisition, loyersAnnuels, chargesAnnee, inputs, tmi,
-            interetsAnnee, assurMens * 12, yearsElapsed + 1, carryForwardDeficit
+            prixAcquisition, loyersAnnuels, chargesAnneeTax, inputs, tmi,
+            interetsAnnee, assuranceAnnee, yearsElapsed + 1, carryForwardDeficit
         );
         carryForwardDeficit = taxResult.newCarryForward;
         const impotsAnnee = taxResult.tax;
 
-        // travauxDeductiblesAnnee est déjà inclus dans chargesAnnee ; seule la part non
-        // déductible doit encore être retranchée du cash-flow (dépense réelle sans effet fiscal).
-        const cfAnnuel = loyersAnnuels - debtService - chargesAnnee - impotsAnnee - travauxAutresAnnee;
+        // Trésorerie : seuls les frais payés cash (travauxCashAnnee, déductibles ou non) sont
+        // retranchés ici — ceux financés par le crédit sont déjà remboursés via debtService au
+        // fil des années (voir travauxCashParAnnee plus haut), les compter aussi ici les
+        // décompterait deux fois.
+        const cfAnnuel = loyersAnnuels - debtService - chargesAnneeBase - impotsAnnee - travauxCashAnnee;
         const recettesAnnee = loyersAnnuels;
         const apportAnnee = y === anneeAchat ? apportInitial : 0;
         // depensesAnnee inclut l'apport (dépense de trésorerie réelle, cf. graphique Recettes vs Dépenses) ;
         // cfAnnuel reste le CF opérationnel hors apport, donc recettesAnnee - depensesAnnee ≠ cfAnnuel l'année d'achat
         // — voir apportAnnee pour réconcilier les deux dans un affichage tabulaire.
-        const depensesAnnee = debtService + chargesAnnee + impotsAnnee + travauxAutresAnnee + apportAnnee;
+        const depensesAnnee = debtService + chargesAnneeBase + impotsAnnee + travauxCashAnnee + apportAnnee;
 
         cumulCF += cfAnnuel;
         recettesCum += recettesAnnee;
         depensesCum += depensesAnnee;
 
-        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum, apportAnnee });
+        // loyersAnnuels/chargesAnneeTax/interetsAnnee/assuranceAnnee : composantes brutes de
+        // l'année, réutilisées telles quelles par computeDeficitFoncierHistorique pour rejouer le
+        // calcul du régime réel sans dupliquer la résolution loyer/charges/travaux ci-dessus.
+        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum, apportAnnee, loyersAnnuels, chargesAnneeTax, interetsAnnee, assuranceAnnee });
     }
 
     return { years, anneeAchat, endYear };
@@ -1688,30 +1874,83 @@ export function computeOwnedAssetTimeline(asset, tmi, regimeOverride = null) {
 
 // ─── NOUVELLES FONCTIONS : PATRIMOINE, DETTE, FISCALITÉ, DASHBOARD ──────────
 
-export function computeAmortizationSchedule(montant, tauxAnnuel, dureeAns, anneeDebut) {
+// Date d'achat d'un bien : stockée en 'YYYY-MM' (mois précis, ex. "2024-06") depuis l'ajout du
+// démarrage de crédit en cours d'année. Accepte aussi une année brute (nombre ou chaîne, ex. 2024
+// ou "2024") pour les biens saisis avant cette évolution — résolue au mois de janvier, ce qui
+// reproduit exactement l'ancien comportement (tout le moteur supposait implicitement janvier).
+// Point d'entrée unique : tout code qui lisait `asset.anneeAchat` doit passer par cette fonction.
+export function parseDateAchat(raw) {
+    const currentYear = new Date().getFullYear();
+    if (typeof raw === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(raw)) {
+        const [annee, mois] = raw.split('-').map(Number);
+        return { annee, mois };
+    }
+    const annee = Number(raw) || currentYear;
+    return { annee, mois: 1 };
+}
+
+// L'assurance emprunteur suit l'une de deux conventions selon le contrat : « capital initial »
+// (cotisation fixe pour toute la durée, base = montant emprunté) ou « capital restant dû »
+// (cotisation dégressive, recalculée chaque année sur le CRD au 1er janvier — c'est ce que montre
+// l'échéancier de la banque quand le contrat est de ce type). tauxAssurance/assuranceMode sont
+// optionnels pour ne pas casser les appels existants qui ne s'intéressent qu'aux intérêts/capital.
+//
+// dateDebut accepte tout ce que parseDateAchat comprend ('YYYY-MM', année brute, ou déjà un objet
+// {annee, mois}) — le crédit ne démarre pas forcément en janvier (ex. acte signé en cours d'année),
+// donc la première (et potentiellement la dernière) ligne du tableau peut être une année partielle
+// de moins de 12 mois. Le tableau reste indexé par année civile (`schedule[i].annee`), donc les
+// appelants qui font `schedule.find(r => r.annee === X)` n'ont rien à changer.
+export function computeAmortizationSchedule(montant, tauxAnnuel, dureeAns, dateDebut, tauxAssurance = 0, assuranceMode = 'initial') {
     const nMois = dureeAns * 12;
     const tauxM = (tauxAnnuel / 100) / 12;
     let mensualite = 0;
     if (tauxM > 0 && nMois > 0) mensualite = (montant * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
     else if (nMois > 0) mensualite = montant / nMois;
 
+    const { annee: anneeStart, mois: moisStart } = (dateDebut && typeof dateDebut === 'object')
+        ? dateDebut
+        : parseDateAchat(dateDebut);
+
     let crd = montant;
-    const schedule = [];
-    for (let y = 0; y < dureeAns; y++) {
-        const annee = anneeDebut + y;
-        let interets = 0, capital = 0;
-        const crdDebut = crd;
-        for (let m = 0; m < 12 && crd > 0.01 && y * 12 + m < nMois; m++) {
-            const intM = tauxM > 0 ? crd * tauxM : 0;
-            const capM = Math.min(crd, mensualite - intM);
-            interets += intM;
-            capital += Math.max(0, capM);
-            crd = Math.max(0, crd - capM);
-        }
-        schedule.push({ annee, interets: Math.round(interets), capital: Math.round(capital), crdDebut: Math.round(crdDebut), crdFin: Math.round(crd) });
-        if (crd <= 0) break;
+    const rows = new Map();
+    const monthlyRows = [];
+    for (let m = 0; m < nMois && crd > 0.01; m++) {
+        const annee = anneeStart + Math.floor((moisStart - 1 + m) / 12);
+        const mois = ((moisStart - 1 + m) % 12) + 1;
+        let row = rows.get(annee);
+        if (!row) { row = { annee, interets: 0, capital: 0, assurance: 0, crdDebut: crd, crdFin: crd }; rows.set(annee, row); }
+
+        const crdDebutMois = crd;
+        const intM = tauxM > 0 ? crd * tauxM : 0;
+        const capM = Math.max(0, Math.min(crd, mensualite - intM));
+        const assuranceBase = assuranceMode === 'crd' ? row.crdDebut : montant;
+        const assuranceM = (assuranceBase * (tauxAssurance / 100)) / 12;
+        row.interets += intM;
+        row.capital += capM;
+        row.assurance += assuranceM;
+        crd = Math.max(0, crd - capM);
+        row.crdFin = crd;
+        monthlyRows.push({
+            annee, mois,
+            interets: Math.round(intM),
+            capital: Math.round(capM),
+            assurance: Math.round(assuranceM),
+            crdDebut: Math.round(crdDebutMois),
+            crdFin: Math.round(crd)
+        });
     }
-    return { schedule, mensualite };
+
+    const schedule = [...rows.values()]
+        .sort((a, b) => a.annee - b.annee)
+        .map(r => ({
+            annee: r.annee,
+            interets: Math.round(r.interets),
+            capital: Math.round(r.capital),
+            crdDebut: Math.round(r.crdDebut),
+            crdFin: Math.round(r.crdFin),
+            assurance: Math.round(r.assurance)
+        }));
+    return { schedule, scheduleMonthly: monthlyRows, mensualite };
 }
 
 export function computePatrimoineNet(asset) {
@@ -1723,17 +1962,26 @@ export function computePatrimoineNet(asset) {
 
     const montant = credit.montant || 0;
     const duree = credit.duree || 0;
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
 
+    // CRD interpolé au mois courant (pas seulement au 1er janvier de l'année en cours) grâce à
+    // scheduleMonthly — sinon le patrimoine net affiché sous-estime le capital déjà remboursé
+    // pendant onze mois sur douze (exact seulement en janvier, écart maximal en décembre).
     let crd = 0;
     if (montant > 0 && duree > 0) {
-        const { schedule } = computeAmortizationSchedule(montant, credit.taux || 0, duree, anneeAchat);
-        const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth(); // 0-indexed
-        const elapsed = Math.floor((currentYear - anneeAchat) * 12 + currentMonth);
-        // Trouver le CRD au début de l'année courante et interpoler
-        const yearRow = schedule.find(r => r.annee === currentYear);
-        crd = yearRow ? yearRow.crdDebut : 0;
+        const { scheduleMonthly } = computeAmortizationSchedule(montant, credit.taux || 0, duree, asset.dateAchat);
+        if (scheduleMonthly.length) {
+            const now = new Date();
+            const nowKey = now.getFullYear() * 12 + (now.getMonth() + 1);
+            const exact = scheduleMonthly.find(r => (r.annee * 12 + r.mois) === nowKey);
+            if (exact) {
+                crd = exact.crdDebut;
+            } else {
+                const first = scheduleMonthly[0];
+                const last = scheduleMonthly[scheduleMonthly.length - 1];
+                if (nowKey < (first.annee * 12 + first.mois)) crd = montant; // crédit pas encore démarré
+                else if (nowKey > (last.annee * 12 + last.mois)) crd = 0; // crédit déjà soldé
+            }
+        }
     }
     return { valeurEstimee, crd: Math.round(crd), patrimoineNet: Math.round(valeurEstimee - crd), dateEstimation };
 }
@@ -1751,16 +1999,29 @@ export function computeEndettementGlobal(assets, revenusMensuels, creditsHorsImm
         let mensCredit = 0;
         if (tauxM > 0 && nMois > 0) mensCredit = (montant * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
         else if (nMois > 0) mensCredit = montant / nMois;
-        const assurMens = (montant * ((credit.assurance || 0) / 100)) / 12;
-        const mensualite = mensCredit + assurMens;
-        const anneeAchat = asset.anneeAchat || now.getFullYear();
-        const anneeFinCredit = anneeAchat + (credit.duree || 0);
 
-        if (montant > 0 && anneeFinCredit > now.getFullYear()) {
-            totalMensualites += mensualite;
-            const moisRestants = (anneeFinCredit - now.getFullYear()) * 12 - now.getMonth();
-            if (moisRestants > 0 && (!prochainCreditTermine || moisRestants < prochainCreditTermine.moisRestants)) {
-                prochainCreditTermine = { assetNom: asset.nom, anneeFinCredit, moisRestants };
+        if (montant > 0 && nMois > 0) {
+            const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+            // Mois absolu (0-based depuis l'an 0) du 1er mois où le crédit n'est plus actif —
+            // remplace l'ancienne comparaison d'années brute, fausse pile sur l'année de fin quand
+            // le crédit démarre en cours d'année (voir computeOwnedAssetCF pour le même correctif).
+            const finAbsMonth = (anneeAchat * 12 + (moisAchat - 1)) + nMois;
+            const nowAbsMonth = now.getFullYear() * 12 + now.getMonth();
+            const moisRestants = finAbsMonth - nowAbsMonth;
+
+            if (moisRestants > 0) {
+                const { scheduleMonthly } = computeAmortizationSchedule(montant, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
+                // Assurance du mois civil courant lue directement dans l'échéancier mensuel — pas
+                // une division par 12 d'un total d'année civile partielle (année d'achat ou de solde
+                // du crédit), qui sous-estimait le taux mensuel réel. Même logique de « taux courant »
+                // que computeOwnedAssetCF/computePatrimoineNet.
+                const monthRow = scheduleMonthly.find(r => r.annee === now.getFullYear() && r.mois === now.getMonth() + 1);
+                const assurMens = monthRow ? monthRow.assurance : 0;
+                totalMensualites += mensCredit + assurMens;
+                const anneeFinCredit = Math.floor(finAbsMonth / 12);
+                if (!prochainCreditTermine || moisRestants < prochainCreditTermine.moisRestants) {
+                    prochainCreditTermine = { assetNom: asset.nom, anneeFinCredit, moisRestants };
+                }
             }
         }
     }
@@ -1783,45 +2044,88 @@ export function computeEndettementGlobal(assets, revenusMensuels, creditsHorsImm
     return { totalMensualites, tauxEndettement, capaciteResiduelle, prochainCreditTermine };
 }
 
-export function computeCFBreakdown(asset, tmi, regime, targetYear = 1) {
+// targetMonth (1-12, optionnel) restreint la ventilation à un seul mois de targetYear au lieu de
+// l'année entière — utilisé par le camembert des dépenses (owned-portfolio.js) quand l'utilisateur
+// choisit un mois précis plutôt que « Toute l'année ». Intérêts/capital/assurance crédit, gestion
+// locative, travaux et loyer restent exacts au mois (échéancier mensuel, date exacte des travaux,
+// resolveLoyerVacance au format 'YYYY-MM'). Taxe foncière et assurance PNO n'ont pas de date
+// d'échéance connue dans le modèle de données : elles sont réparties en 1/12 du montant annuel.
+// Les impôts n'ont pas de notion mensuelle (calculés à l'année sur le revenu global) : on prend
+// 1/12 de l'impôt annuel déjà reconstruit par l'appel récursif sans targetMonth.
+export function computeCFBreakdown(asset, tmi, regime, targetYear = 1, targetMonth = null) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+    const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
     const targetAbsYear = anneeAchat + targetYear - 1;
 
     const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
     const row = years.find(y => y.year === targetAbsYear) || years[years.length - 1];
     if (!row) return null;
 
-    const { loyer, vacancePct } = resolveLoyerVacance(asset, String(targetAbsYear));
-    const loyerBrut = loyer * 12;
+    const moisCible = targetMonth ? `${targetAbsYear}-${String(targetMonth).padStart(2, '0')}` : String(targetAbsYear);
+    const { loyer, vacancePct } = resolveLoyerVacance(asset, moisCible);
+    // Même proratisation que computeOwnedAssetTimeline : l'année d'achat ne compte le loyer que
+    // depuis moisAchat, cohérent avec row.cfAnnuel (sinon l'impôt reconstruit plus bas — qui
+    // absorbe l'écart entre loyersEncaisses et row.cfAnnuel — serait faussé).
+    const moisPossedeAnnee = targetMonth ? 1 : (targetAbsYear === anneeAchat ? (13 - moisAchat) : 12);
+    const loyerBrut = loyer * moisPossedeAnnee;
     const vacanceEuros = loyerBrut * (vacancePct / 100);
     const loyersEncaisses = loyerBrut - vacanceEuros;
 
     const annualEntries = (post.chargesAnnuelles || []).filter(e => e.annee <= targetAbsYear).sort((a, b) => b.annee - a.annee);
     const chargesEntry = annualEntries[0] || null;
-    const taxeFonciere = chargesEntry ? (chargesEntry.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0);
+    const taxeFonciereAnnuelle = chargesEntry ? (chargesEntry.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0);
     const gestionPct = chargesEntry ? (chargesEntry.gestionLocative ?? post.gestionLocative ?? 0) : (post.gestionLocative ?? 0);
-    const assurancePNO = chargesEntry ? (chargesEntry.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
-    const chargesCopro = chargesEntry ? (chargesEntry.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
+    const assurancePNOAnnuelle = chargesEntry ? (chargesEntry.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
+    const chargesCoproMensuelle = chargesEntry ? (chargesEntry.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
+    const taxeFonciere = targetMonth ? taxeFonciereAnnuelle / 12 : taxeFonciereAnnuelle;
+    const assurancePNO = targetMonth ? assurancePNOAnnuelle / 12 : assurancePNOAnnuelle;
+    const chargesCoproTotal = targetMonth ? chargesCoproMensuelle : chargesCoproMensuelle * 12;
     const gestion = loyersEncaisses * (gestionPct / 100);
-    const charges = taxeFonciere + (chargesCopro * 12) + assurancePNO + gestion;
+    const charges = taxeFonciere + chargesCoproTotal + assurancePNO + gestion;
 
-    const travauxAnnee = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === targetAbsYear);
+    // Seuls les frais payés cash entrent dans cette ligne affichée : ceux financés par le crédit
+    // (financeParCredit) sont déjà dans « Mensualités crédit » ci-dessous (voir
+    // computeOwnedAssetTimeline, dont row.cfAnnuel est la référence ici) — les compter aussi ici
+    // les décompterait deux fois et romprait la reconstruction loyers-charges-travaux-impôts=CF.
+    const travauxAnnee = (post.travaux || []).filter(t => {
+        if (!t.date || !t.montant || t.financeParCredit) return false;
+        const d = new Date(t.date);
+        return targetMonth
+            ? d.getFullYear() === targetAbsYear && d.getMonth() + 1 === targetMonth
+            : d.getFullYear() === targetAbsYear;
+    });
     const travauxTotal = travauxAnnee.reduce((s, t) => s + t.montant, 0);
 
     const montant = credit.montant || 0;
     const nMois = (credit.duree || 0) * 12;
-    const tauxM = ((credit.taux || 0) / 100) / 12;
-    let mensCredit = 0;
-    if (tauxM > 0 && nMois > 0) mensCredit = montant * tauxM / (1 - Math.pow(1 + tauxM, -nMois));
-    else if (nMois > 0) mensCredit = montant / nMois;
-    const assurMens = (montant * ((credit.assurance || 0) / 100)) / 12;
-    const creditActif = (credit.duree || 0) > 0 && targetAbsYear < anneeAchat + (credit.duree || 0);
-    const mensualiteCredit = creditActif ? (mensCredit + assurMens) * 12 : 0;
+    // Détail crédit de l'année (ou du mois) ciblé, lu directement dans le planning d'amortissement
+    // (source de vérité unique pour interets/capital/assurance) — mensualiteCredit = leur somme, ce
+    // qui reste exact même pour une année partielle (crédit démarré/soldé en cours d'année)
+    // contrairement à un ancien calcul en « mensualité fixe × 12 ». interetsAnnee/capitalAnnee/
+    // assuranceAnnee sont aussi utilisés tels quels par le camembert des dépenses (owned-portfolio.js).
+    let mensualiteCredit = 0;
+    let interetsAnnee = 0, capitalAnnee = 0, assuranceAnnee = 0;
+    if (montant > 0 && nMois > 0) {
+        const { schedule, scheduleMonthly } = computeAmortizationSchedule(montant, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
+        const targetRow = targetMonth
+            ? scheduleMonthly.find(r => r.annee === targetAbsYear && r.mois === targetMonth)
+            : schedule.find(r => r.annee === targetAbsYear);
+        if (targetRow) {
+            interetsAnnee = targetRow.interets;
+            capitalAnnee = targetRow.capital;
+            assuranceAnnee = targetRow.assurance;
+            mensualiteCredit = interetsAnnee + capitalAnnee + assuranceAnnee;
+        }
+    }
 
-    const impots = loyersEncaisses - mensualiteCredit - charges - travauxTotal - row.cfAnnuel;
+    const impots = targetMonth
+        ? (computeCFBreakdown(asset, tmi, regime, targetYear, null)?.impots || 0) / 12
+        : loyersEncaisses - mensualiteCredit - charges - travauxTotal - row.cfAnnuel;
+    const cfNetNet = targetMonth
+        ? loyersEncaisses - mensualiteCredit - charges - travauxTotal - impots
+        : row.cfAnnuel;
 
     return {
         loyerBrut: Math.round(loyerBrut),
@@ -1829,21 +2133,26 @@ export function computeCFBreakdown(asset, tmi, regime, targetYear = 1) {
         loyersEncaisses: Math.round(loyersEncaisses),
         charges: Math.round(charges),
         travaux: Math.round(travauxTotal),
+        creditDetail: {
+            interets: Math.round(interetsAnnee),
+            capital: Math.round(capitalAnnee),
+            assurance: Math.round(assuranceAnnee)
+        },
         chargesDetail: {
             taxeFonciere: Math.round(taxeFonciere),
-            chargesCopro: Math.round(chargesCopro * 12),
+            chargesCopro: Math.round(chargesCoproTotal),
             assurancePNO: Math.round(assurancePNO),
             gestion: Math.round(gestion)
         },
         mensualiteCredit: Math.round(mensualiteCredit),
         impots: Math.round(impots),
-        cfNetNet: Math.round(row.cfAnnuel)
+        cfNetNet: Math.round(cfNetNet)
     };
 }
 
 export function computeRegimeComparison(asset, tmi, targetYears = [1, 3, 5, 10]) {
     const regimes = ['micro-foncier', 'reel', 'sci-is'];
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+    const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
     const result = {};
     for (const regime of regimes) {
         const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
@@ -1906,16 +2215,22 @@ export function computeCompteResultat(asset, annee, tmi, regime) {
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
     const { loyer, vacancePct } = resolveLoyerVacance(asset, String(annee));
-    const loyersTheoriques = loyer * 12;
+    // Même proratisation que computeCFBreakdown/computeOwnedAssetTimeline : l'année d'achat ne
+    // compte le loyer que depuis moisAchat (13 - moisAchat mois), pas une année pleine — sinon
+    // les recettes déclarées ici (et dans computeDeclaration2044, qui en dépend) sont surestimées
+    // pour tout bien acheté en cours d'année, alors que interetsAnnee/capitalRembourse ci-dessous
+    // sont déjà correctement proratisés via computeAmortizationSchedule.
+    const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+    const moisPossedeAnnee = annee === anneeAchat ? (13 - moisAchat) : 12;
+    const loyersTheoriques = loyer * moisPossedeAnnee;
     const vacanceEst = loyersTheoriques * (vacancePct / 100);
     const recettesBrutes = loyersTheoriques - vacanceEst;
 
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
-    const { schedule } = computeAmortizationSchedule(credit.montant || 0, credit.taux || 0, credit.duree || 0, anneeAchat);
+    const { schedule } = computeAmortizationSchedule(credit.montant || 0, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
     const yearRow = schedule.find(r => r.annee === annee);
     const interetsAnnee = yearRow?.interets || 0;
     const capitalRembourse = yearRow?.capital || 0;
-    const assuranceAnnee = (credit.montant || 0) * ((credit.assurance || 0) / 100);
+    const assuranceAnnee = yearRow?.assurance || 0;
 
     const chargesEntries = (post.chargesAnnuelles || []).filter(e => e.annee <= annee).sort((a, b) => b.annee - a.annee);
     const ce = chargesEntries[0] || null;
@@ -1924,9 +2239,14 @@ export function computeCompteResultat(asset, annee, tmi, regime) {
     const assurancePNO = ce ? (ce.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
     const chargesCopro = (ce ? (ce.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0)) * 12;
     const gestionLocative = recettesBrutes * (gestionPct / 100);
-    const travauxDed = (post.travaux || [])
-        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === annee)
-        .reduce((s, t) => s + (t.montant || 0), 0);
+    const travauxAnneeAll = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === annee);
+    const travauxDed = travauxAnneeAll.filter(t => t.tag === 'deductible').reduce((s, t) => s + (t.montant || 0), 0);
+    // Part de travauxDed financée par le crédit principal (déjà remboursée via capitalRembourse
+    // ci-dessous, pas une dépense cash cette année) et frais non déductibles payés cash (aucun
+    // effet fiscal, mais un vrai décaissement absent des cases ci-dessus) — utilisés uniquement
+    // pour corriger cfReel plus bas, chargesDeductibles reste inchangé pour le calcul de l'impôt.
+    const travauxDedFinance = travauxAnneeAll.filter(t => t.tag === 'deductible' && t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
+    const travauxCashNonDed = travauxAnneeAll.filter(t => t.tag !== 'deductible' && !t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
 
     const chargesDeductibles = interetsAnnee + assuranceAnnee + taxeFonciere + chargesCopro + assurancePNO + gestionLocative + travauxDed;
     const tauxGlobal = (tmi / 100) + CSG_CRDS_RATE;
@@ -1955,7 +2275,11 @@ export function computeCompteResultat(asset, annee, tmi, regime) {
     }
 
     const resultatNet = resultatFoncier - impots;
-    const cfReel = Math.round(resultatNet - capitalRembourse);
+    // cfReel : on retranche capitalRembourse (remboursement du prêt, dette réelle de l'année) puis
+    // on corrige pour les travaux — rajouter la part déductible financée (déjà comptée dans
+    // resultatNet mais pas un décaissement cette année, voir travauxDedFinance) et retrancher les
+    // frais non déductibles payés cash (aucun effet sur resultatNet, mais un vrai décaissement).
+    const cfReel = Math.round(resultatNet - capitalRembourse + travauxDedFinance - travauxCashNonDed);
 
     return {
         annee, regime,
@@ -2045,6 +2369,96 @@ export function computeDeclaration2044(assets, annee, tmi) {
     };
 }
 
+// Revenu foncier imposable du portefeuille pour l'onglet Impôt — ce qui vient réellement s'ajouter
+// (ou se retrancher) au revenu global du foyer selon le régime actif :
+// - micro-foncier : 70 % des loyers bruts, jamais de déficit possible
+// - réel : résultat net (computeDeclaration2044), déficit plafonné à 10 700 €/an imputable sur le
+//   revenu global (le surplus est reporté sur les revenus fonciers des 10 années suivantes, pas pris
+//   en compte ici)
+// - sci-is : taxé à l'IS, hors périmètre de l'IR du foyer — retourné à part (isTotal)
+export function computeRevenuFoncierPortefeuille(assets, annee, tmi, regime) {
+    if (!assets.length) {
+        return { revenuFoncierImposable: 0, lignes: [], isTotal: 0, deficit: null };
+    }
+
+    if (regime === 'sci-is') {
+        // Pas de calcul chiffré ici : computeCompteResultat ne déduit pas l'amortissement comptable
+        // de l'immeuble pour ce régime (cf. openDeclarationFiscaleModal, owned-portfolio.js) — un total
+        // d'IS affiché serait faux. Le résultat SCI-IS est de toute façon hors périmètre de l'IR du foyer.
+        return { revenuFoncierImposable: 0, lignes: [], isTotal: null, deficit: null };
+    }
+
+    if (regime === 'micro-foncier') {
+        const lignes = assets.map(a => computeCompteResultat(a, annee, tmi, 'micro-foncier'));
+        const revenuFoncierImposable = lignes.reduce((s, l) => s + l.baseImposable, 0);
+        return { revenuFoncierImposable: Math.round(revenuFoncierImposable), lignes, isTotal: 0, deficit: null };
+    }
+
+    const decl = computeDeclaration2044(assets, annee, tmi);
+    const revenuFoncierImposable = decl.case420 >= 0 ? decl.case420 : -(decl.deficit?.imputableRevenuGlobal || 0);
+    return { revenuFoncierImposable, lignes: decl.lignes, isTotal: 0, deficit: decl.deficit };
+}
+
+// Historique des déficits fonciers reportables, calculé automatiquement depuis les données déjà
+// saisies (loyers, charges, crédit) plutôt que saisi à la main — l'utilisateur n'a plus à savoir
+// lui-même quoi renseigner. Rejoue chaque année depuis l'achat en simulant le régime réel (seul
+// régime où le déficit foncier existe, même si le bien est actuellement suivi en micro-foncier ou
+// SCI-IS — même convention que le reste de l'app, qui applique un seul régime sur toute la
+// timeline). Une année déficitaire crée une ligne ; une année bénéficiaire consomme les lignes
+// existantes par ordre d'ancienneté (FIFO), comme l'exige la règle des 10 ans (art. 156 I 3° CGI).
+//
+// Limite assumée : ne connaît que ce qui est saisi dans l'app depuis l'année d'achat — un déficit
+// réel antérieur à la saisie du bien (ou basé sur des charges non ressaisies rétroactivement)
+// n'est pas repris. Affiché comme avertissement dans l'UI (owned-portfolio.js).
+export function computeDeficitFoncierHistorique(asset, tmi) {
+    const currentYear = new Date().getFullYear();
+    const { years } = computeOwnedAssetTimeline(asset, tmi, 'reel');
+    const PLAFOND = PLAFOND_DEFICIT_REVENU_GLOBAL;
+    const EXPIRATION_ANS = 10;
+
+    const lignes = []; // { annee, montantInitial, utilise } — ordre chronologique = ordre FIFO
+    for (const row of years) {
+        if (row.year > currentYear) break; // pas d'années projetées, seulement le vécu
+
+        const chargesAnnuelles = row.chargesAnneeTax + row.assuranceAnnee;
+        const revenusNets = row.loyersAnnuels - chargesAnnuelles - row.interetsAnnee;
+
+        if (revenusNets > 0) {
+            let restantAAbsorber = revenusNets;
+            for (const ligne of lignes) {
+                if (restantAAbsorber <= 0) break;
+                if (row.year - ligne.annee >= EXPIRATION_ANS) continue; // déficit déjà expiré cette année-là
+                const disponible = ligne.montantInitial - ligne.utilise;
+                if (disponible <= 0) continue;
+                const absorbe = Math.min(disponible, restantAAbsorber);
+                ligne.utilise += absorbe;
+                restantAAbsorber -= absorbe;
+            }
+        } else {
+            const soldeHorsInterets = row.loyersAnnuels - chargesAnnuelles;
+            const montantCree = soldeHorsInterets < 0
+                ? Math.max(0, Math.abs(soldeHorsInterets) - PLAFOND) + row.interetsAnnee
+                : Math.abs(revenusNets);
+            if (montantCree > 0) lignes.push({ annee: row.year, montantInitial: montantCree, utilise: 0 });
+        }
+    }
+
+    const lignesFormatees = lignes.map(l => {
+        const anciennete = currentYear - l.annee;
+        return {
+            annee: l.annee,
+            montantInitial: Math.round(l.montantInitial),
+            utilise: Math.round(l.utilise),
+            restant: Math.round(Math.max(0, l.montantInitial - l.utilise)),
+            expire: l.annee + EXPIRATION_ANS,
+            expired: anciennete >= EXPIRATION_ANS
+        };
+    });
+    const stockTotal = lignesFormatees.filter(l => !l.expired).reduce((s, l) => s + l.restant, 0);
+
+    return { lignes: lignesFormatees.sort((a, b) => b.annee - a.annee), stockTotal: Math.round(stockTotal) };
+}
+
 export function computePortfolioAlerts(assets, tmi, regime, revenusMensuels) {
     const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
     const alerts = [];
@@ -2073,8 +2487,9 @@ export function computePortfolioAlerts(assets, tmi, regime, revenusMensuels) {
 
         const credit = asset.acquisition?.credit || {};
         if ((credit.duree || 0) > 0) {
-            const anneeFinCredit = (asset.anneeAchat || now.getFullYear()) + (credit.duree || 0);
-            const moisRestants = (anneeFinCredit - now.getFullYear()) * 12 - now.getMonth();
+            const { annee: anneeAchatCredit, mois: moisAchatCredit } = parseDateAchat(asset.dateAchat);
+            const finAbsMonth = (anneeAchatCredit * 12 + (moisAchatCredit - 1)) + (credit.duree || 0) * 12;
+            const moisRestants = finAbsMonth - (now.getFullYear() * 12 + now.getMonth());
             if (moisRestants > 0 && moisRestants <= 12) {
                 alerts.push({ type: 'credit', severity: 'info', assetId: asset.id, msg: `${asset.nom} — Crédit se termine dans ${Math.round(moisRestants)} mois : libération de ${Math.round(r.mensualiteTotale).toLocaleString('fr-FR')} €/mois` });
             }
@@ -2109,13 +2524,17 @@ export function computePortfolioAlerts(assets, tmi, regime, revenusMensuels) {
             }
         }
 
-        // Déficit foncier reportable proche de son expiration (10 ans)
-        for (const d of (asset.postAchat?.deficitFoncierReporte || [])) {
-            const resteAImputer = (d.montantInitial || 0) - (d.utilise || 0);
+        // Déficit foncier reportable proche de son expiration (10 ans), calculé automatiquement
+        // (computeDeficitFoncierHistorique) plutôt que lu depuis une saisie manuelle. Seuil aligné
+        // sur celui de la table "Déficits fonciers reportables" (owned-portfolio.js,
+        // renderAccordionPostAchat) qui marque l'entrée "Expiré" dès anciennete >= 10 — l'alerte ne
+        // doit donc pas se déclencher à anciennete === 10, sous peine d'annoncer "expire dans 0 an"
+        // pour une ligne déjà affichée comme expirée juste en dessous.
+        for (const d of computeDeficitFoncierHistorique(asset, tmi).lignes) {
             const anciennete = now.getFullYear() - d.annee;
-            if (resteAImputer > 0 && anciennete >= 8 && anciennete <= 10) {
+            if (d.restant > 0 && anciennete >= 8 && anciennete <= 9) {
                 const anneesRestantes = 10 - anciennete;
-                alerts.push({ type: 'deficit-expire', severity: 'warning', assetId: asset.id, msg: `${asset.nom} — Déficit foncier ${d.annee} : ${Math.round(resteAImputer).toLocaleString('fr-FR')} € non imputés, expire dans ${anneesRestantes} an${anneesRestantes > 1 ? 's' : ''}` });
+                alerts.push({ type: 'deficit-expire', severity: 'warning', assetId: asset.id, msg: `${asset.nom} — Déficit foncier ${d.annee} : ${d.restant.toLocaleString('fr-FR')} € non imputés, expire dans ${anneesRestantes} an${anneesRestantes > 1 ? 's' : ''}` });
             }
         }
 
@@ -2134,9 +2553,14 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
     const { loyer, vacancePct } = resolveLoyerVacance(asset);
-    const loyersAnnuels = loyer * 12 * (1 - vacancePct / 100);
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
-    const { schedule } = computeAmortizationSchedule(credit.montant || 0, credit.taux || 0, credit.duree || 0, anneeAchat);
+    // Même proratisation que computeOwnedAssetTimeline/computeCompteResultat : l'année d'achat ne
+    // compte le loyer que depuis moisAchat, pas une année pleine — sinon la simulation surestime les
+    // recettes de l'année d'achat alors qu'interetsAnnee/assuranceAnnee ci-dessous (tirés de
+    // l'échéancier réel) sont déjà correctement partiels sur cette même année.
+    const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+    const moisPossedeAnnee = annee === anneeAchat ? (13 - moisAchat) : 12;
+    const loyersAnnuels = loyer * moisPossedeAnnee * (1 - vacancePct / 100);
+    const { schedule } = computeAmortizationSchedule(credit.montant || 0, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
     const yearRow = schedule.find(r => r.annee === annee);
     const interetsAnnee = yearRow?.interets || 0;
 
@@ -2144,7 +2568,7 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
     const chargesCopro = (post.chargesCopro ?? 0) * 12;
     const assurancePNO = post.assurancePNO ?? 0;
     const gestionLocative = loyersAnnuels * ((post.gestionLocative ?? 0) / 100);
-    const assuranceAnnee = (credit.montant || 0) * ((credit.assurance || 0) / 100);
+    const assuranceAnnee = yearRow?.assurance || 0;
     const chargesBase = taxeFonciere + chargesCopro + assurancePNO + gestionLocative + assuranceAnnee;
 
     let deficitCree = 0, economieFiscale3ans = 0;

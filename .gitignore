@@ -10,6 +10,9 @@ scraper/config.py
 # Documents utilisateur (factures PDF importées, générés localement)
 documents/
 
+# Exports générés localement (peuvent contenir des données financières réelles du portefeuille)
+exports/
+
 # Python
 __pycache__/
 *.pyc
@@ -20,3 +23,13 @@ __pycache__/
 venv/
 .env
 .worktrees/
+.pytest_cache/
+
+# Données locales du scraper
+scraper/biens.db
+scraper/spark_scraper.log
+geocache.json
+
+# Firebase CLI (cache local de deploy, pas de secret dedans mais inutile a versionner)
+.firebase/
+firebase-debug.log
