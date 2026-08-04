@@ -2,9 +2,13 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const logger = require('firebase-functions/logger');
 
-const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
+const mammouthApiKey = defineSecret('MAMMOUTH_API_KEY');
 
-const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+// Uniquement des images : Mammouth AI (proxy vers gpt-4o) n'accepte pas les PDF sur ce plan/cette
+// region ('image_url' rejette tout MIME hors image/*, et le mode 'file' natif OpenAI renvoie "File
+// input is not supported in this region") — voir le changement de fournisseur du 2026-08-04
+// (credit Anthropic epuise, cf. memoire projet_portfolio_audit).
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png'];
 const ALLOWED_TAGS = ['deductible', 'non-deductible', 'a-classifier'];
 const ALLOWED_CONFIANCE = ['haute', 'moyenne', 'basse'];
 
@@ -19,11 +23,13 @@ Règles fiscales françaises pour tagSuggestion (foncier réel) :
 
 Si une information est illisible ou absente, laisse une chaîne vide ("") pour date/description, 0 pour montant, et mets confiance à "basse".`;
 
-// Extraction IA d'une facture/devis (PDF ou photo) pour pré-remplir le formulaire d'ajout
-// d'un frais dans l'onglet Travaux (owned-portfolio.js, renderOwnedTravauxTab). Appelée à
-// l'identique depuis index.html (PC) et owned.html (mobile) — voir spec
-// docs/superpowers/specs/2026-08-04-onglet-travaux-refonte.md.
-exports.extraireFraisFacture = onCall({ secrets: [anthropicApiKey], region: 'europe-west1', timeoutSeconds: 60 }, async (request) => {
+// Extraction IA d'une photo de facture/devis pour pré-remplir le formulaire d'ajout d'un frais
+// dans l'onglet Travaux (owned-portfolio.js, renderOwnedTravauxTab) et le rail/FAB Actions
+// rapides. Appelée à l'identique depuis index.html (PC) et owned.html (mobile). Passe par
+// Mammouth AI (proxy OpenAI-compatible, modèle gpt-4o) plutôt que l'API Anthropic directe depuis
+// le 2026-08-04. Le User-Agent explicite est nécessaire : Mammouth est derrière Cloudflare et
+// bloque (403 / "error code 1010") les requêtes sans en-tête User-Agent de navigateur.
+exports.extraireFraisFacture = onCall({ secrets: [mammouthApiKey], region: 'europe-west1', timeoutSeconds: 60 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Authentification requise');
     }
@@ -33,30 +39,31 @@ exports.extraireFraisFacture = onCall({ secrets: [anthropicApiKey], region: 'eur
         throw new HttpsError('invalid-argument', 'Fichier manquant');
     }
     if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-        throw new HttpsError('invalid-argument', 'Format non supporté (PDF, JPG ou PNG uniquement)');
+        throw new HttpsError('invalid-argument', 'Format non supporté (JPG ou PNG uniquement)');
     }
-
-    const contentBlock = mimeType === 'application/pdf'
-        ? { type: 'document', source: { type: 'base64', media_type: mimeType, data: base64 } }
-        : { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } };
 
     let response;
     try {
-        response = await fetch('https://api.anthropic.com/v1/messages', {
+        response = await fetch('https://api.mammouth.ai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
-                'x-api-key': anthropicApiKey.value(),
-                'anthropic-version': '2023-06-01'
+                'authorization': `Bearer ${mammouthApiKey.value()}`,
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
             },
             body: JSON.stringify({
-                model: 'claude-sonnet-4-6',
-                max_tokens: 512,
-                system: SYSTEM_PROMPT,
-                messages: [{
-                    role: 'user',
-                    content: [contentBlock, { type: 'text', text: 'Extrait les informations de cette facture/devis de travaux.' }]
-                }]
+                model: 'gpt-4o',
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: SYSTEM_PROMPT },
+                    {
+                        role: 'user',
+                        content: [
+                            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+                            { type: 'text', text: 'Extrait les informations de cette facture/devis de travaux.' }
+                        ]
+                    }
+                ]
             })
         });
     } catch (err) {
@@ -66,12 +73,12 @@ exports.extraireFraisFacture = onCall({ secrets: [anthropicApiKey], region: 'eur
 
     if (!response.ok) {
         const errorBody = await response.text().catch(() => '<unreadable>');
-        logger.error('extraireFraisFacture: Anthropic API error', { status: response.status, body: errorBody, mimeType });
+        logger.error('extraireFraisFacture: Mammouth API error', { status: response.status, body: errorBody, mimeType });
         throw new HttpsError('internal', `Erreur IA (${response.status})`);
     }
 
     const data = await response.json();
-    const raw = data?.content?.[0]?.text?.trim();
+    const raw = data?.choices?.[0]?.message?.content?.trim();
     let parsed;
     try {
         parsed = JSON.parse(raw);
