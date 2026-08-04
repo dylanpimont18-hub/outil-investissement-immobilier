@@ -5675,6 +5675,12 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     display: grid;
     background: linear-gradient(180deg, rgba(197, 160, 89, 0.08), var(--surface) 12%, var(--surface) 100%);
 }
+/* Bug trouve le 2026-08-04 : grille a une seule colonne implicite (juste pour le gap) — sans
+   min-width:0, un enfant (ex. #owned-detail-view) garde le min-width:auto par defaut des items de
+   grille et s'elargit a son contenu le plus large (ex. une description de frais longue dans
+   l'onglet Travaux), debordant du conteneur .workspace-panel (overflow:clip) et rognant les
+   boutons a droite (modifier/supprimer) sur mobile. */
+#collection-panel > * { min-width: 0; }
 
 .form-zone {
     margin-bottom: 14px;
@@ -8689,7 +8695,8 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 [data-tooltip]:hover::after,
-[data-tooltip]:focus-within::after {
+[data-tooltip]:focus-within::after,
+[data-tooltip].tooltip-tap-open::after {
     opacity: 1;
 }
 /* Variante : tooltip vers le bas (pour éléments en sticky bar en haut de viewport) */
@@ -8720,7 +8727,8 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 [data-tooltip-below]:hover::after,
-[data-tooltip-below]:focus-within::after {
+[data-tooltip-below]:focus-within::after,
+[data-tooltip-below].tooltip-tap-open::after {
     opacity: 1;
 }
 
@@ -9619,6 +9627,10 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     color: var(--text-secondary);
     font-weight: 500;
 }
+.owned-synthese__card-label[data-tooltip] {
+    border-bottom: 1px dotted var(--text-tertiary, var(--muted));
+    width: fit-content;
+}
 
 .owned-synthese__card-value {
     font-family: 'IBM Plex Mono', monospace;
@@ -10160,7 +10172,10 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 }
 
 .owned-travaux-date { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-secondary); }
-.owned-travaux-desc { color: var(--text-primary); }
+/* min-width:0 + overflow-wrap : une description longue et sans espace (ex. un intitule de
+   facture colle) forcerait sinon la piste 1fr a s'elargir a son contenu (PC comme mobile) et
+   deborderait de la ligne. */
+.owned-travaux-desc { color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
 .owned-travaux-montant { font-family: 'IBM Plex Mono', monospace; font-weight: 600; text-align: right; }
 .owned-travaux-delete { color: var(--text-tertiary); font-size: 0.75rem; cursor: pointer; background: none; border: none; padding: 0 4px; }
 .owned-travaux-delete:hover { color: #F85149; }
@@ -11002,9 +11017,9 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     border-radius: var(--radius-md);
     margin-bottom: 4px;
 }
-.owned-dashboard-alert--error { background: rgba(239,68,68,.08); }
-.owned-dashboard-alert--warning { background: rgba(234,179,8,.08); }
-.owned-dashboard-alert--info { background: rgba(99,102,241,.06); }
+.owned-dashboard-alert--error { background: rgba(239,68,68,.08); border-left: 3px solid var(--danger); }
+.owned-dashboard-alert--warning { background: rgba(234,179,8,.08); border-left: 3px solid var(--warning, #eab308); }
+.owned-dashboard-alert--info { background: rgba(99,102,241,.06); border-left: 3px solid var(--info); }
 .owned-dashboard-no-alerts { font-size: .8rem; color: var(--success); margin-bottom: 12px; }
 
 /* Dashboard objectifs */
@@ -11120,6 +11135,9 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     overflow-x: auto;
     border-radius: 8px;
     border: 1px solid var(--border-subtle);
+}
+.owned-cf-table__toggle {
+    margin-top: 8px;
 }
 .owned-cf-table table {
     width: 100%;

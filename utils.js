@@ -1,6 +1,18 @@
 // Helpers partagés (formatage, échappement HTML, toast) — zéro dépendance sur state/nodes.
 // Utilisés par main.js et owned-portfolio.js.
 
+// [data-tooltip]/[data-tooltip-below] (styles.css) ne s'affichent qu'au survol souris (:hover /
+// :focus-within) : sur écran tactile (owned.html), sans hover, ces bulles sont invisibles — trouvé
+// lors de l'audit UX 2026-08-05 sur le libellé DSCR de l'onglet Calcul, partagé PC/mobile. Un seul
+// listener global ajoute un canal tap (classe .tooltip-tap-open) à TOUTES les bulles existantes et
+// futures, sans toucher au survol souris ni ajouter le moindre élément visuel.
+document.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-tooltip], [data-tooltip-below]');
+    const current = document.querySelector('.tooltip-tap-open');
+    if (current && current !== target) current.classList.remove('tooltip-tap-open');
+    if (target) target.classList.toggle('tooltip-tap-open');
+});
+
 export function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')

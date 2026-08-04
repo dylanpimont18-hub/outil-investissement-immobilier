@@ -1241,7 +1241,6 @@ function renderOwnedDashboard(list, profileData, regime) {
     const cfTone = totalCF >= 0 ? 'positive' : 'negative';
     const endettTone = endettement.tauxEndettement > 35 ? 'negative' : endettement.tauxEndettement > 30 ? 'watch' : 'positive';
     const prochainCredit = endettement.prochainCreditTermine;
-    const SEVERITY_ICON = { error: '🔴', warning: '🟡', info: '🔵' };
 
     // Projections objectifs
     const hasGoals = goals.cfCible > 0 || goals.patrimoineCible > 0;
@@ -1255,10 +1254,10 @@ function renderOwnedDashboard(list, profileData, regime) {
         <div class="owned-dashboard-head">
             <span class="owned-dashboard-title">Dashboard dirigeant</span>
             <div style="display:flex;gap:8px">
-                <button class="btn btn--ghost btn--sm" data-action="open-capacite">💳 Capacité d'emprunt</button>
-                <button class="btn btn--ghost btn--sm" data-action="open-objectifs">⚙ Objectifs</button>
-                <button class="btn btn--ghost btn--sm" data-action="open-rapport">📋 Rapport annuel</button>
-                <button class="btn btn--ghost btn--sm" data-action="open-declaration">📄 Déclaration fiscale</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-capacite">Capacité d'emprunt</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-objectifs">Objectifs</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-rapport">Rapport annuel</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-declaration">Déclaration fiscale</button>
             </div>
         </div>
 
@@ -1296,7 +1295,7 @@ function renderOwnedDashboard(list, profileData, regime) {
             <div class="owned-dashboard-section-title">Centre d'actions (${alerts.length})</div>
             ${alerts.map(a => `
             <div class="owned-dashboard-alert owned-dashboard-alert--${a.severity}">
-                ${SEVERITY_ICON[a.severity] || '•'} ${escapeHtml(a.msg)}
+                ${escapeHtml(a.msg)}
                 ${a.assetId ? `<button class="btn btn--ghost btn--xs" data-action="go-asset" data-id="${escapeHtml(a.assetId)}" title="Voir le bien" aria-label="Voir le bien concerné">→</button>` : ''}
             </div>`).join('')}
         </div>` : '<div class="owned-dashboard-no-alerts">✓ Aucune action en attente sur le portefeuille</div>'}
@@ -1944,7 +1943,7 @@ function renderOwnedPortfolioList() {
             }
 
             const sortArrow = key => sort?.criterion === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
-            const sortHeaderAttr = key => `data-sort-header="${key}" role="button" tabindex="0" title="Trier par ${SORT_LABELS[key]}"`;
+            const sortHeaderAttr = (key, tooltip) => `data-sort-header="${key}" role="button" tabindex="0" title="${tooltip ? tooltip + ' ' : ''}Trier par ${SORT_LABELS[key]}"`;
 
             nodes.ownedListTable.innerHTML = yearSelectorHtml + sortSelectorHtml + `
                 <table>
@@ -1955,7 +1954,7 @@ function renderOwnedPortfolioList() {
                             <th>Bien</th>
                             <th style="text-align:right" class="owned-col-sortable" ${sortHeaderAttr('cf')}>CF net/mois${sortArrow('cf')}</th>
                             <th style="text-align:right" class="owned-col-hideable owned-col-sortable" ${sortHeaderAttr('rendement')}>Rendement net${sortArrow('rendement')}</th>
-                            <th style="text-align:right" class="owned-col-hideable owned-col-sortable" ${sortHeaderAttr('dscr')}>DSCR${sortArrow('dscr')}</th>
+                            <th style="text-align:right" class="owned-col-hideable owned-col-sortable" ${sortHeaderAttr('dscr', 'DSCR : capacité de remboursement par le loyer (loyers ÷ mensualité crédit). Au-dessus de 1, le loyer couvre le crédit.')}>DSCR${sortArrow('dscr')}</th>
                             <th>Statut</th>
                             <th></th>
                         </tr>
@@ -2785,6 +2784,9 @@ function renderOwnedVerdictBlock(asset) {
     });
 }
 
+const CF_TABLE_YEARS_COLLAPSED = 5;
+const expandedCfTables = new Set(); // ids d'actifs dont on a demandé les 20 années (état en mémoire, non persisté)
+
 function renderOwnedCfTable(asset) {
     const wrap = nodes.ownedCfTableWrap || document.getElementById('owned-cf-table-wrap');
     if (!wrap) return;
@@ -2797,8 +2799,10 @@ function renderOwnedCfTable(asset) {
     if (!years || !years.length) { wrap.innerHTML = ''; return; }
 
     const first20 = years.slice(0, 20);
+    const isExpanded = expandedCfTables.has(asset.id);
+    const visibleYears = isExpanded ? first20 : first20.slice(0, CF_TABLE_YEARS_COLLAPSED);
     const hasApportYear = first20.some(y => (y.apportAnnee || 0) > 0);
-    const rows = first20.map(y => {
+    const rows = visibleYears.map(y => {
         const cf = y.cfAnnuel ?? y.cfNet ?? 0;
         const cfCls = cf >= 0 ? 'positive' : 'negative';
         const cfSign = cf >= 0 ? '+' : '';
@@ -2833,8 +2837,16 @@ function renderOwnedCfTable(asset) {
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+            ${first20.length > CF_TABLE_YEARS_COLLAPSED ? `<button type="button" class="btn btn--ghost btn--sm owned-cf-table__toggle" data-action="toggle-cf-table">${isExpanded ? 'Réduire' : `Voir les ${first20.length} années`}</button>` : ''}
         </div>
     `;
+
+    wrap.querySelector('[data-action="toggle-cf-table"]')?.addEventListener('click', () => {
+        if (isExpanded) expandedCfTables.delete(asset.id);
+        else expandedCfTables.add(asset.id);
+        const fresh = getOwnedAsset(asset.id);
+        if (fresh) renderOwnedCfTable(fresh);
+    });
 }
 
 const _isImageFilename = filename => /\.(jpe?g|png)$/i.test(filename || '');
@@ -3701,7 +3713,7 @@ function renderOwnedCalculTab(asset) {
                 <span class="owned-synthese__card-value">${r.rentaBrute.toFixed(1).replace('.', ',')} %</span>
             </div>
             <div class="owned-synthese__card">
-                <span class="owned-synthese__card-label">DSCR</span>
+                <span class="owned-synthese__card-label" data-tooltip="Capacité de remboursement par le loyer : loyers ÷ mensualité crédit. Au-dessus de 1, le loyer couvre intégralement le crédit.">DSCR</span>
                 <span class="owned-synthese__card-value ${dscrTone ? `owned-synthese__card-value--${dscrTone}` : ''}">
                     ${r.dscr.toFixed(2).replace('.', ',')}
                 </span>
@@ -4099,6 +4111,15 @@ function renderAccordionPostAchat(asset) {
     const displayPNO = ceDisplay ? (ceDisplay.assurancePNO ?? post.assurancePNO ?? 0) : (post.assurancePNO ?? 0);
     const displayCopro = ceDisplay ? (ceDisplay.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0);
     const displayFromYear = ceDisplay ? ceDisplay.annee : null;
+    // Charges copro n'a de sens que pour un bien en copropriete (appartement/immeuble) : masquee
+    // pour une maison plutot que laissee a 0 sans explication. Gestion locative peut concerner
+    // n'importe quel type de bien (agence pour une maison aussi) : case a cocher + montant
+    // revele au lieu d'un champ toujours visible, pour ne pas donner l'impression que 0 = "non
+    // renseigne" alors que 0 = "pas de gestion locative" est le cas courant. Voir demande
+    // utilisateur du 2026-08-04.
+    const typeBienPostAchat = asset.acquisition?.typeBien || 'appartement';
+    const isMaisonPostAchat = typeBienPostAchat === 'maison';
+    const hasGestionLocative = displayGestion > 0;
 
     nodes.accPostAchatContent.innerHTML = `
         <div class="owned-section-title">Charges récurrentes</div>
@@ -4118,14 +4139,18 @@ function renderAccordionPostAchat(asset) {
                 <span class="variables-label">Taxe foncière (€/an)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
                 <input class="variables-input" type="number" min="0" step="10" data-post-field="taxeFonciere" value="${displayTF}">
             </label>
+            ${isMaisonPostAchat ? '' : `
             <label class="variables-field">
                 <span class="variables-label">Charges copro (€/mois)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
                 <input class="variables-input" type="number" min="0" step="5" data-post-field="chargesCopro" value="${displayCopro}">
-            </label>
-            <label class="variables-field">
-                <span class="variables-label">Gestion locative (% loyer)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
-                <input class="variables-input" type="number" min="0" max="20" step="0.5" data-post-field="gestionLocative" value="${displayGestion}">
-            </label>
+            </label>`}
+            <div class="variables-field">
+                <span class="variables-label" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" data-gestion-toggle ${hasGestionLocative ? 'checked' : ''}>
+                    Gestion locative${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}
+                </span>
+                <input class="variables-input" type="number" min="0" max="20" step="0.5" placeholder="% loyer" data-post-field="gestionLocative" value="${displayGestion}" ${hasGestionLocative ? '' : 'hidden'}>
+            </div>
             <label class="variables-field">
                 <span class="variables-label">Assurance PNO (€/an)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
                 <input class="variables-input" type="number" min="0" step="10" data-post-field="assurancePNO" value="${displayPNO}">
@@ -4267,6 +4292,23 @@ function renderAccordionPostAchat(asset) {
             renderOwnedCalculTab(fresh);
             renderAccordionSimulateur(fresh);
         });
+    });
+
+    // Case a cocher "Gestion locative" : revele/masque le champ montant sur place. Decocher remet
+    // le montant a 0 en redeclenchant un 'change' natif sur le champ (deja cable juste au-dessus
+    // via [data-post-field]) pour reutiliser exactement la meme logique de sauvegarde/sync que la
+    // saisie manuelle, plutot que de la dupliquer ici.
+    nodes.accPostAchatContent.querySelector('[data-gestion-toggle]')?.addEventListener('change', e => {
+        const amountInput = nodes.accPostAchatContent.querySelector('[data-post-field="gestionLocative"]');
+        if (!amountInput) return;
+        if (e.target.checked) {
+            amountInput.hidden = false;
+            amountInput.focus();
+        } else {
+            amountInput.hidden = true;
+            amountInput.value = 0;
+            amountInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
     });
 
     nodes.accPostAchatContent.querySelector('[data-action="goto-travaux-tab"]')?.addEventListener('click', () => {
