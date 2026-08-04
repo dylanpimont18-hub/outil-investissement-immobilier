@@ -24,7 +24,9 @@ To build the distributable: run `build.bat`.
 | `spark.spec` | PyInstaller build config |
 | `build.bat` | Build script → `dist/Spark/Spark.exe` |
 | `index.html` | Complete HTML structure with all panels and forms pre-declared |
-| `main.js` | App shell: state management, DOM wiring, rendering, cross-window sync |
+| `main.js` | App shell: state management, DOM wiring, cross-window sync, Analyse tab + comparator. Delegates the owned-portfolio module to `owned-portfolio.js` |
+| `owned-portfolio.js` | Owned-assets portfolio module (CRUD, list/detail rendering, dashboard, modals). Receives `state`/`nodes` from `main.js` by reference via `initOwnedPortfolio(deps)`, called before the first `render()` |
+| `utils.js` | Shared formatting/escaping/toast helpers, no `state`/`nodes` dependency — imported by `main.js` and `owned-portfolio.js` |
 | `calculs.js` | Pure financial engine — all calculations, zero DOM access |
 | `pdf.js` | Generates the printable decision PDF as a standalone HTML string |
 | `scanner.js` | Scanner UI: triggers scraper, polls status, renders results table |
@@ -51,21 +53,22 @@ To build the distributable: run `build.bat`.
 
 The app supports a split-screen mode where the analysis panel opens in a second popup window (`?panel=analysis`). State synchronizes between windows via `BroadcastChannel` (with `localStorage` as fallback). The `IS_ANALYSIS_WINDOW` flag in `main.js` controls which panels are shown.
 
-### Key state shape (`state` object in `main.js`)
+### Key state shape (`state` object in `main.js`, passed by reference into `owned-portfolio.js`)
 
 - `variablesData` — current study inputs (all form fields, sanitized)
-- `assetRecords[]` — saved studies (comparator + portfolio)
-- `activeAssetId` — which saved record is currently loaded
+- `assetRecords[]` — saved comparator studies only (draft/candidate deals under analysis, unrelated to the owned portfolio)
+- `activeAssetId` — which saved comparator record is currently loaded
+- `ownedAssets`, `activeOwnedAssetId`, `ownedOrder`, `ownedCompact`, `ownedYearFilters`, `ownedLoyerPage` — owned-portfolio state, read/written by `owned-portfolio.js`
 - `profileData` — household profile (income, adults, children) used for tax calculations
 - `theme`, `screens` — UI preferences
 
 ### Financial engine (`calculs.js`)
 
 - `computeAnalysisViewModel(inputs)` — main entry point for single-asset analysis; returns all metrics, decisions, scenarios, charts data
-- `computePortfolioViewModel(assetRecords, profile, activeId, refInputs)` — consolidated portfolio view
 - `computeCF(prixVendeur, loyer, inputs, tmi)` — core net-net cash-flow function used throughout
 - `computeProjectMetrics(inputs)` — per-asset KPIs (rentaBrute, rentaNette, dscr, grm, coc…)
 - `computeResaleTimeline(...)` — resale gain projection (used in `pdf.js`)
+- `computeOwnedAssetCF`, `computeOwnedAssetTimeline`, `computeCFBreakdown`, `computeRegimeComparison`, `computePortfolioAlerts`, etc. — owned-portfolio-specific, imported by `owned-portfolio.js`
 - Tax logic handles three regimes: `micro-foncier`, `reel` (foncier réel), `sci-is`
 
 ### Scraper (`scraper/`)
@@ -98,10 +101,19 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
 - Spacing is a 4px grid; corner radii: 8px (components), 12px (cards)
 - Both themes are applied via `data-theme="light|dark"` on `<html>`
 
+## Testing
+
+- **`calculs.js` unit tests** (`tests/*.mjs`) — pure functions, run individually with `node tests/xxx.mjs`, or all at once with `npm test`. No test framework, just `node:assert/strict` + plain `console.log`. Always run the full suite before claiming a `calculs.js` change is correct.
+- **Browser testing (Playwright)** — installed 2026-08-04 (`npm install`, browser via `npx playwright install chromium`) specifically to verify UI changes *actually work* in a real browser instead of relying on static code reading, which previously missed a real bug (a pre-existing `if (IS_MOBILE_PAGE) { ...; return; }` early-exit silently skipped newly-added code placed after it in the same function — invisible from reading the diff alone, only surfaced by actually clicking in a rendered page).
+  - The owned-portfolio pages require Firebase Auth + a real Firestore account, which a test run doesn't have. **Don't try to log in for real** — instead intercept the `owned-cloud.js` module request (`page.route('**/owned-cloud.js', route => route.fulfill({...}))`) and serve a stub that calls back `watchAuth`/`watchOwnedAssets`/`watchPortfolioMeta` synchronously (or via `setTimeout`) with fake data shaped like the real thing. This drives the real `owned-portfolio.js`/`calculs.js` app code in a real Chromium page without ever touching the real Firebase project or the user's real data.
+  - Start `python server.py` first (serves on `http://127.0.0.1:8080`), point Playwright at `http://127.0.0.1:8080/index.html` or `/owned.html`, and use `page.on('pageerror', ...)`/`page.on('console', ...)` to catch anything a human wouldn't necessarily report precisely.
+  - Use `newPage({ viewport: { width: 393, height: 852 } })` to approximate an iPhone when testing `owned.html`/mobile-only behavior (`IS_MOBILE_PAGE`).
+  - This is local dev tooling only — `node_modules/` is gitignored and already excluded from `firebase deploy` (see `firebase.json`); never rely on it being present in production.
+
 ## Important conventions
 
 - All user-facing text is in French.
-- HTML is built via template literals in `main.js` — always run user content through `escapeHtml()` before injecting.
+- HTML is built via template literals in `main.js`/`owned-portfolio.js` — always run user content through `escapeHtml()` (from `utils.js`) before injecting.
 - New form fields require entries in: `VARIABLE_DEFAULTS`, `VARIABLE_KEYS` (derived), `sanitizeVariablesData()`, and the corresponding `<fieldset>` in `index.html`.
 - `calculs.js` exports are pure functions — keep them free of DOM, `localStorage`, and `window` references.
 - `computeAnalysisViewModel` is called on every keystroke; keep it synchronous and fast.

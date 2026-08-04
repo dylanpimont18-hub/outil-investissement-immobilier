@@ -33,3 +33,7 @@ geocache.json
 # Firebase CLI (cache local de deploy, pas de secret dedans mais inutile a versionner)
 .firebase/
 firebase-debug.log
+
+# Node (tooling de test uniquement — Playwright pour verifier l'app dans un vrai navigateur,
+# voir CLAUDE.md section Testing. Deja exclu du deploy Firebase via firebase.json.)
+node_modules/
