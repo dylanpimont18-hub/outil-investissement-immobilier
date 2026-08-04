@@ -2,39 +2,141 @@
 // onglets Acquisition/Exploitation/Travaux/Projection) et evenements. Extrait de main.js (axe 3).
 //
 // Interface : initOwnedPortfolio(deps) doit etre appelee en tout premier (avant le premier render()),
-// avec { state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW } (les memes objets partages que main.js,
-// passes par reference) — renderCollections() en depend des le premier rendu. initOwnedPortfolioEvents()
+// avec { state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE } (les memes objets partages
+// que main.js, passes par reference) — renderCollections() en depend des le premier rendu.
+// IS_MOBILE_PAGE (true depuis owned-entry.js, false depuis main.js) fait sauter dashboard/carte/
+// graphiques/comparaison regimes/diagnostic IA dans le rendu, pour ne garder sur owned.html (page
+// iPhone) que la saisie/edition d'un bien + le detail du calcul du CF net-net. initOwnedPortfolioEvents()
 // cable les listeners persistants et doit etre appelee separement, au meme moment que dans main.js
 // avant l'extraction (apres le rendu initial). renderCollections() est ensuite appelee a chaque cycle
 // de rendu par main.js.
 
 import {
-    calculateTMI, computeOwnedAssetCF, computeOwnedAssetTimeline, computeAmortizationSchedule,
+    computeOwnedAssetCF, computeOwnedAssetTimeline, computeAmortizationSchedule,
     computePatrimoineNet, computeEndettementGlobal, computeCapaciteEmprunt, getOptimalRegime,
     computeRevenusLocatifsBruts, computeCompteResultat, computePortfolioAlerts,
     computeSimulationTravaux, computeCFBreakdown, computeRegimeComparison, resolveLoyerVacance,
-    computeDeclaration2044
+    computeDeclaration2044, parseDateAchat, computeDeficitFoncierHistorique,
+    computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer
 } from './calculs.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency } from './utils.js';
+import {
+    watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
+    watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
+    cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture
+} from './owned-cloud.js';
 
-let state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW;
+let state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
+
+// Affichage de dateAchat ('YYYY-MM', voir parseDateAchat dans calculs.js) au format français MM/YYYY.
+// Accepte aussi une année brute (biens saisis avant l'ajout du mois précis) : affichée telle quelle.
+function formatDateAchat(dateAchat) {
+    if (typeof dateAchat === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(dateAchat)) {
+        const [annee, mois] = dateAchat.split('-');
+        return `${mois}/${annee}`;
+    }
+    return dateAchat ? String(dateAchat) : '';
+}
+
+// Cache local tenu a jour par les abonnements temps reel Firestore (onSnapshot). loadOwnedAssets()/
+// loadPortfolioGoals() le lisent de facon synchrone (comme avant, quand la source etait localStorage) ;
+// saveOwnedAssets()/savePortfolioGoals() l'ecrivent de facon optimiste puis poussent un diff vers
+// Firestore en arriere-plan (fire-and-forget) — voir _initCloudSync.
+let _assetsCache = {};
+let _metaCache = {};
+let _authUser = null;
+let _cloudLoaded = false; // premier snapshot ownedAssets recu depuis la connexion
+let _metaLoaded = false; // premier snapshot portfolioMeta (regime/profil/ordre) recu depuis la connexion
 
 export function initOwnedPortfolio(deps) {
     state = deps.state;
     nodes = deps.nodes;
     STORAGE_KEYS = deps.STORAGE_KEYS;
     IS_ANALYSIS_WINDOW = deps.IS_ANALYSIS_WINDOW;
+    IS_MOBILE_PAGE = !!deps.IS_MOBILE_PAGE;
+    _initCloudSync();
+}
+
+// Un seul compte Firebase pour tout le portefeuille (PC + iPhone) ; tant que personne n'est
+// connecte, renderCollections() affiche la grille de connexion (_renderAuthGate) a la place.
+let _unsubAssets = null, _unsubMeta = null;
+function _initCloudSync() {
+    watchAuth(user => {
+        _authUser = user;
+        if (_unsubAssets) { _unsubAssets(); _unsubAssets = null; }
+        if (_unsubMeta) { _unsubMeta(); _unsubMeta = null; }
+        if (!user) {
+            _assetsCache = {};
+            _metaCache = {};
+            _cloudLoaded = false;
+            _metaLoaded = false;
+            renderCollections();
+            return;
+        }
+        _unsubAssets = watchOwnedAssets(map => {
+            _assetsCache = map;
+            _cloudLoaded = true;
+            renderCollections();
+        }, () => showToast('Connexion au portefeuille cloud impossible — vérifiez votre connexion internet', 'negative'));
+        _unsubMeta = watchPortfolioMeta(meta => {
+            _metaCache = meta || {};
+            _metaLoaded = true;
+            if (_metaCache.order) state.ownedOrder = _metaCache.order;
+            if (_metaCache.regime) state.ownedRegime = _metaCache.regime;
+            // Profil du foyer (income/adults/children, seuls champs qui pilotent le TMI donc les
+            // impots dans le CF net-net) : synchronise via Firestore comme order/regime, pour que
+            // owned.html (iPhone, sans formulaire Profil) calcule le meme CF net-net apres impot
+            // que index.html (PC, seul endroit ou le profil s'edite). Voir syncProfileToCloud().
+            if (_metaCache.profile) {
+                state.profileData = { ...state.profileData, ...(_metaCache.profile) };
+            } else if (state.profileConfigured) {
+                // Bootstrap : le cloud n'a encore jamais recu de profil (premiere connexion depuis
+                // ce mecanisme), mais celui-ci est deja configure localement (PC uniquement —
+                // owned-entry.js/owned.html ne pose jamais profileConfigured=true) -> on le pousse.
+                syncProfileToCloud();
+            }
+            renderCollections();
+        }, () => {});
+    });
+}
+
+// Pousse le profil du foyer vers Firestore, pour que owned.html (iPhone) reste aligne sur celui
+// saisi sur index.html (PC) — desormais editable des deux cotes via l'onglet Profil (voir
+// renderOwnedProfilTab), donc synchronise dans son integralite (pas seulement income/adults/
+// children comme avant l'ajout du revenu historise) : nom, revenus (historique), composition du
+// foyer, objectifs, et autres credits (utilises par le taux d'endettement global).
+// Appelee par main.js->saveProfileData() et par saveOwnedProfileData() (onglet Profil) a chaque
+// sauvegarde ; no-op si non connecte (le profil reste alors purement local a l'appareil).
+export function syncProfileToCloud() {
+    if (!_authUser || !state?.profileData) return;
+    const { name = '', income = 0, adults = 2, children = 0, revenuHistorique = [], objectifCF = 1000, revaloAnnuelle = 2, autresCredits = [] } = state.profileData;
+    const profile = { name, income, adults, children, revenuHistorique, objectifCF, revaloAnnuelle, autresCredits };
+    _metaCache = { ..._metaCache, profile };
+    cloudSaveMeta({ profile }).catch(() => {});
 }
 
 export { initOwnedPortfolioEvents };
 
 function loadOwnedAssets() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedAssets)) || {}; }
-    catch { return {}; }
+    // Copie profonde jetable : tout le fichier mute librement l'objet retourne puis appelle
+    // saveOwnedAssets() pour committer — reproduit exactement le contrat de l'ancien
+    // JSON.parse(localStorage...) qui recreait deja un objet frais a chaque appel.
+    return JSON.parse(JSON.stringify(_assetsCache));
 }
 
 function saveOwnedAssets(assets) {
-    localStorage.setItem(STORAGE_KEYS.ownedAssets, JSON.stringify(assets));
+    const prev = _assetsCache;
+    _assetsCache = assets;
+    if (!_authUser) return;
+    const ids = new Set([...Object.keys(prev), ...Object.keys(assets)]);
+    for (const id of ids) {
+        const had = id in prev, has = id in assets;
+        if (has && (!had || JSON.stringify(prev[id]) !== JSON.stringify(assets[id]))) {
+            cloudSetAsset(id, assets[id]).catch(() => showToast('Échec de synchronisation — modification non sauvegardée', 'negative'));
+        } else if (had && !has) {
+            cloudDeleteAssetDoc(id).catch(() => {});
+        }
+    }
 }
 
 function createOwnedAssetId() {
@@ -51,11 +153,11 @@ function createOwnedAsset(nom, ville) {
         adresse: '',
         lat: null,
         lng: null,
-        anneeAchat: null,
+        dateAchat: null,
         acquisition: {
             prix: 0, fraisAgence: 0, fraisNotaire: 0, loyerInitial: 0,
             surface: 0, typeBien: 'appartement',
-            credit: { montant: 0, duree: 0, taux: 0, assurance: 0 }
+            credit: { montant: 0, duree: 0, taux: 0, assurance: 0, assuranceMode: 'initial' }
         },
         postAchat: {
             taxeFonciere: 0, chargesCopro: 0, gestionLocative: 0, assurancePNO: 0,
@@ -89,7 +191,7 @@ function deleteOwnedAsset(id) {
     const all = loadOwnedAssets();
     delete all[id];
     saveOwnedAssets(all);
-    fetch(`/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+    cloudDeleteAllDocuments(id).catch(() => {});
 }
 
 function updateOwnedAcquisition(id, patch) {
@@ -155,7 +257,12 @@ function addOwnedTravail(assetId, travail) {
         tag: ['deductible', 'non-deductible', 'a-classifier'].includes(travail.tag) ? travail.tag : 'a-classifier',
         commentaire: travail.commentaire || '',
         pdfFilename: travail.pdfFilename || null,
-        credit: travail.credit || null
+        credit: travail.credit || null,
+        // Frais inclus dans l'enveloppe du crédit immobilier principal (pas payé cash) : reste
+        // déductible fiscalement l'année où la dépense a eu lieu, mais n'est plus retranché du
+        // cash-flow ici — la mensualité du crédit rembourse déjà cette part au fil des années
+        // (calculs.js, resolveTravauxAnnee) ; sans quoi le montant serait décompté deux fois.
+        financeParCredit: !!travail.financeParCredit
     };
     all[assetId].postAchat.travaux.push(entry);
     saveOwnedAssets(all);
@@ -177,7 +284,10 @@ function updateOwnedTravail(assetId, travailId, patch) {
         description: patch.description ?? current.description,
         montant: patch.montant != null ? Math.max(0, Number(patch.montant) || 0) : current.montant,
         tag: ['deductible', 'non-deductible', 'a-classifier'].includes(patch.tag) ? patch.tag : current.tag,
-        commentaire: patch.commentaire ?? current.commentaire
+        commentaire: patch.commentaire ?? current.commentaire,
+        // undefined = champ absent du patch, ne pas toucher ; null = retirer le justificatif.
+        pdfFilename: patch.pdfFilename !== undefined ? patch.pdfFilename : current.pdfFilename,
+        financeParCredit: patch.financeParCredit !== undefined ? !!patch.financeParCredit : current.financeParCredit
     };
     saveOwnedAssets(all);
     return list[idx];
@@ -190,19 +300,12 @@ function deleteOwnedTravail(assetId, travailId) {
     all[assetId].postAchat.travaux = all[assetId].postAchat.travaux.filter(t => t.id !== travailId);
     saveOwnedAssets(all);
     if (entry?.pdfFilename) {
-        fetch(`/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(entry.pdfFilename)}`, { method: 'DELETE' }).catch(() => {});
+        cloudDeleteDocument(assetId, entry.pdfFilename).catch(() => {});
     }
 }
 
 async function uploadOwnedDocument(assetId, file) {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch(`/api/documents/${encodeURIComponent(assetId)}/upload`, { method: 'POST', body: fd });
-    const json = await res.json();
-    if (!res.ok || !json.filename) {
-        throw new Error(json.error || 'upload_failed');
-    }
-    return json.filename;
+    return cloudUploadDocument(assetId, file);
 }
 
 function addOwnedNote(assetId, text) {
@@ -276,12 +379,7 @@ async function geocodeOwnedAsset(assetId, adresse, hintEl) {
     }
     if (hintEl) hintEl.textContent = 'Localisation en cours…';
     try {
-        const res = await fetch('/api/geocode/address', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adresse: clean })
-        });
-        const json = await res.json();
+        const json = await cloudGeocode(clean);
         const lat = json?.lat ?? null;
         const lng = json?.lng ?? null;
         updateOwnedAsset(assetId, { lat, lng });
@@ -296,29 +394,12 @@ async function geocodeOwnedAsset(assetId, adresse, hintEl) {
     }
 }
 
-function addOwnedDeficitFoncier(assetId, entry) {
-    const all = loadOwnedAssets();
-    if (!all[assetId]) return;
-    const post = all[assetId].postAchat || {};
-    const list = (post.deficitFoncierReporte || []).filter(e => e.annee !== entry.annee);
-    list.push({ annee: Number(entry.annee), montantInitial: Number(entry.montantInitial) || 0, utilise: Number(entry.utilise) || 0 });
-    list.sort((a, b) => b.annee - a.annee);
-    updateOwnedPostAchat(assetId, { deficitFoncierReporte: list });
-}
-
-function deleteOwnedDeficitFoncier(assetId, annee) {
-    const all = loadOwnedAssets();
-    if (!all[assetId]) return;
-    const post = all[assetId].postAchat || {};
-    updateOwnedPostAchat(assetId, { deficitFoncierReporte: (post.deficitFoncierReporte || []).filter(e => e.annee !== annee) });
-}
-
-const STORAGE_GOALS = 'investissementWebPortfolioGoals';
 function loadPortfolioGoals() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_GOALS)) || {}; } catch { return {}; }
+    return _metaCache.goals || {};
 }
 function savePortfolioGoals(goals) {
-    localStorage.setItem(STORAGE_GOALS, JSON.stringify(goals));
+    _metaCache = { ..._metaCache, goals };
+    if (_authUser) cloudSaveMeta({ goals }).catch(() => showToast('Échec de synchronisation des objectifs', 'negative'));
 }
 
 function addOwnedScenario(assetId) {
@@ -391,15 +472,14 @@ function _showOwnedModal(html, id = 'owned-generic-modal') {
 function openCompteResultatModal(assetId) {
     const asset = getOwnedAsset(assetId);
     if (!asset) return;
-    const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+    const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
     const currentYear = new Date().getFullYear();
     const annees = [];
     for (let y = anneeAchat; y <= currentYear; y++) annees.push(y);
 
     function renderCR(annee) {
-        const cr = computeCompteResultat(asset, annee, tmi, regime);
+        const cr = computeCompteResultat(asset, annee, state.profileData, regime);
         const signCR = v => v >= 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR');
         const cfTone = cr.cfReel >= 0 ? 'color:var(--success)' : 'color:var(--danger)';
         return `
@@ -467,12 +547,11 @@ function openCompteResultatModal(assetId) {
 function openSimulationTravauxModal(assetId) {
     const asset = getOwnedAsset(assetId);
     if (!asset) return;
-    const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
     const currentYear = new Date().getFullYear();
 
     function renderSimu(montant, annee, deductible) {
-        const sim = computeSimulationTravaux(asset, montant, annee, deductible, tmi, regime);
+        const sim = computeSimulationTravaux(asset, montant, annee, deductible, state.profileData, regime);
         const rn = v => v >= 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR');
         return `
         <div class="cr-section">
@@ -499,7 +578,7 @@ function openSimulationTravauxModal(assetId) {
                     </label>
                     <label class="variables-field">
                         <span class="variables-label">Année de réalisation</span>
-                        <input class="variables-input" type="number" id="simu-annee" min="${asset.anneeAchat || 2020}" max="${currentYear + 5}" value="${currentYear}">
+                        <input class="variables-input" type="number" id="simu-annee" min="${parseDateAchat(asset.dateAchat).annee}" max="${currentYear + 5}" value="${currentYear}">
                     </label>
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.85rem">
@@ -525,9 +604,7 @@ function openSimulationTravauxModal(assetId) {
 
 function openCapaciteEmpruntModal() {
     const assets = Object.values(loadOwnedAssets());
-    const tmi = getOwnedTmi();
-    const regime = getOwnedRegime();
-    const revenusMens = (state.profileData?.income || 0) / 12;
+    const revenusMens = resolveRevenuFoyer(state.profileData, new Date().getFullYear()) / 12;
     const endettement = computeEndettementGlobal(assets, revenusMens, state.profileData?.autresCredits || []);
 
     function renderCapacite(duree, taux, apport) {
@@ -629,7 +706,7 @@ function openRapportAnnuelModal() {
     const regime = getOwnedRegime();
     const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
     const currentYear = new Date().getFullYear();
-    const anneeMin = assets.reduce((m, a) => Math.min(m, a.anneeAchat || currentYear), currentYear);
+    const anneeMin = assets.reduce((m, a) => Math.min(m, parseDateAchat(a.dateAchat).annee), currentYear);
 
     function buildRapport(annee) {
         if (!assets.length) return '<p style="color:var(--text-tertiary);text-align:center">Aucun bien dans le portefeuille.</p>';
@@ -641,7 +718,7 @@ function openRapportAnnuelModal() {
             const post = a.postAchat || {};
             const sc = getOwnedDefaultScenario(a);
             const r = computeOwnedAssetCF(a, { ...sc.variables, regime }, tmi);
-            const cr = computeCompteResultat(a, annee, tmi, regime);
+            const cr = computeCompteResultat(a, annee, state.profileData, regime);
             const pn = computePatrimoineNet(a);
 
             totalValeur += acq.valeurEstimee || 0;
@@ -656,7 +733,7 @@ function openRapportAnnuelModal() {
 
         const patNet = totalValeur - totalCRD;
         const cfAnnuel = assets.reduce((sum, a) => {
-            const { years } = computeOwnedAssetTimeline(a, tmi, regime);
+            const { years } = computeOwnedAssetTimeline(a, state.profileData, regime);
             const row = years.find(y => y.year === annee) || years[years.length - 1];
             return sum + (row ? row.cfAnnuel : 0);
         }, 0);
@@ -729,10 +806,9 @@ FISCALITÉ
 // affiche une explication + recommandation expert-comptable plutôt qu'un mapping non fiabilisé.
 function openDeclarationFiscaleModal() {
     const assets = Object.values(loadOwnedAssets()).filter(a => (a.acquisition?.prix || 0) > 0);
-    const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
     const currentYear = new Date().getFullYear();
-    const anneeMin = assets.reduce((m, a) => Math.min(m, a.anneeAchat || currentYear), currentYear);
+    const anneeMin = assets.reduce((m, a) => Math.min(m, parseDateAchat(a.dateAchat).annee), currentYear);
     const annees = [];
     for (let y = Math.max(anneeMin, currentYear - 5); y <= currentYear; y++) annees.push(y);
 
@@ -740,7 +816,7 @@ function openDeclarationFiscaleModal() {
 
     function buildReel(annee) {
         if (!assets.length) return `<p style="color:var(--text-tertiary);text-align:center">Aucun bien avec un prix d'achat renseigné.</p>`;
-        const decl = computeDeclaration2044(assets, annee, tmi);
+        const decl = computeDeclaration2044(assets, annee, state.profileData);
         const fmt = v => v.toLocaleString('fr-FR') + ' €';
         return `<pre class="rapport-text">
 ═══════════════════════════════════════════
@@ -828,18 +904,328 @@ POINTS À VÉRIFIER VOUS-MÊME
     }
 }
 
+// ─── ONGLET IMPÔT (vue liste) ────────────────────────────────────────────────
+// Reprend le revenu salarial du profil (déjà net imposable, après abattement 10 % — saisi tel quel
+// par l'utilisateur) + le revenu foncier imposable du portefeuille, et calcule l'IR au barème
+// progressif tranche par tranche (computeImpotFoyer, calculs.js) — pas juste la TMI en taux plat.
+function renderOwnedImpotTab() {
+    const el = document.getElementById('owned-impot-content');
+    if (!el) return;
+
+    const assets = Object.values(loadOwnedAssets()).filter(a => (a.acquisition?.prix || 0) > 0);
+    const regime = getOwnedRegime();
+    const foyer = { adults: state.profileData?.adults || 2, children: state.profileData?.children || 0 };
+    const currentYear = new Date().getFullYear();
+    const anneeMin = assets.length
+        ? assets.reduce((m, a) => Math.min(m, parseDateAchat(a.dateAchat).annee), currentYear)
+        : currentYear;
+    const annees = [];
+    for (let y = Math.max(anneeMin, currentYear - 5); y <= currentYear; y++) annees.push(y);
+
+    const fmt = v => Math.round(v).toLocaleString('fr-FR') + ' €';
+    const REGIME_LABEL = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI à l\'IS' };
+
+    function build(annee) {
+        // Revenu salarial résolu pour l'ANNÉE VISÉE par le sélecteur (pas le revenu actuel) :
+        // cet onglet reconstruit l'impôt d'une année fiscale précise, voir revenuHistorique.
+        const revenuSalarial = resolveRevenuFoyer(state.profileData, annee);
+        if (!revenuSalarial && !assets.length) {
+            return `<p style="color:var(--text-tertiary);text-align:center">Renseignez vos revenus salariaux (onglet Profil) et au moins un bien avec un prix d'achat pour voir l'estimation.</p>`;
+        }
+        const foncier = computeRevenuFoncierPortefeuille(assets, annee, state.profileData, regime);
+        const impot = computeImpotFoyer(revenuSalarial, foncier.revenuFoncierImposable, foyer);
+
+        const trancheRows = impot.tranches.map(t => `
+            <tr>
+                <td>${fmt(t.seuilBas)} – ${t.seuilHaut !== null ? fmt(t.seuilHaut) : '∞'}</td>
+                <td>${t.taux} %</td>
+                <td>${fmt(t.montantImposable)}</td>
+                <td>${fmt(t.impot)}</td>
+            </tr>`).join('');
+
+        return `
+            <div class="owned-alert owned-alert--info">
+                ⚠ Estimation indicative basée sur vos données saisies — barème IR ${annee} appliqué tranche par tranche, décote incluse.
+                Ne prend pas en compte : autres revenus (dividendes, BIC…), autres crédits/réductions d'impôt, cas particuliers de plafonnement (parent isolé, invalidité, veuvage).
+                Ne remplace pas votre avis d'imposition réel.
+            </div>
+
+            <div class="owned-dashboard-kpis">
+                <div class="owned-dashboard-kpi">
+                    <span class="owned-dashboard-kpi__label">Revenu salarial net imposable</span>
+                    <span class="owned-dashboard-kpi__value">${fmt(impot.revenuSalarial)}</span>
+                </div>
+                <div class="owned-dashboard-kpi">
+                    <span class="owned-dashboard-kpi__label">Revenu foncier imposable (${REGIME_LABEL[regime]})</span>
+                    <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--${impot.revenuFoncierImposable >= 0 ? 'positive' : 'negative'}">${impot.revenuFoncierImposable >= 0 ? '+' : ''}${fmt(impot.revenuFoncierImposable)}</span>
+                </div>
+                <div class="owned-dashboard-kpi">
+                    <span class="owned-dashboard-kpi__label">Revenu net global imposable</span>
+                    <span class="owned-dashboard-kpi__value">${fmt(impot.revenuGlobal)}</span>
+                </div>
+                <div class="owned-dashboard-kpi">
+                    <span class="owned-dashboard-kpi__label">Total estimé à payer</span>
+                    <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--negative">${fmt(impot.total)}</span>
+                </div>
+            </div>
+
+            ${regime === 'reel' && foncier.lignes.length ? `
+            <div class="owned-cf-table-wrap">
+                <div class="owned-cf-table">
+                    <div class="owned-cf-table__title">Détail des revenus fonciers par bien</div>
+                    <div class="owned-cf-table__scroll">
+                        <table>
+                            <thead><tr><th>Bien</th><th>Loyers bruts</th><th>Résultat net</th></tr></thead>
+                            <tbody>
+                                ${foncier.lignes.map(l => `<tr><td>${escapeHtml(l.nom)}</td><td>${fmt(l.case211)}</td><td class="${l.case263 >= 0 ? 'positive' : 'negative'}">${l.case263 >= 0 ? '+' : ''}${fmt(l.case263)}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    ${foncier.deficit ? `<div class="owned-cf-table__note">Déficit foncier de ${fmt(foncier.deficit.totalDeficit)} : ${fmt(foncier.deficit.imputableRevenuGlobal)} imputable sur le revenu global cette année (plafond 10 700 €), ${fmt(foncier.deficit.reportFoncier10ans)} reporté sur les revenus fonciers des 10 prochaines années.</div>` : ''}
+                </div>
+            </div>` : ''}
+
+            ${regime === 'sci-is' ? `
+            <div class="owned-alert owned-alert--info">
+                En SCI à l'IS, le résultat foncier est taxé séparément à l'impôt sur les sociétés (formulaire 2065, avec amortissement comptable de l'immeuble — non calculé par l'application, voir « Déclaration fiscale ») — il n'entre pas dans le calcul de votre IR personnel ci-dessus, sauf distribution de dividendes (non gérée ici).
+            </div>` : ''}
+
+            <div class="owned-cf-table-wrap">
+                <div class="owned-cf-table">
+                    <div class="owned-cf-table__title">Calcul de l'IR — barème progressif ${annee}</div>
+                    <div class="owned-cf-table__note">Quotient familial : ${fmt(impot.revenuGlobal)} ÷ ${impot.parts} part${impot.parts > 1 ? 's' : ''} = ${fmt(impot.quotient)}</div>
+                    <div class="owned-cf-table__scroll">
+                        <table>
+                            <thead><tr><th>Tranche</th><th>Taux</th><th>Montant imposé</th><th>Impôt</th></tr></thead>
+                            <tbody>${trancheRows}</tbody>
+                        </table>
+                    </div>
+                    ${impot.plafonnementQF?.applique ? `
+                    <div class="owned-cf-table__note">
+                        ⚠ Plafonnement du quotient familial appliqué : l'avantage lié à vos parts enfants (${fmt(impot.plafonnementQF.avantage)}) dépasse le plafond légal (${fmt(impot.plafonnementQF.plafond)}) — IR brut recalculé sans ce plafonnement aurait été ${fmt(impot.plafonnementQF.irBrutSansPlafonnement)}.
+                    </div>` : ''}
+                    <div class="owned-cf-table__note">
+                        IR brut (× ${impot.parts} part${impot.parts > 1 ? 's' : ''}) = ${fmt(impot.irBrut)}
+                        · Décote = − ${fmt(impot.decote)}
+                        · <strong>IR net = ${fmt(impot.irNet)}</strong>
+                        · Prélèvements sociaux fonciers (17,2 % sur le résultat foncier positif) = ${fmt(impot.psFoncier)}
+                        · <strong>Total = ${fmt(impot.total)}</strong>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    el.innerHTML = `
+        <div class="owned-impot-head" style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <div class="owned-section-title" style="margin:0">Impôt sur le revenu du foyer</div>
+            <select id="owned-impot-annee" class="variables-input" style="width:auto">
+                ${annees.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
+            </select>
+        </div>
+        <div id="owned-impot-body">${build(currentYear)}</div>
+    `;
+    el.querySelector('#owned-impot-annee')?.addEventListener('change', e => {
+        const body = el.querySelector('#owned-impot-body');
+        if (body) body.innerHTML = build(Number(e.target.value));
+    });
+}
+
+// ─── ONGLET PROFIL (revenus historisés + composition du foyer) ──────────────
+// Remplace la modale Profil pour toute édition courante (PC et téléphone) — la modale ne sert plus
+// qu'au tout premier remplissage (onboarding), voir main.js. Persistance identique à
+// main.js:saveProfileData() (localStorage + sync cloud) pour rester cohérent entre les deux points
+// d'entrée : les champs simples partagent le même state.profileData que la modale.
+function saveOwnedProfileData() {
+    localStorage.setItem(STORAGE_KEYS.profileData, JSON.stringify(state.profileData));
+    syncProfileToCloud();
+}
+
+function addOwnedRevenuHistorique(entry) {
+    const list = (state.profileData.revenuHistorique || []).filter(e => e.annee !== entry.annee);
+    list.push({ annee: entry.annee, revenu: Math.max(0, Number(entry.revenu) || 0) });
+    list.sort((a, b) => a.annee - b.annee);
+    state.profileData = { ...state.profileData, revenuHistorique: list };
+    saveOwnedProfileData();
+}
+
+function deleteOwnedRevenuHistorique(annee) {
+    state.profileData = {
+        ...state.profileData,
+        revenuHistorique: (state.profileData.revenuHistorique || []).filter(e => e.annee !== annee)
+    };
+    saveOwnedProfileData();
+}
+
+function addOwnedAutreCredit(entry) {
+    const credits = [...(state.profileData.autresCredits || [])];
+    credits.push({ id: `credit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, libelle: entry.libelle, mensualite: Math.max(0, Number(entry.mensualite) || 0) });
+    state.profileData = { ...state.profileData, autresCredits: credits };
+    saveOwnedProfileData();
+}
+
+function deleteOwnedAutreCredit(id) {
+    state.profileData = {
+        ...state.profileData,
+        autresCredits: (state.profileData.autresCredits || []).filter(c => c.id !== id)
+    };
+    saveOwnedProfileData();
+}
+
+function renderOwnedProfilTab() {
+    const el = document.getElementById('owned-profil-content');
+    if (!el) return;
+
+    const pd = state.profileData || {};
+    const anneeCourante = new Date().getFullYear();
+    const revenuHistorique = [...(pd.revenuHistorique || [])].sort((a, b) => b.annee - a.annee);
+    const revenuActuel = resolveRevenuFoyer(pd, anneeCourante);
+    const credits = pd.autresCredits || [];
+
+    el.innerHTML = `
+        <div class="owned-section-title">Profil du foyer</div>
+        <p class="owned-caveat">Pilote le TMI — donc l'impôt calculé pour tous les biens du portefeuille (dashboard, comptes de résultat, déclaration 2044, onglet Impôt).</p>
+
+        <form class="owned-form-grid" data-form="profil-simple" style="margin-top:12px">
+            <label class="variables-field">
+                <span class="variables-label">Nom du profil</span>
+                <input name="name" class="variables-input" type="text" value="${escapeHtml(pd.name || '')}" placeholder="ex : Notre foyer">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Adultes</span>
+                <input name="adults" class="variables-input" type="number" min="1" max="2" value="${pd.adults ?? 2}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Enfants à charge</span>
+                <input name="children" class="variables-input" type="number" min="0" value="${pd.children ?? 0}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Objectif CF mensuel (€)</span>
+                <input name="objectifCF" class="variables-input" type="number" min="0" step="50" value="${pd.objectifCF ?? 1000}">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Revalorisation annuelle (%)</span>
+                <input name="revaloAnnuelle" class="variables-input" type="number" min="0" step="0.5" value="${pd.revaloAnnuelle ?? 2}">
+            </label>
+            <button type="submit" class="btn btn--primary btn--sm" style="align-self:end">Enregistrer</button>
+        </form>
+
+        <div class="owned-section-title" style="margin-top:20px">Revenus du foyer</div>
+        <p class="owned-caveat">Une entrée s'applique à partir de son année et jusqu'à la suivante (même logique que le loyer d'un bien) — le TMI de chaque année passée reste donc celui du revenu de l'époque, pas celui d'aujourd'hui.</p>
+        <div class="owned-loyer-actuel owned-revenu-actuel">
+            <span class="owned-loyer-actuel__label">Revenu retenu pour ${anneeCourante}</span>
+            <span class="owned-loyer-actuel__value owned-revenu-actuel__value">${Math.round(revenuActuel).toLocaleString('fr-FR')} €/an</span>
+        </div>
+        ${revenuHistorique.length ? `
+        <div class="owned-charges-annuelles-list">
+            ${revenuHistorique.map((e, idx) => `
+                <div class="owned-charges-annuelles-row">
+                    <span class="owned-charges-annuelles-row__year">${e.annee}</span>
+                    <span class="owned-charges-annuelles-row__vals">
+                        ${Math.round(e.revenu || 0).toLocaleString('fr-FR')} €/an
+                        ${idx === revenuHistorique.length - 1 ? ' · <em>revenu de départ</em>' : ''}
+                    </span>
+                    <button class="owned-travaux-delete" data-delete-revenu-hist="${e.annee}" title="Supprimer" aria-label="Supprimer le revenu ${e.annee}">✕</button>
+                </div>
+            `).join('')}
+        </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune évolution enregistrée — le revenu ci-dessus s'applique à toutes les années.</p>`}
+        <form class="owned-loyers-form" data-form="add-revenu-hist" novalidate>
+            <input type="number" name="revenu" class="variables-input" placeholder="Revenu €/an" min="0" step="500" required style="flex:1;min-width:120px">
+            <label class="owned-loyer-date-label">
+                <span>à partir de</span>
+                <input type="number" name="annee" class="variables-input" value="${anneeCourante}" min="2000" max="2100" required style="min-width:100px">
+            </label>
+            <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
+        </form>
+
+        <div class="owned-section-title" style="margin-top:20px">Autres crédits (hors immobilier)</div>
+        <p class="owned-caveat">Ajoutés au taux d'endettement global et à la capacité d'emprunt résiduelle.</p>
+        ${credits.length ? `
+        <div class="owned-charges-annuelles-list">
+            ${credits.map(c => `
+                <div class="owned-charges-annuelles-row">
+                    <span class="owned-charges-annuelles-row__year">${escapeHtml(c.libelle || 'Crédit')}</span>
+                    <span class="owned-charges-annuelles-row__vals">${Math.round(c.mensualite || 0).toLocaleString('fr-FR')} €/mois</span>
+                    <button class="owned-travaux-delete" data-delete-autre-credit="${escapeHtml(c.id)}" title="Supprimer" aria-label="Supprimer ${escapeHtml(c.libelle || 'ce crédit')}">✕</button>
+                </div>
+            `).join('')}
+        </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun crédit hors immobilier enregistré.</p>`}
+        <form class="owned-loyers-form" data-form="add-autre-credit" novalidate>
+            <input type="text" name="libelle" class="variables-input" placeholder="ex : Crédit auto" required style="flex:1;min-width:120px">
+            <input type="number" name="mensualite" class="variables-input" placeholder="Mensualité €/mois" min="0" step="10" required style="min-width:140px">
+            <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
+        </form>
+    `;
+
+    el.querySelector('[data-form="profil-simple"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        state.profileData = {
+            ...state.profileData,
+            name: String(fd.get('name') || '').trim(),
+            adults: Math.min(2, Math.max(1, Number(fd.get('adults')) || 2)),
+            children: Math.max(0, Number(fd.get('children')) || 0),
+            objectifCF: Math.max(0, Number(fd.get('objectifCF')) || 0),
+            revaloAnnuelle: Math.max(0, Number(fd.get('revaloAnnuelle')) || 0)
+        };
+        saveOwnedProfileData();
+        showToast('Profil enregistré');
+        renderCollections();
+    });
+
+    el.querySelectorAll('[data-delete-revenu-hist]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            deleteOwnedRevenuHistorique(Number(btn.dataset.deleteRevenuHist));
+            showToast('Revenu supprimé');
+            renderCollections();
+        });
+    });
+
+    el.querySelector('[data-form="add-revenu-hist"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const annee = Number(fd.get('annee'));
+        if (!annee) return;
+        addOwnedRevenuHistorique({ annee, revenu: Number(fd.get('revenu')) || 0 });
+        showToast('Revenu enregistré');
+        renderCollections();
+    });
+
+    el.querySelectorAll('[data-delete-autre-credit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            deleteOwnedAutreCredit(btn.dataset.deleteAutreCredit);
+            showToast('Crédit supprimé');
+            renderCollections();
+        });
+    });
+
+    el.querySelector('[data-form="add-autre-credit"]')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const libelle = String(fd.get('libelle') || '').trim();
+        if (!libelle) return;
+        addOwnedAutreCredit({ libelle, mensualite: Number(fd.get('mensualite')) || 0 });
+        showToast('Crédit enregistré');
+        renderCollections();
+    });
+}
+
 // ─── DASHBOARD DIRIGEANT (vue liste) ─────────────────────────────────────────
 
-function renderOwnedDashboard(list, tmi, regime) {
+function renderOwnedDashboard(list, profileData, regime) {
+    if (IS_MOBILE_PAGE) return; // bloc desktop uniquement — voir renderOwnedVerdictBlock
     const wrap = document.getElementById('owned-dashboard-wrap');
     if (!wrap) return;
 
     if (!list.length) { wrap.innerHTML = ''; return; }
 
-    const revenusMens = (state.profileData?.income || 0) / 12;
+    // Taux courant (aujourd'hui) pour le CF total et les alertes CF/DSCR — computePortfolioAlerts
+    // résout lui-même un TMI par année pour le déficit foncier historique (voir calculs.js).
+    const tmi = resolveTmiFoyer(profileData, new Date().getFullYear());
+    const revenusMens = resolveRevenuFoyer(profileData, new Date().getFullYear()) / 12;
     const endettement = computeEndettementGlobal(list, revenusMens, state.profileData?.autresCredits || []);
     const SEVERITY_ORDER = { error: 0, warning: 1, info: 2 };
-    const alerts = computePortfolioAlerts(list, tmi, regime, revenusMens)
+    const alerts = computePortfolioAlerts(list, profileData, regime, revenusMens)
         .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
     const goals = loadPortfolioGoals();
 
@@ -1022,7 +1408,7 @@ function initOwnedPortfolioEvents() {
                     for (const [id, asset] of Object.entries(json.portfolio)) {
                         if (!existing[id]) { existing[id] = asset; added++; }
                     }
-                    localStorage.setItem('investissementWebOwnedAssets', JSON.stringify(existing));
+                    saveOwnedAssets(existing);
                     importModal.hidden = true;
                     renderOwnedPortfolioList();
                     importConfirm.textContent = added > 0
@@ -1055,6 +1441,8 @@ function initOwnedPortfolioEvents() {
             openOwnedDetail(asset.id);
         });
     }
+    initOwnedQuickRail();
+    initOwnedQuickFab();
     if (nodes.ownedBackBtn) {
         nodes.ownedBackBtn.addEventListener('click', closeOwnedDetail);
     }
@@ -1228,11 +1616,12 @@ async function openOwnedImportModal() {
     }
 }
 
+// TMI "taux courant" (année en cours) — pour les fonctions qui répondent à « si ma situation
+// actuelle se maintient » (computeOwnedAssetCF, cartes, KPI...), jamais pour une reconstruction
+// d'année fiscale précise (celles-ci reçoivent state.profileData directement et résolvent le TMI
+// de CHAQUE année visée elles-mêmes — voir resolveTmiFoyer, calculs.js).
 function getOwnedTmi() {
-    return calculateTMI(state.profileData.income || 0, {
-        adults: state.profileData.adults || 2,
-        children: state.profileData.children || 0
-    });
+    return resolveTmiFoyer(state.profileData, new Date().getFullYear());
 }
 
 function getOwnedRegime() {
@@ -1241,7 +1630,8 @@ function getOwnedRegime() {
 
 function setOwnedRegime(regime) {
     state.ownedRegime = regime;
-    localStorage.setItem('investissementWebOwnedRegime', regime);
+    _metaCache = { ..._metaCache, regime };
+    if (_authUser) cloudSaveMeta({ regime }).catch(() => {});
 }
 
 function getOwnedDefaultScenario(asset) {
@@ -1271,7 +1661,7 @@ function renderOwnedRegimeSelector() {
             renderOwnedPortfolioList();
             if (state.activeOwnedAssetId) {
                 const fresh = getOwnedAsset(state.activeOwnedAssetId);
-                if (fresh) { renderOwnedSynthese(fresh); renderOwnedCharts(fresh); }
+                if (fresh) { renderOwnedSynthese(fresh); renderOwnedCalculTab(fresh); }
             }
         });
     });
@@ -1325,6 +1715,16 @@ function getOrderedAssetList() {
 let _ownedMap = null;
 let _ownedMapMarkers = null;
 
+// Exportée pour main.js : le panneau Portefeuille peut être caché (display:none, autre onglet
+// actif) au moment où Firestore livre les biens et où la carte s'initialise pour la première fois
+// — Leaflet mesure alors un conteneur à 0x0 et ne charge que quelques tuiles. Le seul rattrapage
+// interne (renderOwnedMap, plus bas) ne suffit pas si aucun second rendu ne survient pendant que
+// le panneau redevient visible : il faut recalculer la taille au moment précis où l'onglet
+// Portefeuille est cliqué, ce que seul main.js (propriétaire du wiring des onglets) peut détecter.
+export function invalidateOwnedMap() {
+    _ownedMap?.invalidateSize();
+}
+
 function _initOwnedMap() {
     if (_ownedMap || typeof L === 'undefined') return _ownedMap;
     const canvas = document.getElementById('owned-map');
@@ -1340,6 +1740,7 @@ function _initOwnedMap() {
 }
 
 function renderOwnedMap(list = null) {
+    if (IS_MOBILE_PAGE) return; // bloc desktop uniquement — voir renderOwnedVerdictBlock
     const section = document.getElementById('owned-map-section');
     if (!section) return;
 
@@ -1464,6 +1865,14 @@ function renderOwnedPortfolioList() {
         }
     }
 
+    if (IS_MOBILE_PAGE) {
+        // Ne PAS `return` ici : le branchement des onglets et le rendu de l'onglet Profil (plus bas
+        // dans cette fonction, hors de ce bloc desktop-only) doivent aussi s'exécuter sur owned.html —
+        // un `return` prématuré les court-circuitait entièrement, rendant l'onglet Profil totalement
+        // inerte sur téléphone (aucune erreur, juste jamais câblé — bug remonté par l'utilisateur,
+        // reproduit et diagnostiqué via Playwright le 2026-08-04, voir docs/superpowers/specs/).
+        _renderOwnedListMobile(list);
+    } else {
     renderOwnedMap(list);
 
     if (nodes.ownedListTable) {
@@ -1507,25 +1916,30 @@ function renderOwnedPortfolioList() {
 
             // Métriques pré-calculées pour chaque bien (affichage + tri)
             const rowData = list.map(asset => {
-                const { years: timeline } = computeOwnedAssetTimeline(asset, tmi, regime);
-                const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+                const { years: timeline } = computeOwnedAssetTimeline(asset, state.profileData, regime);
+                const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
                 const targetAbsYear = anneeAchat + yr - 1;
                 const yearRow = timeline.find(y => y.year === targetAbsYear) || timeline[timeline.length - 1];
                 const cfAnnuel = yearRow ? yearRow.cfAnnuel : 0;
                 const cfMens = cfAnnuel / 12;
 
-                const sc = getOwnedDefaultScenario(asset);
-                const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+                // DSCR/rendement calculés pour la MÊME année ciblée que cfAnnuel (via computeCFBreakdown,
+                // qui accepte un targetYear comme computeOwnedAssetTimeline) — pas via computeOwnedAssetCF,
+                // qui reflète toujours aujourd'hui : sinon la colonne CF suit le sélecteur "Métriques en
+                // An X" pendant que DSCR/Rendement restaient figés sur la situation actuelle, deux bases
+                // temporelles différentes affichées côte à côte sur la même ligne (bug remonté par
+                // l'utilisateur, 2026-08-03).
+                const bd = computeCFBreakdown(asset, state.profileData, regime, yr);
                 const investissementTotal = (asset.acquisition?.prix || 0) + (asset.acquisition?.fraisAgence || 0) + (asset.acquisition?.fraisNotaire || 0);
-                const rentaNette = investissementTotal > 0
-                    ? ((r.loyerEffectif * 12 - r.chargesMensuelles * 12) / investissementTotal) * 100
-                    : 0;
+                const noiAnnuel = bd ? (bd.loyersEncaisses - bd.charges) : 0;
+                const rentaNette = investissementTotal > 0 ? (noiAnnuel / investissementTotal) * 100 : 0;
+                const dscr = bd && bd.mensualiteCredit > 0 ? noiAnnuel / bd.mensualiteCredit : 0;
 
-                return { asset, cfMens, r, rentaNette, cfAnnuel };
+                return { asset, cfMens, dscr, rentaNette, cfAnnuel, targetAbsYear };
             });
 
             if (sort) {
-                const valueFor = row => sort.criterion === 'cf' ? row.cfMens : sort.criterion === 'rendement' ? row.rentaNette : row.r.dscr;
+                const valueFor = row => sort.criterion === 'cf' ? row.cfMens : sort.criterion === 'rendement' ? row.rentaNette : row.dscr;
                 rowData.sort((a, b) => (valueFor(a) - valueFor(b)) * (sort.dir === 'asc' ? 1 : -1));
             }
 
@@ -1547,19 +1961,22 @@ function renderOwnedPortfolioList() {
                         </tr>
                     </thead>
                     <tbody>
-                        ${rowData.map(({ asset, cfMens, r, rentaNette, cfAnnuel }) => {
+                        ${rowData.map(({ asset, cfMens, dscr, rentaNette, cfAnnuel, targetAbsYear }) => {
                             const cfTone = cfMens >= 0 ? 'positive' : 'negative';
 
                             // Alerte régime : comparer régime optimal an 1 vs an 5
-                            const cmp = computeRegimeComparison(asset, tmi, [1, 5]);
+                            const cmp = computeRegimeComparison(asset, state.profileData, [1, 5]);
                             const optAn1 = cmp.optimal[1];
                             const optAn5 = cmp.optimal[5];
                             const regimeAlertHtml = (optAn1 && optAn5 && optAn1 !== optAn5)
                                 ? `<span class="owned-regime-alert" title="Régime optimal change en an 5">⚠ Régime an 5</span>`
                                 : '';
 
-                            // Donut inline SVG
-                            const recettes = Math.max(0, (asset.acquisition?.loyerInitial || 0) * 12 * (1 - (asset.postAchat?.vacance ?? 5) / 100));
+                            // Donut inline SVG — loyer résolu à targetAbsYear (même année que cfAnnuel via
+                            // resolveLoyerVacance, cohérent avec le sélecteur "Métriques en An X" ; sans ça
+                            // le donut mélangeait le loyer d'AUJOURD'HUI avec un cfAnnuel d'une autre année).
+                            const { loyer: loyerDonut, vacancePct: vacanceDonut } = resolveLoyerVacance(asset, String(targetAbsYear));
+                            const recettes = Math.max(0, loyerDonut * 12 * (1 - vacanceDonut / 100));
                             const depenses = Math.max(0, recettes - cfAnnuel);
                             const total = recettes + depenses;
                             const donutHtml = total > 0 ? renderOwnedDonutSVG(recettes, depenses, cfMens >= 0) : '<div class="owned-donut-wrap"></div>';
@@ -1568,9 +1985,9 @@ function renderOwnedPortfolioList() {
                             let statusTone, statusLabel;
                             if (cfMens < -50) {
                                 statusTone = 'negative'; statusLabel = `CF ${Math.round(cfMens).toLocaleString('fr-FR')} €`;
-                            } else if (r.dscr > 0 && r.dscr < 1) {
-                                statusTone = 'negative'; statusLabel = `DSCR ${r.dscr.toFixed(2).replace('.', ',')}`;
-                            } else if (r.dscr >= 1 && r.dscr < 1.1) {
+                            } else if (dscr > 0 && dscr < 1) {
+                                statusTone = 'negative'; statusLabel = `DSCR ${dscr.toFixed(2).replace('.', ',')}`;
+                            } else if (dscr >= 1 && dscr < 1.1) {
                                 statusTone = 'watch'; statusLabel = 'DSCR tendu';
                             } else if (hasUnclassified) {
                                 statusTone = 'watch'; statusLabel = '⚠ Travaux';
@@ -1587,13 +2004,13 @@ function renderOwnedPortfolioList() {
                                 </td>
                                 <td>
                                     <div class="owned-table-name">${escapeHtml(asset.nom)}</div>
-                                    <div class="owned-table-meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · ${asset.anneeAchat}` : ''}${regimeAlertHtml ? ' ' + regimeAlertHtml : ''}</div>
+                                    <div class="owned-table-meta">${escapeHtml(asset.ville)}${asset.dateAchat ? ` · ${formatDateAchat(asset.dateAchat)}` : ''}${regimeAlertHtml ? ' ' + regimeAlertHtml : ''}</div>
                                 </td>
                                 <td class="owned-table-num owned-table-num--${cfTone}">
                                     ${cfMens >= 0 ? '+' : ''}${Math.round(cfMens).toLocaleString('fr-FR')} €
                                 </td>
                                 <td class="owned-table-num owned-col-hideable">${rentaNette.toFixed(1).replace('.', ',')} %</td>
-                                <td class="owned-table-num owned-col-hideable">${r.dscr.toFixed(2).replace('.', ',')}</td>
+                                <td class="owned-table-num owned-col-hideable">${dscr.toFixed(2).replace('.', ',')}</td>
                                 <td>
                                     <span class="owned-status-badge owned-status-badge--${statusTone}">
                                         ${statusLabel}
@@ -1618,7 +2035,7 @@ function renderOwnedPortfolioList() {
             </div>
             <div class="owned-expanded-metric">
                 <span class="owned-expanded-label">DSCR</span>
-                <span class="owned-expanded-value owned-expanded-value--${r.dscr >= 1.2 ? 'positive' : r.dscr >= 1 ? 'watch' : 'negative'}">${r.dscr.toFixed(2)}</span>
+                <span class="owned-expanded-value owned-expanded-value--${dscr >= 1.2 ? 'positive' : dscr >= 1 ? 'watch' : 'negative'}">${dscr.toFixed(2)}</span>
             </div>
             <div class="owned-expanded-metric">
                 <span class="owned-expanded-label">Prix d'achat</span>
@@ -1742,19 +2159,106 @@ function renderOwnedPortfolioList() {
                         ids.splice(fromIdx, 1);
                         ids.splice(toIdx, 0, _dragSrcId);
                         state.ownedOrder = ids;
-                        localStorage.setItem(STORAGE_KEYS.ownedOrder, JSON.stringify(ids));
+                        if (_authUser) cloudSaveMeta({ order: ids }).catch(() => {});
                         renderOwnedPortfolioList();
                     });
                 });
             })();
         }
     }
-    renderOwnedPortfolioCharts(list, tmi, regime);
-    renderOwnedDashboard(list, tmi, regime);
+    renderOwnedPortfolioCharts(list, state.profileData, regime);
+    renderOwnedDashboard(list, state.profileData, regime);
     renderOwnedCfConsolidatedSection(list, tmi, regime);
+    }
+
+    // Le branchement du clic sur les onglets est fait AVANT de rendre le contenu des onglets
+    // eux-mêmes (Profil/Impôt, juste après) : si l'un de ces rendus lève une exception sur une
+    // forme de donnée imprévue, le clic reste fonctionnel pour tous les onglets au lieu d'être
+    // silencieusement jamais câblé (bug remonté par l'utilisateur — clic sur "Profil" sans effet
+    // sur owned.html, cause exacte non confirmée faute d'accès navigateur, corrigé par prudence).
+    const listView = nodes.ownedListView;
+    if (listView && !listView.dataset.tabWired) {
+        listView.dataset.tabWired = '1';
+        listView.addEventListener('click', e => {
+            const btn = e.target.closest('.owned-list-tabs .owned-tab');
+            if (!btn) return;
+            const tabKey = btn.dataset.tab;
+            listView.querySelectorAll('.owned-list-tabs .owned-tab').forEach(t => {
+                t.classList.toggle('owned-tab--active', t === btn);
+                t.setAttribute('aria-selected', t === btn ? 'true' : 'false');
+            });
+            listView.querySelectorAll(':scope > .owned-tab-panel').forEach(p => {
+                p.hidden = p.id !== `owned-list-tab-${tabKey}`;
+            });
+        });
+    }
+
+    // Onglet Profil : PC et téléphone (l'utilisateur veut pouvoir mettre à jour ses revenus depuis
+    // les deux). Onglet Impôt : reste PC uniquement, cohérent avec la simplification mobile du
+    // 2026-07-28 (owned.html n'a pas de tableau de bord fiscal détaillé). Chacun protégé par
+    // try/catch : une exception sur une forme de donnée imprévue ne doit dégrader que cet onglet,
+    // jamais le reste du rendu ni le clic câblé juste au-dessus.
+    try {
+        renderOwnedProfilTab();
+    } catch (err) {
+        console.error('[Spark] renderOwnedProfilTab a échoué :', err);
+    }
+    if (!IS_MOBILE_PAGE) {
+        try {
+            renderOwnedImpotTab();
+        } catch (err) {
+            console.error('[Spark] renderOwnedImpotTab a échoué :', err);
+        }
+    }
+}
+
+// Vue liste smartphone (owned.html) : juste nom/ville/CF net-net par bien, tap pour ouvrir
+// la fiche. Pas de tri, pas de glisser-déposer, pas de carte/graphiques/dashboard — cf. spec
+// docs/superpowers/specs/2026-07-28-owned-mobile-simplification.md.
+function _renderOwnedListMobile(list) {
+    if (!nodes.ownedListTable) return;
+    const tmi = getOwnedTmi();
+    const regime = getOwnedRegime();
+
+    if (!list.length) {
+        nodes.ownedListTable.innerHTML = `
+            <div class="owned-empty-state">
+                <p>Aucun bien enregistré dans le portefeuille.</p>
+                <button class="btn btn--primary" id="owned-empty-add-btn" type="button">+ Ajouter mon premier bien</button>
+            </div>
+        `;
+        nodes.ownedListTable.querySelector('#owned-empty-add-btn')?.addEventListener('click', () => {
+            openOwnedAddModal();
+        });
+        return;
+    }
+
+    nodes.ownedListTable.innerHTML = `
+        <div class="owned-mobile-list">
+            ${list.map(asset => {
+                const sc = getOwnedDefaultScenario(asset);
+                const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+                const cfMens = r.cfNetNet;
+                const cfTone = cfMens >= 0 ? 'positive' : 'negative';
+                const cfSign = cfMens >= 0 ? '+' : '−';
+                return `
+                <button type="button" class="owned-mobile-list__item" data-asset-id="${escapeHtml(asset.id)}">
+                    <span class="owned-mobile-list__info">
+                        <span class="owned-mobile-list__name">${escapeHtml(asset.nom || 'Sans nom')}</span>
+                        <span class="owned-mobile-list__ville">${escapeHtml(asset.ville || '')}</span>
+                    </span>
+                    <span class="owned-mobile-list__cf owned-mobile-list__cf--${cfTone}">${cfSign}${Math.round(Math.abs(cfMens)).toLocaleString('fr-FR')} €<small>/mois</small></span>
+                </button>`;
+            }).join('')}
+        </div>
+    `;
+    nodes.ownedListTable.querySelectorAll('[data-asset-id]').forEach(btn => {
+        btn.addEventListener('click', () => openOwnedDetail(btn.dataset.assetId));
+    });
 }
 
 function renderOwnedCfConsolidatedSection(list, tmi, regime) {
+    if (IS_MOBILE_PAGE) return; // bloc desktop uniquement — voir renderOwnedVerdictBlock
     const wrap = document.getElementById('owned-portfolio-cf-consolidated');
     if (!wrap) return;
     if (!list.length) { wrap.innerHTML = ''; return; }
@@ -1791,16 +2295,252 @@ function renderOwnedRepartitionBarHTML(list, tmi, regime) {
     `;
 }
 
+// Sur mobile (owned.html), la modale #owned-add-modal existe encore. Sur PC (index.html), elle a été
+// retirée le 2026-08-04 au profit du rail Actions rapides (#owned-quickrail) — openOwnedAddModal()
+// reste le point d'entrée commun appelé par les CTA "état vide" (mobile + PC), et bascule vers le rail
+// quand la modale est absente.
 function openOwnedAddModal() {
-    if (!nodes.ownedAddModal) return;
-    nodes.ownedAddModal.hidden = false;
-    nodes.ownedAddNom?.focus();
+    if (nodes.ownedAddModal) {
+        nodes.ownedAddModal.hidden = false;
+        nodes.ownedAddNom?.focus();
+        return;
+    }
+    openOwnedQuickPanel('add-bien');
 }
 
 function closeOwnedAddModal() {
     if (!nodes.ownedAddModal) return;
     nodes.ownedAddModal.hidden = true;
     nodes.ownedAddForm?.reset();
+}
+
+// ─── Capture rapide d'une facture — briques partagées entre le rail PC (#owned-quickrail) et le
+// bouton flottant mobile (#owned-quickfab), ajouté le 2026-08-04. Un "root" (le panneau du rail ou
+// la modale mobile) doit contenir : un sélecteur [data-quick-asset-select], une dropzone
+// [data-quick-dropzone]/[data-quick-dropzone-body]/[data-quick-file-input]/[data-quick-status], et un
+// formulaire [data-quick-facture-form] avec des champs [data-quick-field="date|description|montant|tag"].
+// Réutilise les mêmes briques que renderOwnedTravauxTab (TRAVAUX_ACCEPTED_MIME,
+// cloudExtraireFraisFacture, addOwnedTravail) — un seul flux d'extraction IA, PC et mobile.
+function _populateQuickAssetSelect(root) {
+    const select = root?.querySelector('[data-quick-asset-select]');
+    if (!select) return;
+    const list = getOrderedAssetList();
+    select.innerHTML = list.length
+        ? list.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.nom)}</option>`).join('')
+        : '<option value="" disabled selected>Aucun bien — ajoute-en un d\'abord</option>';
+}
+
+// Reste sur la vue courante après l'ajout (pas de navigation forcée) : si la fiche du bien concerné
+// est déjà ouverte on la rafraîchit, sinon on rafraîchit la liste/dashboard visible.
+function _refreshAfterQuickFacture(assetId) {
+    if (state.activeOwnedAssetId === assetId) {
+        const fresh = getOwnedAsset(assetId);
+        if (fresh) {
+            renderOwnedTravauxTab(fresh);
+            renderAccordionPostAchat(fresh);
+            renderOwnedSynthese(fresh);
+            renderOwnedCalculTab(fresh);
+            renderAccordionSimulateur(fresh);
+        }
+    } else {
+        renderOwnedPortfolioList();
+    }
+}
+
+function _wireQuickFactureForm(root, onSubmitted) {
+    let quickPendingFile = null;
+    const dropzone = root.querySelector('[data-quick-dropzone]');
+    const dropzoneBody = root.querySelector('[data-quick-dropzone-body]');
+    const fileInput = root.querySelector('[data-quick-file-input]');
+    const statusEl = root.querySelector('[data-quick-status]');
+    const factureForm = root.querySelector('[data-quick-facture-form]');
+    const fieldDate = factureForm?.querySelector('[data-quick-field="date"]');
+    const fieldDesc = factureForm?.querySelector('[data-quick-field="description"]');
+    const fieldMontant = factureForm?.querySelector('[data-quick-field="montant"]');
+    const fieldTag = factureForm?.querySelector('[data-quick-field="tag"]');
+
+    const resetQuickDropzone = () => {
+        quickPendingFile = null;
+        if (fileInput) fileInput.value = '';
+        dropzone?.classList.remove('owned-travaux-dropzone--filled', 'owned-travaux-dropzone--dragover');
+        if (dropzoneBody) dropzoneBody.hidden = false;
+        if (statusEl) { statusEl.hidden = true; statusEl.className = 'owned-travaux-dropzone__status'; statusEl.textContent = ''; }
+        [fieldDate, fieldDesc, fieldMontant].forEach(f => f?.classList.remove('ai-filled'));
+    };
+
+    const handleQuickFile = async file => {
+        if (!TRAVAUX_ACCEPTED_MIME.includes(file.type)) {
+            showToast('Format non supporté (PDF, JPG ou PNG uniquement)', 'negative');
+            return;
+        }
+        quickPendingFile = file;
+        if (dropzoneBody) dropzoneBody.hidden = true;
+        dropzone?.classList.add('owned-travaux-dropzone--filled');
+        if (statusEl) {
+            statusEl.hidden = false;
+            statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--loading';
+            statusEl.textContent = `📄 ${file.name} — lecture de la facture…`;
+        }
+        if (file.size > TRAVAUX_MAX_FILE_SIZE) {
+            if (statusEl) {
+                statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
+                statusEl.textContent = `📄 ${file.name} — trop volumineux (max 8 Mo), remplis à la main`;
+            }
+            return;
+        }
+        try {
+            const base64 = await _fileToBase64(file);
+            const result = await cloudExtraireFraisFacture(base64, file.type);
+            if (result.date && fieldDate) { fieldDate.value = result.date; fieldDate.classList.add('ai-filled'); }
+            if (result.description && fieldDesc) { fieldDesc.value = result.description; fieldDesc.classList.add('ai-filled'); }
+            if (result.montant > 0 && fieldMontant) { fieldMontant.value = result.montant; fieldMontant.classList.add('ai-filled'); }
+            if (fieldTag) fieldTag.value = result.tagSuggestion || 'a-classifier';
+            if (statusEl) {
+                statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--ok';
+                statusEl.textContent = `📄 ${file.name} — ✓ pré-rempli`;
+            }
+        } catch {
+            if (statusEl) {
+                statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
+                statusEl.textContent = `📄 ${file.name} — extraction impossible, remplis à la main`;
+            }
+            showToast('Extraction impossible, remplis le formulaire à la main', 'negative');
+        }
+    };
+
+    dropzone?.addEventListener('click', () => fileInput?.click());
+    dropzone?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); } });
+    dropzone?.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('owned-travaux-dropzone--dragover'); });
+    dropzone?.addEventListener('dragleave', () => dropzone.classList.remove('owned-travaux-dropzone--dragover'));
+    dropzone?.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('owned-travaux-dropzone--dragover');
+        const file = e.dataTransfer.files?.[0];
+        if (file) handleQuickFile(file);
+    });
+    fileInput?.addEventListener('change', () => {
+        const file = fileInput.files?.[0];
+        if (file) handleQuickFile(file);
+        fileInput.value = '';
+    });
+
+    factureForm?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const assetId = root.querySelector('[data-quick-asset-select]')?.value;
+        if (!assetId) { showToast('Choisis un bien', 'negative'); return; }
+        const date = fieldDate?.value;
+        const description = fieldDesc?.value.trim();
+        const montant = Number(fieldMontant?.value);
+        if (!date || !description || !montant) { showToast('Date, description et montant sont requis', 'negative'); return; }
+        let pdfFilename = null;
+        if (quickPendingFile) {
+            try {
+                pdfFilename = await uploadOwnedDocument(assetId, quickPendingFile);
+            } catch {
+                showToast('Échec de l\'import du fichier', 'negative');
+                return;
+            }
+        }
+        addOwnedTravail(assetId, {
+            date, description, montant,
+            tag: fieldTag?.value || 'a-classifier',
+            commentaire: '',
+            pdfFilename,
+            financeParCredit: false
+        });
+        factureForm.reset();
+        resetQuickDropzone();
+        showToast('Frais ajouté');
+        onSubmitted(assetId);
+    });
+
+    return { reset: resetQuickDropzone };
+}
+
+// ─── Rail Actions rapides (#owned-quickrail, PC uniquement — absent de owned.html) ──────────────
+// Ouvre/ferme sur place un mini-formulaire (Ajouter un bien / Ajouter une facture) juste sous le
+// bouton cliqué, sans quitter la vue courante (liste ou fiche d'un bien).
+function openOwnedQuickPanel(action) {
+    const rail = document.getElementById('owned-quickrail');
+    if (!rail) return false;
+    rail.querySelectorAll('[data-quickpanel]').forEach(p => { p.hidden = p.dataset.quickpanel !== action; });
+    rail.querySelectorAll('[data-quickaction]').forEach(b => { b.classList.toggle('owned-quickrail__action--active', b.dataset.quickaction === action); });
+    if (action === 'add-bien') {
+        document.getElementById('owned-quick-add-bien-form')?.querySelector('[name="nom"]')?.focus();
+    } else if (action === 'add-facture') {
+        _populateQuickAssetSelect(rail);
+    }
+    return true;
+}
+
+function closeOwnedQuickPanels() {
+    const rail = document.getElementById('owned-quickrail');
+    if (!rail) return;
+    rail.querySelectorAll('[data-quickpanel]').forEach(p => { p.hidden = true; });
+    rail.querySelectorAll('[data-quickaction]').forEach(b => b.classList.remove('owned-quickrail__action--active'));
+}
+
+function initOwnedQuickRail() {
+    const rail = document.getElementById('owned-quickrail');
+    if (!rail) return; // absent sur owned.html (mobile) : voir initOwnedQuickFab pour l'équivalent
+
+    rail.querySelectorAll('[data-quickaction]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.quickaction;
+            const panel = rail.querySelector(`[data-quickpanel="${action}"]`);
+            const wasOpen = panel && !panel.hidden;
+            closeOwnedQuickPanels();
+            if (!wasOpen) openOwnedQuickPanel(action);
+        });
+    });
+    rail.querySelectorAll('[data-quickcancel]').forEach(btn => {
+        btn.addEventListener('click', () => closeOwnedQuickPanels());
+    });
+
+    // ─── Ajouter un bien ──────────────────────────────────────────────────────
+    document.getElementById('owned-quick-add-bien-form')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const nom = String(fd.get('nom') || '').trim();
+        if (!nom) return;
+        const ville = String(fd.get('ville') || '').trim();
+        const cp = String(fd.get('cp') || '').trim();
+        const asset = createOwnedAsset(nom, ville);
+        if (cp) updateOwnedAsset(asset.id, { codePostal: cp });
+        e.target.reset();
+        closeOwnedQuickPanels();
+        openOwnedDetail(asset.id);
+    });
+
+    // ─── Ajouter une facture ──────────────────────────────────────────────────
+    _wireQuickFactureForm(rail, assetId => {
+        closeOwnedQuickPanels();
+        _refreshAfterQuickFacture(assetId);
+    });
+}
+
+// ─── Bouton flottant Actions rapides mobile (#owned-quickfab, absent d'index.html) ──────────────
+// Équivalent mobile de "Ajouter une facture" du rail PC : visible partout sur owned.html (liste et
+// fiche d'un bien), ouvre une modale plein écran plutôt qu'un panneau inline (écran trop étroit).
+// Pas d'action "Ajouter un bien" ici : déjà accessible via le bouton existant de la Vue d'ensemble.
+function initOwnedQuickFab() {
+    const fab = document.getElementById('owned-quickfab');
+    const modal = document.getElementById('owned-quickfab-modal');
+    if (!fab || !modal) return; // absent sur index.html (PC) : voir initOwnedQuickRail
+
+    const closeModal = () => modal.hidden = true;
+
+    fab.addEventListener('click', () => {
+        modal.hidden = false;
+        _populateQuickAssetSelect(modal);
+    });
+    modal.querySelector('[data-quickcancel]')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+    _wireQuickFactureForm(modal, assetId => {
+        closeModal();
+        _refreshAfterQuickFacture(assetId);
+    });
 }
 
 function openOwnedDeleteModal(assetId) {
@@ -1831,7 +2571,7 @@ function openOwnedDetail(assetId) {
     if (_a) {
         const post = _a.postAchat || {};
         if (!post.chargesAnnuelles || post.chargesAnnuelles.length === 0) {
-            const annee = _a.anneeAchat || new Date().getFullYear();
+            const annee = parseDateAchat(_a.dateAchat).annee;
             if ((post.taxeFonciere ?? 0) > 0 || (post.gestionLocative ?? 0) > 0 || (post.assurancePNO ?? 0) > 0 || (post.chargesCopro ?? 0) > 0) {
                 addOwnedChargesAnnuelles(assetId, {
                     annee,
@@ -1876,16 +2616,6 @@ function closeOwnedDetail() {
     }, 120);
 }
 
-function renderOwnedProjectionContent(asset) {
-    const el = document.getElementById('owned-projection-content');
-    if (!el) return;
-    const hasData = (asset.acquisition?.prix || 0) > 0;
-    if (!hasData) { el.innerHTML = ''; return; }
-    const tmi = getOwnedTmi();
-    const cmp = computeRegimeComparison(asset, tmi);
-    el.innerHTML = renderRegimeComparisonHTML(cmp);
-}
-
 function renderOwnedDetail() {
     const assetId = state.activeOwnedAssetId;
     if (!assetId) return;
@@ -1899,7 +2629,7 @@ function renderOwnedDetail() {
                  data-rename-asset="${escapeHtml(asset.id)}"
                  spellcheck="false"
                  title="Cliquer pour renommer">${escapeHtml(asset.nom)}</div>
-            <div class="owned-detail-title__meta">${escapeHtml(asset.ville)}${asset.anneeAchat ? ` · Acquis ${asset.anneeAchat}` : ''}</div>
+            <div class="owned-detail-title__meta">${escapeHtml(asset.ville)}${asset.dateAchat ? ` · Acquis ${formatDateAchat(asset.dateAchat)}` : ''}</div>
         `;
         const nameEl = nodes.ownedDetailTitle.querySelector('[data-rename-asset]');
         if (nameEl && !nameEl.dataset.renameWired) {
@@ -1957,21 +2687,26 @@ function renderOwnedDetail() {
 
     if (nodes.ownedDiagnosticBtn) {
         const hasData = (asset.acquisition?.prix || 0) > 0;
-        nodes.ownedDiagnosticBtn.hidden = !hasData;
+        nodes.ownedDiagnosticBtn.hidden = IS_MOBILE_PAGE || !hasData;
         nodes.ownedDiagnosticBtn.disabled = !hasData;
     }
 
     renderOwnedRegimeSelector();
+    // Version smartphone : saisie/édition d'un bien + onglet Calcul complet (indicateurs, détail CF,
+    // comparatif régimes) — identique au PC depuis 2026-08-04. Pas de dashboard portefeuille, de
+    // carte, de bloc Verdict ni de diagnostic IA sur mobile — cf. spec
+    // docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md.
     renderOwnedSynthese(asset);
-    renderOwnedVerdictBlock(asset);
-    renderOwnedCharts(asset);
-    renderOwnedCrdChart(asset);
+    renderOwnedCalculTab(asset);
+    if (!IS_MOBILE_PAGE) {
+        renderOwnedVerdictBlock(asset);
+    }
     renderAccordionAcquisition(asset);
     renderAccordionPostAchat(asset);
-    renderAccordionSimulateur(asset);
-    renderOwnedCfTable(asset);
-    renderOwnedProjectionContent(asset);
     renderOwnedTravauxTab(asset);
+    if (!IS_MOBILE_PAGE) {
+        renderAccordionSimulateur(asset);
+    }
 
     const detail = nodes.ownedDetailView;
     if (detail && !detail.dataset.tabWired) {
@@ -1992,21 +2727,21 @@ function renderOwnedDetail() {
 }
 
 function renderOwnedVerdictBlock(asset) {
+    if (IS_MOBILE_PAGE) return; // bloc desktop uniquement
     const el = nodes.ownedVerdict || document.getElementById('owned-verdict');
     if (!el) return;
     const acq = asset.acquisition || {};
     const hasData = (acq.prix || 0) > 0;
     if (!hasData) { el.innerHTML = ''; return; }
 
-    const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
+    const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
     const defaultYrVerdict = Math.max(1, new Date().getFullYear() - anneeAchat + 1);
     const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYrVerdict;
     const YEAR_OPTIONS = [1, 3, 5, 10];
 
     // Métriques selon l'année sélectionnée
-    const { years: timeline } = computeOwnedAssetTimeline(asset, tmi, regime);
+    const { years: timeline } = computeOwnedAssetTimeline(asset, state.profileData, regime);
     const targetAbsYear = anneeAchat + yr - 1;
     const yearRow = timeline.find(y => y.year === targetAbsYear) || timeline[timeline.length - 1];
     const cfAnnuel = yearRow ? yearRow.cfAnnuel : 0;
@@ -2045,7 +2780,7 @@ function renderOwnedVerdictBlock(asset) {
             localStorage.setItem('investissementWebOwnedYearFilters', JSON.stringify(state.ownedYearFilters));
             renderOwnedVerdictBlock(asset);
             const freshPost = getOwnedAsset(asset.id);
-            if (freshPost) renderAccordionPostAchat(freshPost);
+            if (freshPost) renderOwnedCalculTab(freshPost);
         });
     });
 }
@@ -2057,9 +2792,8 @@ function renderOwnedCfTable(asset) {
     const hasData = (acq.prix || 0) > 0;
     if (!hasData) { wrap.innerHTML = ''; return; }
 
-    const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
-    const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+    const { years } = computeOwnedAssetTimeline(asset, state.profileData, regime);
     if (!years || !years.length) { wrap.innerHTML = ''; return; }
 
     const first20 = years.slice(0, 20);
@@ -2103,7 +2837,9 @@ function renderOwnedCfTable(asset) {
     `;
 }
 
-function openDocumentPreview(assetId, filename) {
+const _isImageFilename = filename => /\.(jpe?g|png)$/i.test(filename || '');
+
+async function openDocumentPreview(assetId, filename) {
     let overlay = document.getElementById('document-preview-overlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -2112,15 +2848,29 @@ function openDocumentPreview(assetId, filename) {
         overlay.innerHTML = `
             <div class="document-preview-dialog">
                 <button type="button" class="document-preview-close" aria-label="Fermer">✕</button>
-                <embed class="document-preview-embed" type="application/pdf">
+                <embed class="document-preview-embed" type="application/pdf" hidden>
+                <img class="document-preview-img" alt="Justificatif" hidden>
             </div>
         `;
         document.body.appendChild(overlay);
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true; });
         overlay.querySelector('.document-preview-close').addEventListener('click', () => { overlay.hidden = true; });
     }
-    overlay.querySelector('.document-preview-embed').src = `/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(filename)}`;
+    const embed = overlay.querySelector('.document-preview-embed');
+    const img = overlay.querySelector('.document-preview-img');
+    const isImage = _isImageFilename(filename);
+    embed.hidden = isImage;
+    img.hidden = !isImage;
+    embed.src = '';
+    img.src = '';
     overlay.hidden = false;
+    try {
+        const url = await cloudDocumentUrl(assetId, filename);
+        if (isImage) img.src = url; else embed.src = url;
+    } catch {
+        overlay.hidden = true;
+        showToast('Document indisponible — vérifiez votre connexion internet', 'negative');
+    }
 }
 
 // Modale d'édition d'un frais existant (onglet Travaux). Le PDF joint n'y est pas
@@ -2165,9 +2915,23 @@ function openEditTravailModal(assetId, travailId) {
                     <span class="variables-label">Commentaire</span>
                     <input class="variables-input" type="text" name="commentaire" value="${escapeHtml(travail.commentaire || '')}">
                 </label>
-                ${travail.pdfFilename
-                    ? '<p class="owned-caveat" style="grid-column:1/-1">Le justificatif PDF joint reste inchangé. Pour le remplacer, supprimez ce frais et recréez-le.</p>'
-                    : ''}
+                <label class="variables-field" style="grid-column:1/-1;flex-direction:row;align-items:center;gap:8px" data-tooltip="À cocher si ce frais fait partie de l'enveloppe du crédit immobilier principal (pas payé cash) — reste déductible fiscalement l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">
+                    <input type="checkbox" name="financeParCredit" value="1" ${travail.financeParCredit ? 'checked' : ''}>
+                    <span class="variables-label" style="margin:0">Financé par le crédit immobilier principal</span>
+                </label>
+                <div class="variables-field" style="grid-column:1/-1">
+                    <span class="variables-label">Justificatif</span>
+                    ${travail.pdfFilename ? `
+                    <div class="owned-edit-pdf-current" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <button type="button" class="btn btn--ghost btn--sm" data-preview-current-pdf>📄 Voir le justificatif actuel</button>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--text-secondary);cursor:pointer">
+                            <input type="checkbox" name="removePdf" value="1"> Supprimer ce justificatif
+                        </label>
+                    </div>
+                    <span class="variables-label" style="margin-top:10px;font-weight:400;font-size:.78rem">Remplacer par un autre fichier (PDF, JPG ou PNG — optionnel)</span>
+                    ` : `<span class="variables-label" style="font-weight:400;font-size:.78rem">Ajouter un justificatif (PDF, JPG ou PNG — optionnel)</span>`}
+                    <input class="variables-input" type="file" name="pdf" accept="${TRAVAUX_ACCEPTED_MIME.join(',')}" style="margin-top:6px">
+                </div>
                 <div class="owned-modal-actions" style="grid-column:1/-1">
                     <button type="button" class="btn btn--ghost" data-close-modal>Annuler</button>
                     <button type="submit" class="btn btn--primary">Enregistrer</button>
@@ -2176,15 +2940,43 @@ function openEditTravailModal(assetId, travailId) {
         </div>
     `, 'owned-edit-travail-modal');
 
-    modal.querySelector('[data-form="edit-travail"]')?.addEventListener('submit', e => {
+    modal.querySelector('[data-preview-current-pdf]')?.addEventListener('click', () => {
+        if (travail.pdfFilename) openDocumentPreview(assetId, travail.pdfFilename);
+    });
+
+    modal.querySelector('[data-form="edit-travail"]')?.addEventListener('submit', async e => {
         e.preventDefault();
-        const fd = new FormData(e.target);
+        const form = e.target;
+        const fd = new FormData(form);
+        const removePdf = fd.get('removePdf') === '1';
+        const file = fd.get('pdf');
+        // undefined = ne pas toucher au justificatif existant ; null = le retirer.
+        let pdfFilename;
+        if (file && file.size > 0) {
+            if (!TRAVAUX_ACCEPTED_MIME.includes(file.type)) {
+                showToast('Format non supporté (PDF, JPG ou PNG uniquement)', 'negative');
+                return;
+            }
+            try {
+                const newFilename = await uploadOwnedDocument(assetId, file);
+                if (travail.pdfFilename) cloudDeleteDocument(assetId, travail.pdfFilename).catch(() => {});
+                pdfFilename = newFilename;
+            } catch {
+                showToast('Échec de l\'import du fichier', 'negative');
+                return;
+            }
+        } else if (removePdf && travail.pdfFilename) {
+            cloudDeleteDocument(assetId, travail.pdfFilename).catch(() => {});
+            pdfFilename = null;
+        }
         updateOwnedTravail(assetId, travailId, {
             date: fd.get('date'),
             description: String(fd.get('description') || '').trim(),
             montant: Number(fd.get('montant')),
             tag: fd.get('tag'),
-            commentaire: String(fd.get('commentaire') || '').trim()
+            commentaire: String(fd.get('commentaire') || '').trim(),
+            financeParCredit: fd.get('financeParCredit') === '1',
+            ...(pdfFilename !== undefined ? { pdfFilename } : {})
         });
         modal.hidden = true;
         showToast('Frais modifié');
@@ -2192,21 +2984,24 @@ function openEditTravailModal(assetId, travailId) {
         renderOwnedTravauxTab(fresh);
         renderAccordionPostAchat(fresh);
         renderOwnedSynthese(fresh);
-        renderOwnedCharts(fresh);
+        renderOwnedCalculTab(fresh);
         renderAccordionSimulateur(fresh);
     });
 }
 
-function printSelectedDocuments(assetId, filenames) {
+async function printSelectedDocuments(assetId, filenames) {
     if (!filenames.length) return;
     const win = window.open('', '_blank');
     if (!win) return;
-    const embeds = filenames.map(f => `<embed src="/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(f)}" type="application/pdf" class="print-doc-embed">`).join('');
+    const pairs = await Promise.all(filenames.map(async f => ({ url: await cloudDocumentUrl(assetId, f).catch(() => null), isImage: _isImageFilename(f) })));
+    const embeds = pairs.filter(p => p.url).map(p => p.isImage
+        ? `<img src="${p.url}" class="print-doc-embed">`
+        : `<embed src="${p.url}" type="application/pdf" class="print-doc-embed">`).join('');
     win.document.write(`
         <!doctype html><html><head><title>Impression des factures</title>
         <style>
             body { margin: 0; }
-            .print-doc-embed { width: 100%; height: 100vh; display: block; break-after: page; }
+            .print-doc-embed { width: 100%; height: 100vh; display: block; break-after: page; object-fit: contain; }
             .print-doc-embed:last-child { break-after: auto; }
         </style>
         </head><body>${embeds}</body></html>
@@ -2214,6 +3009,35 @@ function printSelectedDocuments(assetId, filenames) {
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 500);
+}
+
+function _normalizeSearchText(str) {
+    return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+const TRAVAUX_ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png'];
+const TRAVAUX_MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 Mo — marge sous la limite de la Cloud Function
+
+function _fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+}
+
+// Lance worker(item) sur chaque item de `items`, au plus `limit` en simultane — evite de
+// saturer l'API Anthropic quand plusieurs factures sont deposees d'un coup (import groupe).
+async function _runWithConcurrencyLimit(items, limit, worker) {
+    let cursor = 0;
+    async function next() {
+        while (cursor < items.length) {
+            const current = cursor++;
+            await worker(items[current], current);
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next));
 }
 
 function renderOwnedTravauxTab(asset) {
@@ -2241,20 +3065,20 @@ function renderOwnedTravauxTab(asset) {
         const yearTotal = rows.reduce((s, t) => s + t.montant, 0);
         const isCurrent = String(y) === String(currentYear);
         return `
-        <details class="owned-travaux-year" ${isCurrent ? 'open' : ''}>
+        <details class="owned-travaux-year" data-default-open="${isCurrent ? '1' : '0'}" ${isCurrent ? 'open' : ''}>
             <summary class="owned-travaux-year__summary">
                 <span>${y === 'sans-date' ? 'Sans date' : y}</span>
                 <strong>${Math.round(yearTotal).toLocaleString('fr-FR')} €</strong>
             </summary>
             <div class="owned-travaux-list">
                 ${rows.map(t => `
-                    <div class="owned-travaux-row">
-                        <input type="checkbox" class="owned-travaux-select" data-select-travail="${escapeHtml(t.id)}" ${t.pdfFilename ? '' : 'disabled title="Aucun PDF attaché"'}>
+                    <div class="owned-travaux-row" data-search-text="${escapeHtml(`${t.description || ''} ${t.montant || ''} ${t.commentaire || ''}`)}">
+                        <input type="checkbox" class="owned-travaux-select" data-select-travail="${escapeHtml(t.id)}" ${t.pdfFilename ? '' : 'disabled title="Aucun justificatif attaché"'}>
                         <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
-                        <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
+                        <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.financeParCredit ? ` <small class="owned-caveat" data-tooltip="Inclus dans le crédit immobilier principal (pas payé cash) — reste déductible l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">🏦 financé</small>` : ''}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
                         <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
                         <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
-                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le PDF" aria-label="Voir le PDF de ${escapeHtml(t.description || 'ce frais')}">📄</button>` : '<span></span>'}
+                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le justificatif" aria-label="Voir le justificatif de ${escapeHtml(t.description || 'ce frais')}">📄</button>` : '<span></span>'}
                         <button type="button" class="owned-travaux-edit" data-edit-travail="${escapeHtml(t.id)}" title="Modifier" aria-label="Modifier ${escapeHtml(t.description || 'ce frais')}">✏️</button>
                         <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
                     </div>
@@ -2266,23 +3090,41 @@ function renderOwnedTravauxTab(asset) {
     el.innerHTML = `
         <div class="owned-section-title">Frais &amp; justificatifs</div>
         <div class="owned-travaux-toolbar">
+            <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…">
             <button type="button" class="btn btn--ghost btn--sm" data-action="print-selection" disabled>🖨 Imprimer la sélection</button>
         </div>
         ${yearBlocksHtml}
         ${totalDed > 0 ? `<div class="owned-travaux-totals"><span>Déductible ${currentYear} : <strong>${Math.round(totalDed).toLocaleString('fr-FR')} €</strong></span></div>` : ''}
-        <form class="owned-travaux-form" data-form="add-travail-tab" novalidate>
-            <input type="date" name="date" class="variables-input" required placeholder="Date" style="flex:0 0 140px">
-            <input type="text" name="description" class="variables-input" required placeholder="Description" style="flex:1;min-width:120px">
-            <input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" style="flex:0 0 100px">
-            <select name="tag" class="variables-input" style="flex:0 0 130px">
-                <option value="a-classifier">À classifier</option>
-                <option value="deductible">Déductible</option>
-                <option value="non-deductible">Non déductible</option>
-            </select>
-            <input type="text" name="commentaire" class="variables-input" placeholder="Commentaire (optionnel)" style="flex:1;min-width:120px">
-            <input type="file" name="pdf" accept="application/pdf" class="variables-input" style="flex:0 0 220px">
-            <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
-        </form>
+        <div class="owned-travaux-add-row">
+            <div class="owned-travaux-dropzone" data-travaux-dropzone tabindex="0" role="button" aria-label="Déposer une facture ou une photo">
+                <input type="file" accept="application/pdf,image/jpeg,image/png" multiple data-travaux-file-input hidden>
+                <div class="owned-travaux-dropzone__body" data-travaux-dropzone-body>
+                    <div class="owned-travaux-dropzone__icon">📄</div>
+                    <div class="owned-travaux-dropzone__label">Dépose une facture ou une photo</div>
+                    <div class="owned-travaux-dropzone__hint">PDF, JPG ou PNG — glisser-déposer ou <span class="owned-travaux-dropzone__browse">choisir un fichier</span></div>
+                </div>
+                <div class="owned-travaux-dropzone__status" data-travaux-status hidden></div>
+            </div>
+            <form class="owned-travaux-form" data-form="add-travail-tab" novalidate>
+                <div class="owned-travaux-ai-banner" data-travaux-ai-banner hidden></div>
+                <input type="date" name="date" class="variables-input" required placeholder="Date" data-field="date" style="flex:0 0 140px">
+                <input type="text" name="description" class="variables-input" required placeholder="Description" data-field="description" style="flex:1;min-width:120px">
+                <input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" data-field="montant" style="flex:0 0 100px">
+                <span class="owned-travaux-tag-wrap">
+                    <select name="tag" class="variables-input" data-field="tag" style="flex:0 0 130px">
+                        <option value="a-classifier">À classifier</option>
+                        <option value="deductible">Déductible</option>
+                        <option value="non-deductible">Non déductible</option>
+                    </select>
+                    <span class="owned-tag-suggested-badge" data-tag-suggested-badge hidden>🤖 suggéré</span>
+                </span>
+                <input type="text" name="commentaire" class="variables-input" placeholder="Commentaire (optionnel)" style="flex:1;min-width:120px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text-secondary);white-space:nowrap;flex:0 0 auto" data-tooltip="À cocher si ce frais fait partie de l'enveloppe du crédit immobilier principal (pas payé cash) — reste déductible fiscalement l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">
+                    <input type="checkbox" name="financeParCredit" value="1"> Financé par le crédit
+                </label>
+                <button type="submit" class="btn btn--primary btn--sm">Ajouter</button>
+            </form>
+        </div>
     `;
 
     const updateSelectionToolbar = () => {
@@ -2331,105 +3173,300 @@ function renderOwnedTravauxTab(asset) {
             renderOwnedTravauxTab(fresh);
             renderAccordionPostAchat(fresh);
             renderOwnedSynthese(fresh);
-            renderOwnedCharts(fresh);
+            renderOwnedCalculTab(fresh);
             renderAccordionSimulateur(fresh);
         });
     });
 
-    el.querySelector('[data-form="add-travail-tab"]')?.addEventListener('submit', async e => {
+    // ─── Recherche (filtre client, déplie les années qui matchent) ───────────
+    const searchInput = el.querySelector('[data-travaux-search]');
+    searchInput?.addEventListener('input', () => {
+        const q = _normalizeSearchText(searchInput.value.trim());
+        el.querySelectorAll('.owned-travaux-year').forEach(details => {
+            if (!q) {
+                details.hidden = false;
+                details.open = details.dataset.defaultOpen === '1';
+                details.querySelectorAll('.owned-travaux-row').forEach(row => { row.hidden = false; });
+                return;
+            }
+            let anyMatch = false;
+            details.querySelectorAll('.owned-travaux-row').forEach(row => {
+                const match = _normalizeSearchText(row.dataset.searchText).includes(q);
+                row.hidden = !match;
+                if (match) anyMatch = true;
+            });
+            details.hidden = !anyMatch;
+            if (anyMatch) details.open = true;
+        });
+    });
+
+    // ─── Dépôt facture/photo → extraction IA (Cloud Function extraireFraisFacture) ──────────
+    // Pré-remplit le formulaire ci-contre ; le fichier reste attaché comme justificatif au
+    // clic "Ajouter" même si l'extraction échoue (toast, pas de blocage). Voir spec
+    // docs/superpowers/specs/2026-08-04-onglet-travaux-refonte.md.
+    let pendingFile = null;
+    const dropzone = el.querySelector('[data-travaux-dropzone]');
+    const dropzoneBody = el.querySelector('[data-travaux-dropzone-body]');
+    const fileInput = el.querySelector('[data-travaux-file-input]');
+    const statusEl = el.querySelector('[data-travaux-status]');
+    const aiBanner = el.querySelector('[data-travaux-ai-banner]');
+    const tagBadge = el.querySelector('[data-tag-suggested-badge]');
+    const form = el.querySelector('[data-form="add-travail-tab"]');
+    const fieldDate = form.querySelector('[data-field="date"]');
+    const fieldDesc = form.querySelector('[data-field="description"]');
+    const fieldMontant = form.querySelector('[data-field="montant"]');
+    const fieldTag = form.querySelector('[data-field="tag"]');
+
+    const resetDropzone = () => {
+        pendingFile = null;
+        if (fileInput) fileInput.value = '';
+        dropzone.classList.remove('owned-travaux-dropzone--filled', 'owned-travaux-dropzone--dragover');
+        dropzoneBody.hidden = false;
+        statusEl.hidden = true;
+        statusEl.className = 'owned-travaux-dropzone__status';
+        statusEl.textContent = '';
+        aiBanner.hidden = true;
+        tagBadge.hidden = true;
+        [fieldDate, fieldDesc, fieldMontant].forEach(f => f.classList.remove('ai-filled'));
+    };
+
+    const handleFile = async file => {
+        if (!TRAVAUX_ACCEPTED_MIME.includes(file.type)) {
+            showToast('Format non supporté (PDF, JPG ou PNG uniquement)', 'negative');
+            return;
+        }
+        pendingFile = file;
+        dropzoneBody.hidden = true;
+        dropzone.classList.add('owned-travaux-dropzone--filled');
+        statusEl.hidden = false;
+        statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--loading';
+        statusEl.textContent = `📄 ${file.name} — lecture de la facture…`;
+
+        if (file.size > TRAVAUX_MAX_FILE_SIZE) {
+            statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
+            statusEl.textContent = `📄 ${file.name} — trop volumineux pour l'extraction (max 8 Mo), remplis à la main`;
+            return;
+        }
+
+        try {
+            const base64 = await _fileToBase64(file);
+            const result = await cloudExtraireFraisFacture(base64, file.type);
+            if (result.date) { fieldDate.value = result.date; fieldDate.classList.add('ai-filled'); }
+            if (result.description) { fieldDesc.value = result.description; fieldDesc.classList.add('ai-filled'); }
+            if (result.montant > 0) { fieldMontant.value = result.montant; fieldMontant.classList.add('ai-filled'); }
+            fieldTag.value = result.tagSuggestion || 'a-classifier';
+            tagBadge.hidden = false;
+            aiBanner.hidden = false;
+            aiBanner.textContent = `🤖 Facture : ${file.name} — vérifie les champs avant de valider`;
+            statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--ok';
+            statusEl.textContent = `📄 ${file.name} — ✓ pré-rempli`;
+        } catch (err) {
+            statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
+            statusEl.textContent = `📄 ${file.name} — extraction impossible, remplis à la main`;
+            showToast('Extraction impossible, remplis le formulaire à la main', 'negative');
+        }
+    };
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('owned-travaux-dropzone--dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('owned-travaux-dropzone--dragover'));
+    // Plusieurs fichiers a la fois -> modale de revue groupee (openTravauxBatchModal) ; un seul
+    // fichier -> flux inline existant (handleFile), inchange. Voir spec
+    // docs/superpowers/specs/2026-08-04-travaux-import-groupe.md.
+    const handleFiles = fileList => {
+        const files = Array.from(fileList || []);
+        if (files.length === 0) return;
+        if (files.length === 1) { handleFile(files[0]); return; }
+        openTravauxBatchModal(files);
+    };
+    dropzone.addEventListener('drop', e => {
         e.preventDefault();
-        const form = e.target;
+        dropzone.classList.remove('owned-travaux-dropzone--dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => {
+        handleFiles(fileInput.files);
+        fileInput.value = '';
+    });
+
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
         const fd = new FormData(form);
         const id = state.activeOwnedAssetId;
         if (!id) return;
-        const file = fd.get('pdf');
+        const date = fd.get('date');
+        const description = fd.get('description')?.trim();
+        const montant = Number(fd.get('montant'));
+        if (!date || !description || !montant) {
+            showToast('Date, description et montant sont requis', 'negative');
+            return;
+        }
         let pdfFilename = null;
-        if (file && file.size > 0) {
+        if (pendingFile) {
             try {
-                pdfFilename = await uploadOwnedDocument(id, file);
+                pdfFilename = await uploadOwnedDocument(id, pendingFile);
             } catch {
-                showToast('Échec de l\'import du PDF', 'negative');
+                showToast('Échec de l\'import du fichier', 'negative');
                 return;
             }
         }
         addOwnedTravail(id, {
-            date: fd.get('date'),
-            description: fd.get('description')?.trim(),
-            montant: Number(fd.get('montant')),
+            date,
+            description,
+            montant,
             tag: fd.get('tag'),
             commentaire: fd.get('commentaire')?.trim(),
-            pdfFilename
+            pdfFilename,
+            financeParCredit: fd.get('financeParCredit') === '1'
         });
         form.reset();
+        resetDropzone();
         showToast('Frais ajouté');
         const fresh = getOwnedAsset(id);
         renderOwnedTravauxTab(fresh);
         renderAccordionPostAchat(fresh);
         renderOwnedSynthese(fresh);
-        renderOwnedCharts(fresh);
+        renderOwnedCalculTab(fresh);
         renderAccordionSimulateur(fresh);
     });
 }
 
-let _ownedCfCumChart = null;
-let _ownedEcartChart = null;
-let _ownedCrdChart = null;
+// Import groupe : plusieurs fichiers deposes d'un coup sur le dropzone (renderOwnedTravauxTab)
+// -> revue en tableau, extraction IA en concurrence limitee, validation en un clic. Voir spec
+// docs/superpowers/specs/2026-08-04-travaux-import-groupe.md. Le flux fichier unique
+// (handleFile, dans renderOwnedTravauxTab) reste inchange.
+async function openTravauxBatchModal(files) {
+    const id = state.activeOwnedAssetId;
+    if (!id) return;
+
+    const rows = files.map((file, idx) => ({ idx, file, status: 'loading', date: '', description: '', montant: 0, tag: 'a-classifier' }));
+    const TAG_OPTIONS = `
+        <option value="a-classifier">À classifier</option>
+        <option value="deductible">Déductible</option>
+        <option value="non-deductible">Non déductible</option>`;
+
+    const rowHtml = row => `
+        <tr>
+            <td><input type="checkbox" data-batch-check="${row.idx}" checked aria-label="Inclure ${escapeHtml(row.file.name)}"></td>
+            <td class="owned-batch-filename">
+                📄 ${escapeHtml(row.file.name)}
+                <div class="owned-batch-status" data-batch-status="${row.idx}">lecture…</div>
+            </td>
+            <td><input type="date" class="variables-input" data-batch-field="date" data-idx="${row.idx}"></td>
+            <td><input type="text" class="variables-input" data-batch-field="description" data-idx="${row.idx}" placeholder="Description"></td>
+            <td><input type="number" class="variables-input" data-batch-field="montant" data-idx="${row.idx}" placeholder="Montant €" min="0"></td>
+            <td><select class="variables-input" data-batch-field="tag" data-idx="${row.idx}">${TAG_OPTIONS}</select></td>
+        </tr>`;
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--xwide">
+            <div class="owned-modal-head">
+                <div>
+                    <h3 class="owned-modal-title">Import groupé — ${files.length} factures</h3>
+                    <div class="owned-modal-sub" data-batch-progress>Analyse en cours… 0 / ${files.length}</div>
+                </div>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+            </div>
+            <div class="owned-batch-table-wrap">
+                <table class="owned-batch-table">
+                    <thead><tr><th></th><th>Fichier</th><th>Date</th><th>Description</th><th>Montant</th><th>Tag</th></tr></thead>
+                    <tbody>${rows.map(rowHtml).join('')}</tbody>
+                </table>
+            </div>
+            <div class="owned-modal-actions">
+                <button type="button" class="btn btn--ghost" data-close-modal>Annuler</button>
+                <button type="button" class="btn btn--primary" data-batch-submit disabled>Ajouter les ${files.length} frais</button>
+            </div>
+        </div>
+    `, 'owned-travaux-batch-modal');
+
+    const progressEl = modal.querySelector('[data-batch-progress]');
+    const submitBtn = modal.querySelector('[data-batch-submit]');
+
+    const updateSubmitLabel = () => {
+        if (!submitBtn) return;
+        const checkedCount = modal.querySelectorAll('[data-batch-check]:checked').length;
+        submitBtn.textContent = checkedCount > 0 ? `Ajouter les ${checkedCount} frais` : 'Aucun frais sélectionné';
+        submitBtn.disabled = doneCount < files.length || checkedCount === 0;
+    };
+    modal.querySelectorAll('[data-batch-check]').forEach(cb => cb.addEventListener('change', updateSubmitLabel));
+
+    const applyRow = row => {
+        const statusEl = modal.querySelector(`[data-batch-status="${row.idx}"]`);
+        if (statusEl) {
+            statusEl.textContent = row.status === 'ok' ? '✓ pré-rempli' : row.status === 'error' ? 'extraction impossible' : 'lecture…';
+            statusEl.className = `owned-batch-status ${row.status === 'ok' ? 'owned-batch-status--ok' : row.status === 'error' ? 'owned-batch-status--error' : ''}`;
+        }
+        const dateEl = modal.querySelector(`[data-batch-field="date"][data-idx="${row.idx}"]`);
+        const descEl = modal.querySelector(`[data-batch-field="description"][data-idx="${row.idx}"]`);
+        const montantEl = modal.querySelector(`[data-batch-field="montant"][data-idx="${row.idx}"]`);
+        const tagEl = modal.querySelector(`[data-batch-field="tag"][data-idx="${row.idx}"]`);
+        if (dateEl) dateEl.value = row.date;
+        if (descEl) descEl.value = row.description;
+        if (montantEl) montantEl.value = row.montant > 0 ? row.montant : '';
+        if (tagEl) tagEl.value = row.tag;
+    };
+
+    let doneCount = 0;
+    await _runWithConcurrencyLimit(rows, 3, async row => {
+        try {
+            const base64 = await _fileToBase64(row.file);
+            const result = await cloudExtraireFraisFacture(base64, row.file.type);
+            row.status = 'ok';
+            row.date = result.date || '';
+            row.description = result.description || '';
+            row.montant = result.montant > 0 ? result.montant : 0;
+            row.tag = result.tagSuggestion || 'a-classifier';
+        } catch {
+            row.status = 'error';
+        }
+        applyRow(row);
+        doneCount++;
+        progressEl.textContent = doneCount < files.length
+            ? `Analyse en cours… ${doneCount} / ${files.length}`
+            : `Analyse terminée — vérifie les champs avant de valider`;
+        if (doneCount === files.length) updateSubmitLabel();
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Ajout en cours…';
+        let added = 0, skipped = 0;
+        for (const row of rows) {
+            const checked = modal.querySelector(`[data-batch-check="${row.idx}"]`)?.checked;
+            if (!checked) continue;
+            const date = modal.querySelector(`[data-batch-field="date"][data-idx="${row.idx}"]`)?.value;
+            const description = modal.querySelector(`[data-batch-field="description"][data-idx="${row.idx}"]`)?.value.trim();
+            const montant = Number(modal.querySelector(`[data-batch-field="montant"][data-idx="${row.idx}"]`)?.value);
+            const tag = modal.querySelector(`[data-batch-field="tag"][data-idx="${row.idx}"]`)?.value;
+            if (!date || !description || !montant) { skipped++; continue; }
+            let pdfFilename;
+            try {
+                pdfFilename = await uploadOwnedDocument(id, row.file);
+            } catch {
+                skipped++;
+                continue;
+            }
+            addOwnedTravail(id, { date, description, montant, tag, commentaire: '', pdfFilename, financeParCredit: false });
+            added++;
+        }
+        modal.hidden = true;
+        showToast(skipped > 0 ? `${added} frais ajoutés, ${skipped} ignoré${skipped > 1 ? 's' : ''}` : `${added} frais ajoutés`);
+        const fresh = getOwnedAsset(id);
+        renderOwnedTravauxTab(fresh);
+        renderAccordionPostAchat(fresh);
+        renderOwnedSynthese(fresh);
+        renderOwnedCalculTab(fresh);
+        renderAccordionSimulateur(fresh);
+    });
+}
+
 let _ownedPortfolioCfChart = null;
 let _ownedPortfolioEcartChart = null;
 
-function renderOwnedCharts(asset) {
-    const wrap = document.getElementById('owned-charts-detail');
-    if (!wrap) return;
-
-    if (!((asset.acquisition?.prix || 0) > 0)) {
-        wrap.hidden = true;
-        if (_ownedCfCumChart) { _ownedCfCumChart.destroy(); _ownedCfCumChart = null; }
-        if (_ownedEcartChart) { _ownedEcartChart.destroy(); _ownedEcartChart = null; }
-        return;
-    }
-
-    wrap.hidden = false;
-    const tmi = getOwnedTmi();
-    const regime = getOwnedRegime();
-    const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
-
-    const labels = years.map(y => String(y.year));
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const gold = '#C5A059';
-    const green = '#22c55e';
-    const red = '#ef4444';
-    const textClr = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
-    const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-    const scaleOpts = {
-        x: { ticks: { color: textClr, maxRotation: 45, minRotation: 45, font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } },
-        y: { ticks: { color: textClr, callback: v => (Math.abs(v) >= 1000 ? (v/1000).toFixed(0) + 'k' : v) + '€', font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } }
-    };
-
-    if (_ownedCfCumChart) { _ownedCfCumChart.destroy(); _ownedCfCumChart = null; }
-    const canvasCF = document.getElementById('owned-cfcum-chart');
-    if (canvasCF) {
-        _ownedCfCumChart = new Chart(canvasCF, {
-            type: 'line',
-            data: { labels, datasets: [{ data: years.map(y => Math.round(y.cumulCF)), borderColor: gold, backgroundColor: isDark ? 'rgba(197,160,89,0.08)' : 'rgba(197,160,89,0.13)', borderWidth: 2, pointRadius: 3, pointBackgroundColor: gold, tension: 0.25, fill: true }] },
-            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
-        });
-    }
-
-    if (_ownedEcartChart) { _ownedEcartChart.destroy(); _ownedEcartChart = null; }
-    const canvasEcart = document.getElementById('owned-ecart-chart');
-    if (canvasEcart) {
-        _ownedEcartChart = new Chart(canvasEcart, {
-            type: 'line',
-            data: { labels, datasets: [
-                { label: 'Recettes', data: years.map(y => Math.round(y.recettesCum)), borderColor: green, backgroundColor: 'rgba(34,197,94,0.06)', borderWidth: 2, pointRadius: 2, tension: 0.25, fill: false },
-                { label: 'Dépenses', data: years.map(y => Math.round(y.depensesCum)), borderColor: red, backgroundColor: 'rgba(239,68,68,0.06)', borderWidth: 2, pointRadius: 2, tension: 0.25, fill: false }
-            ]},
-            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ' : ' + ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
-        });
-    }
-}
-
-function renderOwnedPortfolioCharts(list, tmi, regime) {
+function renderOwnedPortfolioCharts(list, profileData, regime) {
+    if (IS_MOBILE_PAGE) return; // bloc desktop uniquement — voir renderOwnedVerdictBlock
     const container = document.getElementById('owned-portfolio-charts');
     if (!container) return;
 
@@ -2442,7 +3479,7 @@ function renderOwnedPortfolioCharts(list, tmi, regime) {
 
     const currentYear = new Date().getFullYear();
     const allRanges = list.map(a => {
-        const anneeAchat = a.anneeAchat || currentYear;
+        const anneeAchat = parseDateAchat(a.dateAchat).annee;
         const duree = a.acquisition?.credit?.duree || 0;
         return { start: anneeAchat, end: Math.max(currentYear + 2, anneeAchat + duree) };
     });
@@ -2453,7 +3490,7 @@ function renderOwnedPortfolioCharts(list, tmi, regime) {
     for (let y = globalStart; y <= globalEnd; y++) { aggCF[y] = 0; aggRec[y] = 0; aggDep[y] = 0; }
 
     for (const asset of list) {
-        const { years } = computeOwnedAssetTimeline(asset, tmi, regime);
+        const { years } = computeOwnedAssetTimeline(asset, profileData, regime);
         for (const row of years) {
             if (row.year >= globalStart && row.year <= globalEnd) {
                 aggCF[row.year] += row.cfAnnuel;
@@ -2522,62 +3559,13 @@ function renderOwnedPortfolioCharts(list, tmi, regime) {
     }
 }
 
-function renderOwnedCrdChart(asset) {
-    const wrap = document.getElementById('owned-crd-chart-wrap');
-    if (!wrap) return;
-    if (_ownedCrdChart) { _ownedCrdChart.destroy(); _ownedCrdChart = null; }
-
-    const credit = asset.acquisition?.credit || {};
-    const montant = credit.montant || 0;
-    const duree = credit.duree || 0;
-    const anneeAchat = asset.anneeAchat || new Date().getFullYear();
-
-    if (!montant || !duree) { wrap.hidden = true; return; }
-    wrap.hidden = false;
-
-    const { schedule } = computeAmortizationSchedule(montant, credit.taux || 0, duree, anneeAchat);
-    const labels = schedule.map(r => String(r.annee));
-    const dataCRD = schedule.map(r => r.crdDebut);
-    const currentYear = new Date().getFullYear();
-
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const textClr = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
-    const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-    const canvas = document.getElementById('owned-crd-chart');
-    if (!canvas) return;
-
-    _ownedCrdChart = new Chart(canvas, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                data: dataCRD,
-                borderColor: '#ef4444',
-                backgroundColor: isDark ? 'rgba(239,68,68,0.07)' : 'rgba(239,68,68,0.08)',
-                borderWidth: 2,
-                pointRadius: 2,
-                tension: 0.1,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => 'CRD : ' + Math.round(ctx.parsed.y).toLocaleString('fr-FR') + ' €' } }
-            },
-            scales: {
-                x: { ticks: { color: textClr, maxRotation: 45, font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } },
-                y: { ticks: { color: textClr, callback: v => (Math.abs(v) >= 1000 ? (v/1000).toFixed(0) + 'k' : v) + '€', font: { family: "'IBM Plex Mono', monospace", size: 10 } }, grid: { color: gridClr } }
-            }
-        }
-    });
-}
-
+// Alertes uniquement (régime optimal plus avantageux, seuil micro-foncier dépassé, loyer sous-évalué)
+// — toujours visibles au-dessus des onglets, PC et mobile. Les indicateurs chiffrés et le comparatif
+// des régimes ont été déplacés dans l'onglet Calcul (renderOwnedCalculTab), voir spec
+// docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md.
 function renderOwnedSynthese(asset) {
     if (!nodes.ownedSynthese) return;
     const acq = asset.acquisition || {};
-    const credit = acq.credit || {};
     const hasData = (acq.prix || 0) > 0;
 
     if (!hasData) {
@@ -2586,7 +3574,45 @@ function renderOwnedSynthese(asset) {
     }
 
     const tmi = getOwnedTmi();
+    const currentRegime = getOwnedRegime();
+    const optRegime = getOptimalRegime(asset, tmi);
+    const optGain = optRegime.optimal ? (optRegime.optimalCF || 0) - (optRegime.allCFs[currentRegime] || 0) : 0;
+    const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
+    const hasOptAlert = optRegime.optimal && optRegime.optimal !== currentRegime && optGain > 20;
+
+    // Revenus bruts pour alerte 15k
+    const allAssets = Object.values(loadOwnedAssets());
+    const revenusBruts = computeRevenusLocatifsBruts(allAssets);
+    const alerteMicroFoncier = revenusBruts > 15000 && currentRegime === 'micro-foncier';
+
+    const loyerMarche = asset.loyerMarche || null;
+    const loyerInitialVal = acq.loyerInitial || 0;
+    const loyerSousEvalue = loyerMarche && loyerInitialVal > 0 && loyerInitialVal < loyerMarche.loyerMedian * 0.9;
+
+    nodes.ownedSynthese.innerHTML = `
+        ${alerteMicroFoncier ? `<div class="owned-alert owned-alert--error">⚠ Revenus fonciers bruts ${Math.round(revenusBruts).toLocaleString('fr-FR')} €/an — Micro-foncier interdit au-delà de 15 000 €. Changez de régime.</div>` : ''}
+        ${hasOptAlert ? `<div class="owned-alert owned-alert--info">💡 ${REGIME_LABELS_SHORT[optRegime.optimal]} serait plus favorable de <strong>+${Math.round(optGain).toLocaleString('fr-FR')} €/mois</strong> pour ce bien${optRegime.optimal === 'sci-is' ? ' <span class="owned-caveat" data-tooltip="Comparaison basée sur le seul CF net-net : ne compte pas les frais de structure d\'une SCI-IS (comptable, formalisme, ~1500-2500 €/an) ni sa fiscalité de sortie, moins favorable (pas d\'abattement pour durée de détention, flat tax sur les dividendes).">(hors frais de structure et fiscalité de sortie)</span>' : ''}</div>` : ''}
+        ${loyerSousEvalue ? `<div class="owned-alert owned-alert--warning">📈 Loyer potentiellement sous-évalué : marché à <strong>${Math.round(loyerMarche.loyerMedian).toLocaleString('fr-FR')} €/mois</strong> (médiane sur ${loyerMarche.nbSamples} biens)</div>` : ''}
+    `;
+}
+
+// Onglet Calcul : détail de tous les indicateurs d'un bien, identique PC et mobile — indicateurs clés,
+// défiscalisation (comparaison des régimes pour le scénario courant), détail CF net-net (avec sélecteur
+// d'année partagé avec le bloc Verdict via state.ownedYearFilters), flux de trésorerie annuel
+// (renderOwnedCfTable, cible owned-cf-table-wrap séparément), comparatif des régimes dans le temps,
+// accès au compte de résultat. Voir docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md.
+function renderOwnedCalculTab(asset) {
+    const topEl = document.getElementById('owned-calcul-top');
+    const bottomEl = document.getElementById('owned-calcul-bottom');
+    if (!topEl || !bottomEl) return;
+    const acq = asset.acquisition || {};
+    const credit = acq.credit || {};
+    const hasData = (acq.prix || 0) > 0;
+    if (!hasData) { topEl.innerHTML = ''; bottomEl.innerHTML = ''; renderOwnedCfTable(asset); return; }
+
+    const tmi = getOwnedTmi();
     const sc = getOwnedDefaultScenario(asset);
+    const regime = getOwnedRegime();
 
     // Mensualité crédit calculée
     const montant = credit.montant || 0;
@@ -2595,13 +3621,18 @@ function renderOwnedSynthese(asset) {
     let mensualiteCredit = 0;
     if (tauxM > 0 && nMois > 0) mensualiteCredit = (montant * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
     else if (nMois > 0) mensualiteCredit = montant / nMois;
-    const assuranceMens = (montant * ((credit.assurance || 0) / 100)) / 12;
+    let assuranceMens = 0;
+    if (montant > 0 && (credit.duree || 0) > 0) {
+        const { schedule } = computeAmortizationSchedule(montant, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
+        const yearRow = schedule.find(r => r.annee === new Date().getFullYear());
+        assuranceMens = yearRow ? yearRow.assurance / 12 : 0;
+    }
     const mensualiteTotale = mensualiteCredit + assuranceMens;
     const investTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
     const apport = Math.max(0, investTotal - montant);
 
     // Métriques scénario réaliste — régime global
-    const r = computeOwnedAssetCF(asset, sc.variables, tmi, getOwnedRegime());
+    const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
     const cfAvantTone = r.cfNet >= 0 ? 'positive' : 'negative';
     const cfApresTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
     const dscrTone = r.dscr > 0 && r.dscr < 1 ? 'negative' : r.dscr >= 1.1 ? 'positive' : '';
@@ -2612,7 +3643,7 @@ function renderOwnedSynthese(asset) {
         { key: 'reel', label: 'Réel' },
         { key: 'sci-is', label: 'SCI-IS' },
     ];
-    const currentRegime = getOwnedRegime();
+    const currentRegime = regime;
     const defisca = REGIMES.map(({ key, label }) => {
         const rd = computeOwnedAssetCF(asset, { ...sc.variables, regime: key }, tmi);
         return { key, label, impots: rd.impotsAnnee, cfNetNet: rd.cfNetNet };
@@ -2622,30 +3653,26 @@ function renderOwnedSynthese(asset) {
     const patNet = computePatrimoineNet(asset);
     const patTone = patNet.patrimoineNet !== null ? (patNet.patrimoineNet >= 0 ? 'positive' : 'negative') : '';
 
-    // Régime optimal
+    // Régime optimal (pour le badge sur les cartes défiscalisation)
     const optRegime = getOptimalRegime(asset, tmi);
-    const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
-    const optGain = optRegime.optimal ? (optRegime.optimalCF || 0) - (optRegime.allCFs[currentRegime] || 0) : 0;
-    const hasOptAlert = optRegime.optimal && optRegime.optimal !== currentRegime && optGain > 20;
 
-    // Revenus bruts pour alerte 15k
-    const allAssets = Object.values(loadOwnedAssets());
-    const revenusBruts = computeRevenusLocatifsBruts(allAssets);
-    const alerteMicroFoncier = revenusBruts > 15000 && currentRegime === 'micro-foncier';
-    const anneeComp = new Date().getFullYear();
+    // Détail CF net-net — sélecteur d'année, état partagé avec le bloc Verdict (state.ownedYearFilters)
+    const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
+    const defaultYear = Math.max(1, new Date().getFullYear() - anneeAchat + 1);
+    const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYear;
+    const YEAR_OPTIONS = [1, 3, 5, 10];
+    const yearSelectorHtml = `
+        <div class="owned-year-selector" style="margin-bottom:8px">
+            <span class="owned-year-selector__label">Vue</span>
+            <div class="owned-year-selector__btns">
+                ${YEAR_OPTIONS.map(y => { const absYear = anneeAchat + y - 1; return `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-calcul-year="${y}">An ${y} <span style="font-size:.65em;opacity:.6">${absYear}</span></button>`; }).join('')}
+            </div>
+        </div>`;
+    const breakdown = computeCFBreakdown(asset, state.profileData, regime, yr);
+    const breakdownHtml = breakdown ? renderCFBreakdownHTML(breakdown, yr) : '';
 
-    const loyerMarche = asset.loyerMarche || null;
-    const loyerInitialVal = acq.loyerInitial || 0;
-    const loyerSousEvalue = loyerMarche && loyerInitialVal > 0 && loyerInitialVal < loyerMarche.loyerMedian * 0.9;
-
-    nodes.ownedSynthese.innerHTML = `
-        ${alerteMicroFoncier ? `<div class="owned-alert owned-alert--error">⚠ Revenus fonciers bruts ${Math.round(revenusBruts).toLocaleString('fr-FR')} €/an — Micro-foncier interdit au-delà de 15 000 €. Changez de régime.</div>` : ''}
-        ${hasOptAlert ? `<div class="owned-alert owned-alert--info">💡 ${REGIME_LABELS_SHORT[optRegime.optimal]} serait plus favorable de <strong>+${Math.round(optGain).toLocaleString('fr-FR')} €/mois</strong> pour ce bien${optRegime.optimal === 'sci-is' ? ' <span class="owned-caveat" data-tooltip="Comparaison basée sur le seul CF net-net : ne compte pas les frais de structure d\'une SCI-IS (comptable, formalisme, ~1500-2500 €/an) ni sa fiscalité de sortie, moins favorable (pas d\'abattement pour durée de détention, flat tax sur les dividendes).">(hors frais de structure et fiscalité de sortie)</span>' : ''}</div>` : ''}
-        ${loyerSousEvalue ? `<div class="owned-alert owned-alert--warning">📈 Loyer potentiellement sous-évalué : marché à <strong>${Math.round(loyerMarche.loyerMedian).toLocaleString('fr-FR')} €/mois</strong> (médiane sur ${loyerMarche.nbSamples} biens)</div>` : ''}
-        <div class="owned-synthese__title">Synthèse · scénario réaliste
-            ${asset.ville ? `<button class="btn btn--ghost btn--sm" data-action="analyse-loyer-marche" style="font-size:0.75rem" title="Comparer le loyer au marché local">📈 Loyer marché</button>` : ''}
-            <button class="btn btn--ghost btn--sm" data-action="open-compte-resultat" data-annee="${anneeComp}" style="margin-left:auto;font-size:0.75rem">📊 Compte de résultat ${anneeComp}</button>
-        </div>
+    topEl.innerHTML = `
+        <div class="owned-section-title">Indicateurs clés</div>
         <div class="owned-synthese__cards">
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Mensualité crédit</span>
@@ -2714,6 +3741,28 @@ function renderOwnedSynthese(asset) {
                 </div>`;
             }).join('')}
         </div>
+        <div class="owned-section-title" style="margin-top:20px">Détail du CF net-net</div>
+        ${yearSelectorHtml}
+        ${breakdownHtml}
+    `;
+
+    topEl.querySelectorAll('[data-calcul-year]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: Number(btn.dataset.calculYear) };
+            localStorage.setItem('investissementWebOwnedYearFilters', JSON.stringify(state.ownedYearFilters));
+            renderOwnedCalculTab(asset);
+            if (!IS_MOBILE_PAGE) renderOwnedVerdictBlock(asset);
+        });
+    });
+
+    renderOwnedCfTable(asset);
+
+    const cmp = computeRegimeComparison(asset, state.profileData);
+    const anneeComp = new Date().getFullYear();
+    bottomEl.innerHTML = `
+        <div class="owned-section-title" style="margin-top:20px">Comparatif des régimes fiscaux dans le temps</div>
+        ${renderRegimeComparisonHTML(cmp)}
+        <button type="button" class="btn btn--ghost btn--sm" data-action="open-compte-resultat" data-annee="${anneeComp}" style="margin-top:12px">📊 Compte de résultat ${anneeComp}</button>
     `;
 }
 
@@ -2731,6 +3780,12 @@ function renderAccordionAcquisition(asset) {
             ? `${Math.round(investTotal).toLocaleString('fr-FR')} € investis`
             : '';
     }
+
+    // Valeur affichée dans l'<input type="month"> : toujours 'YYYY-MM' (padding sur le mois),
+    // même pour un bien saisi avant l'ajout du mois précis (anneeAchat brute, ex-défaut janvier).
+    const dateAchatValue = asset.dateAchat
+        ? (() => { const { annee, mois } = parseDateAchat(asset.dateAchat); return `${annee}-${String(mois).padStart(2, '0')}`; })()
+        : '';
 
     nodes.accAcquisitionContent.innerHTML = `
         <div class="owned-form-grid">
@@ -2765,8 +3820,8 @@ function renderAccordionAcquisition(asset) {
                 </select>
             </label>
             <label class="variables-field">
-                <span class="variables-label">Année d'achat</span>
-                <input class="variables-input" type="number" min="1900" max="2099" step="1" data-owned-field="anneeAchat" value="${asset.anneeAchat || ''}">
+                <span class="variables-label" data-tooltip="Date d'effet du crédit et du reste du calcul du bien (loyer, charges, déficit foncier). Le crédit ne démarre pas forcément en janvier : indiquez le mois exact pour une première (et dernière) année d'amortissement correctement proratisée.">Date d'achat</span>
+                <input class="variables-input" type="month" data-owned-field="dateAchat" value="${dateAchatValue}">
             </label>
             <label class="variables-field">
                 <span class="variables-label">Ville</span>
@@ -2832,6 +3887,13 @@ function renderAccordionAcquisition(asset) {
                 <span class="variables-label">Assurance (%/an)</span>
                 <input class="variables-input" type="number" min="0" max="5" step="0.01" data-credit-field="assurance" value="${credit.assurance || 0}">
             </label>
+            <label class="variables-field">
+                <span class="variables-label" data-tooltip="Certains contrats recalculent la cotisation chaque année sur le capital restant dû (elle diminue), d'autres la fixent une fois pour toute la durée sur le capital emprunté. Vérifiez sur votre échéancier bancaire.">Base de l'assurance</span>
+                <select class="variables-input" data-credit-field="assuranceMode">
+                    <option value="initial" ${(credit.assuranceMode || 'initial') === 'initial' ? 'selected' : ''}>Capital initial (fixe)</option>
+                    <option value="crd" ${credit.assuranceMode === 'crd' ? 'selected' : ''}>Capital restant dû (dégressif)</option>
+                </select>
+            </label>
         </div>
         <div class="owned-section-title" style="margin-top:20px">Valeur patrimoniale</div>
         <div class="owned-form-grid">
@@ -2880,14 +3942,12 @@ function renderAccordionAcquisition(asset) {
             }
             if (nodes.ownedDetailTitle) {
                 const metaEl = nodes.ownedDetailTitle.querySelector('.owned-detail-title__meta');
-                if (metaEl) metaEl.textContent = `${freshAsset.ville}${freshAsset.anneeAchat ? ` · Acquis ${freshAsset.anneeAchat}` : ''}`;
+                if (metaEl) metaEl.textContent = `${freshAsset.ville}${freshAsset.dateAchat ? ` · Acquis ${formatDateAchat(freshAsset.dateAchat)}` : ''}`;
             }
             renderOwnedSynthese(freshAsset);
             renderOwnedVerdictBlock(freshAsset);
-            renderOwnedCfTable(freshAsset);
-            renderOwnedCharts(freshAsset);
+            renderOwnedCalculTab(freshAsset);
             renderAccordionSimulateur(freshAsset);
-            renderOwnedCrdChart(freshAsset);
         });
         nodes.accAcquisitionContent.addEventListener('click', e => {
             const delBtn = e.target.closest('[data-delete-lot]');
@@ -2898,7 +3958,7 @@ function renderAccordionAcquisition(asset) {
                 const freshAsset = getOwnedAsset(id);
                 renderAccordionAcquisition(freshAsset);
                 renderOwnedSynthese(freshAsset);
-                renderOwnedCfTable(freshAsset);
+                renderOwnedCalculTab(freshAsset);
             }
         });
         nodes.accAcquisitionContent.addEventListener('submit', e => {
@@ -2918,7 +3978,7 @@ function renderAccordionAcquisition(asset) {
             const freshAsset = getOwnedAsset(id);
             renderAccordionAcquisition(freshAsset);
             renderOwnedSynthese(freshAsset);
-            renderOwnedCfTable(freshAsset);
+            renderOwnedCalculTab(freshAsset);
         });
     }
 }
@@ -3029,16 +4089,6 @@ function renderAccordionPostAchat(asset) {
         .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
         .reduce((s, t) => s + t.montant, 0);
 
-    // CF Breakdown pour l'année sélectionnée (filtre par bien)
-    const tmi = getOwnedTmi();
-    const regime = getOwnedRegime();
-    const defaultYear = asset.anneeAchat
-        ? Math.max(1, currentYear - asset.anneeAchat + 1)
-        : 1;
-    const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYear;
-    const breakdown = (asset.acquisition?.prix || 0) > 0 ? computeCFBreakdown(asset, tmi, regime, yr) : null;
-    const breakdownHtml = breakdown ? renderCFBreakdownHTML(breakdown, yr) : '';
-
     // P0-B : résoudre les valeurs courantes depuis chargesAnnuelles pour les inputs plats
     const recentEntriesDisplay = (post.chargesAnnuelles || [])
         .filter(e => e.annee <= currentYear)
@@ -3093,15 +4143,13 @@ function renderAccordionPostAchat(asset) {
             `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Ajoutez une année pour suivre l\'évolution des charges.</p>'}
         </div>
         <form class="owned-charges-form" data-form="add-charges" novalidate>
-            <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.anneeAchat || 2020}" step="1" required style="min-width:0">
+            <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.dateAchat ? parseDateAchat(asset.dateAchat).annee : 2020}" step="1" required style="min-width:0">
             <input type="number" name="taxeFonciere" class="variables-input" placeholder="TF (€/an)" min="0" step="10" style="min-width:0">
             <input type="number" name="chargesCopro" class="variables-input" placeholder="Copro (€/mois)" min="0" step="5" style="min-width:0">
             <input type="number" name="gestionLocative" class="variables-input" placeholder="Gestion (%)" min="0" max="20" step="0.5" style="min-width:0">
             <input type="number" name="assurancePNO" class="variables-input" placeholder="PNO (€/an)" min="0" step="10" style="min-width:0">
             <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
         </form>
-
-        ${breakdownHtml}
 
         <div class="owned-section-title" style="margin-top:20px">Travaux</div>
         <p style="font-size:.82rem;color:var(--text-tertiary)">
@@ -3110,7 +4158,9 @@ function renderAccordionPostAchat(asset) {
         </p>
         <button type="button" class="btn btn--ghost btn--sm" data-action="goto-travaux-tab">Gérer les frais &amp; justificatifs →</button>
 
-        <div class="owned-section-title" style="margin-top:20px">Loyer</div>
+        <div class="owned-section-title" style="margin-top:20px">Loyer
+            ${asset.ville ? `<button class="btn btn--ghost btn--sm" data-action="analyse-loyer-marche" style="margin-left:auto;font-size:0.75rem" title="Comparer le loyer au marché local">📈 Loyer marché</button>` : ''}
+        </div>
         ${(() => {
             const isImmeubleLoyer = (asset.lots || []).length > 0;
             if (isImmeubleLoyer) {
@@ -3155,35 +4205,22 @@ function renderAccordionPostAchat(asset) {
 
         <div class="owned-section-title" style="margin-top:20px">Déficits fonciers reportables</div>
         ${(() => {
-            const defs = [...(post.deficitFoncierReporte || [])].sort((a, b) => b.annee - a.annee);
-            const currentYear = new Date().getFullYear();
-            const stockTotal = defs.filter(d => d.annee >= currentYear - 10).reduce((s, d) => s + Math.max(0, (d.montantInitial || 0) - (d.utilise || 0)), 0);
+            const { lignes, stockTotal } = computeDeficitFoncierHistorique(asset, state.profileData);
             return `
-            ${stockTotal > 0 ? `<div class="owned-deficit-total">Stock reportable : <strong>${Math.round(stockTotal).toLocaleString('fr-FR')} €</strong></div>` : ''}
+            <p class="owned-caveat">Calculé automatiquement depuis l'historique de ce bien dans l'app (loyers, charges, crédit — régime réel simulé, quel que soit le régime actuellement suivi ci-dessus). Un déficit réel antérieur à la saisie du bien ici n'est pas repris.</p>
+            ${stockTotal > 0 ? `<div class="owned-deficit-total">Stock reportable : <strong>${stockTotal.toLocaleString('fr-FR')} €</strong></div>` : ''}
             <table class="owned-loyers-table">
-                <thead><tr><th>Année</th><th>Montant initial</th><th>Utilisé</th><th>Restant</th><th>Expire</th><th></th></tr></thead>
+                <thead><tr><th>Année</th><th>Montant</th><th>Utilisé</th><th>Restant</th><th>Expire</th></tr></thead>
                 <tbody>
-                ${defs.length ? defs.map(d => {
-                    const restant = Math.max(0, (d.montantInitial || 0) - (d.utilise || 0));
-                    const expire = d.annee + 10;
-                    const expired = expire <= currentYear;
-                    return `<tr ${expired ? 'style="opacity:0.4"' : ''}>
+                ${lignes.length ? lignes.map(d => `<tr ${d.expired ? 'style="opacity:0.4"' : ''}>
                         <td>${d.annee}</td>
-                        <td>${(d.montantInitial || 0).toLocaleString('fr-FR')} €</td>
-                        <td>${(d.utilise || 0).toLocaleString('fr-FR')} €</td>
-                        <td>${restant.toLocaleString('fr-FR')} €</td>
-                        <td>${expired ? '<span style="color:var(--danger)">Expiré</span>' : expire}</td>
-                        <td><button class="owned-travaux-delete" data-delete-deficit="${d.annee}" title="Supprimer" aria-label="Supprimer le déficit ${d.annee}">✕</button></td>
-                    </tr>`;
-                }).join('') : '<tr><td colspan="6" style="text-align:center;font-style:italic;color:var(--text-tertiary);padding:12px">Aucun déficit enregistré</td></tr>'}
+                        <td>${d.montantInitial.toLocaleString('fr-FR')} €</td>
+                        <td>${d.utilise.toLocaleString('fr-FR')} €</td>
+                        <td>${d.restant.toLocaleString('fr-FR')} €</td>
+                        <td>${d.expired ? '<span style="color:var(--danger)">Expiré</span>' : d.expire}</td>
+                    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;font-style:italic;color:var(--text-tertiary);padding:12px">Aucun déficit détecté sur l\'historique de ce bien</td></tr>'}
                 </tbody>
-            </table>
-            <form class="owned-deficit-form" data-form="add-deficit" novalidate>
-                <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.anneeAchat || 2015}" max="${currentYear}" step="1" required style="flex:0 0 80px">
-                <input type="number" name="montantInitial" class="variables-input" placeholder="Montant (€)" min="0" step="100" required style="flex:1">
-                <input type="number" name="utilise" class="variables-input" placeholder="Déjà utilisé (€)" min="0" step="100" style="flex:1">
-                <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
-            </form>`;
+            </table>`;
         })()}
 
         <div class="owned-section-title" style="margin-top:20px">Notes</div>
@@ -3227,18 +4264,8 @@ function renderAccordionPostAchat(asset) {
             const fresh = getOwnedAsset(id);
             renderOwnedSynthese(fresh);
             renderOwnedVerdictBlock(fresh);
-            renderOwnedCfTable(fresh);
-            renderOwnedCharts(fresh);
+            renderOwnedCalculTab(fresh);
             renderAccordionSimulateur(fresh);
-            renderOwnedProjectionContent(fresh);
-
-            // B3 : mise à jour ciblée du bloc CF breakdown sans re-rendre tout l'accordéon
-            const yr2 = (state.ownedYearFilters?.[id]) ?? 1;
-            const bdNew = (fresh.acquisition?.prix || 0) > 0
-                ? computeCFBreakdown(fresh, getOwnedTmi(), getOwnedRegime(), yr2)
-                : null;
-            const bdWrap = nodes.accPostAchatContent.querySelector('.cf-breakdown');
-            if (bdWrap && bdNew) bdWrap.outerHTML = renderCFBreakdownHTML(bdNew, yr2);
         });
     });
 
@@ -3255,7 +4282,7 @@ function renderAccordionPostAchat(asset) {
             const fresh = getOwnedAsset(id);
             renderAccordionPostAchat(fresh);
             renderOwnedSynthese(fresh);
-            renderOwnedCharts(fresh);
+            renderOwnedCalculTab(fresh);
             renderAccordionSimulateur(fresh);
         });
     });
@@ -3267,7 +4294,7 @@ function renderAccordionPostAchat(asset) {
         if (!id) return;
         const annee = Number(fd.get('annee'));
         if (!annee) return;
-        const anneeAchatMin = getOwnedAsset(id)?.anneeAchat || 2000;
+        const anneeAchatMin = parseDateAchat(getOwnedAsset(id)?.dateAchat).annee;
         if (annee < anneeAchatMin || annee > new Date().getFullYear() + 1) {
             showToast(`Année invalide (min : ${anneeAchatMin})`, 'negative');
             return;
@@ -3283,7 +4310,7 @@ function renderAccordionPostAchat(asset) {
         const fresh = getOwnedAsset(id);
         renderAccordionPostAchat(fresh);
         renderOwnedSynthese(fresh);
-        renderOwnedCharts(fresh);
+        renderOwnedCalculTab(fresh);
         renderAccordionSimulateur(fresh);
     });
 
@@ -3313,8 +4340,7 @@ function renderAccordionPostAchat(asset) {
         renderAccordionPostAchat(fresh);
         renderOwnedSynthese(fresh);
         renderOwnedVerdictBlock(fresh);
-        renderOwnedCfTable(fresh);
-        renderOwnedCharts(fresh);
+        renderOwnedCalculTab(fresh);
         renderAccordionAcquisition(fresh);
         renderAccordionSimulateur(fresh);
     };
@@ -3341,31 +4367,10 @@ function renderAccordionPostAchat(asset) {
         refreshAfterLoyerChange(id);
     });
 
-    nodes.accPostAchatContent.querySelectorAll('[data-delete-deficit]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = state.activeOwnedAssetId;
-            if (!id) return;
-            deleteOwnedDeficitFoncier(id, Number(btn.dataset.deleteDeficit));
-            renderAccordionPostAchat(getOwnedAsset(id));
-        });
-    });
-
-    nodes.accPostAchatContent.querySelector('[data-form="add-deficit"]')?.addEventListener('submit', e => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const id = state.activeOwnedAssetId;
-        if (!id) return;
-        const annee = Number(fd.get('annee'));
-        if (!annee) return;
-        addOwnedDeficitFoncier(id, { annee, montantInitial: Number(fd.get('montantInitial')) || 0, utilise: Number(fd.get('utilise')) || 0 });
-        e.target.reset();
-        showToast('Déficit enregistré');
-        renderAccordionPostAchat(getOwnedAsset(id));
-    });
-
 }
 
 function renderAccordionSimulateur(asset) {
+    if (IS_MOBILE_PAGE) return; // bloc desktop uniquement — voir renderOwnedVerdictBlock
     if (!nodes.accSimulateurContent) return;
     const tmi = getOwnedTmi();
     const scenarios = asset.scenarios || [];
@@ -3526,7 +4531,7 @@ function renderAccordionSimulateur(asset) {
             const fresh = getOwnedAsset(id);
             renderOwnedSynthese(fresh);
             renderOwnedVerdictBlock(fresh);
-            renderOwnedCfTable(fresh);
+            renderOwnedCalculTab(fresh);
             renderAccordionSimulateur(fresh);
         });
     });
@@ -3570,7 +4575,7 @@ async function callOwnedDiagnosticIA(assetId) {
         bien: {
             nom: asset.nom,
             ville: asset.ville,
-            anneeAchat: asset.anneeAchat,
+            dateAchat: asset.dateAchat,
             acquisition: asset.acquisition,
             postAchat: {
                 taxeFonciere: asset.postAchat?.taxeFonciere,
@@ -3626,12 +4631,126 @@ async function callOwnedDiagnosticIA(assetId) {
     }
 }
 
+// ─── CONNEXION (compte unique PC + iPhone) ───────────────────────────────────
+
+let _authGateWired = false;
+function _renderAuthGate() {
+    const gate = document.getElementById('owned-auth-gate');
+    if (!gate) return;
+    if (!gate.innerHTML.trim()) {
+        gate.innerHTML = `
+            <div class="owned-auth-gate">
+                <h2>Portefeuille — Connexion</h2>
+                <p class="owned-auth-gate__hint">Un seul compte, partagé entre le PC et l'iPhone.</p>
+                <form id="owned-auth-form" novalidate>
+                    <label class="variables-field">
+                        <span class="variables-label">Email</span>
+                        <input class="variables-input" type="email" name="email" required autocomplete="username">
+                    </label>
+                    <label class="variables-field">
+                        <span class="variables-label">Mot de passe</span>
+                        <input class="variables-input" type="password" name="password" required autocomplete="current-password">
+                    </label>
+                    <div id="owned-auth-error" class="owned-auth-gate__error" hidden></div>
+                    <button type="submit" class="btn btn--primary">Se connecter</button>
+                </form>
+            </div>`;
+    }
+    if (_authGateWired) return;
+    _authGateWired = true;
+    gate.querySelector('#owned-auth-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const errEl = gate.querySelector('#owned-auth-error');
+        const btn = e.target.querySelector('button[type="submit"]');
+        if (errEl) errEl.hidden = true;
+        if (btn) { btn.disabled = true; btn.textContent = 'Connexion…'; }
+        try {
+            await cloudSignIn(String(fd.get('email') || '').trim(), String(fd.get('password') || ''));
+        } catch {
+            if (errEl) { errEl.textContent = 'Email ou mot de passe incorrect.'; errEl.hidden = false; }
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Se connecter'; }
+        }
+    });
+}
+
+// ─── MIGRATION PONCTUELLE (ancien portefeuille localStorage → Firestore) ─────
+// Ne s'affiche que si le portefeuille cloud est vide et qu'un ancien portefeuille local existe sur
+// cet appareil — se masque tout seul une fois l'un des deux devenu faux, pas besoin de la retirer.
+
+function _renderMigrationBanner() {
+    const el = document.getElementById('owned-migration-banner');
+    if (!el) return;
+    if (Object.keys(_assetsCache).length > 0) { el.hidden = true; return; }
+    let legacy = {};
+    try { legacy = JSON.parse(localStorage.getItem('investissementWebOwnedAssets')) || {}; } catch { /* pas de portefeuille local */ }
+    const count = Object.keys(legacy).length;
+    if (!count) { el.hidden = true; return; }
+
+    el.hidden = false;
+    el.innerHTML = `
+        <div class="owned-alert owned-alert--info">
+            ${count} bien(s) trouvé(s) dans l'ancien stockage local de cet appareil.
+            <button type="button" class="btn btn--primary btn--sm" id="owned-migrate-btn">Importer vers le cloud</button>
+        </div>`;
+    el.querySelector('#owned-migrate-btn')?.addEventListener('click', async e => {
+        const btn = e.target;
+        btn.disabled = true;
+        btn.textContent = 'Import en cours…';
+        try {
+            for (const [id, asset] of Object.entries(legacy)) {
+                await cloudSetAsset(id, asset);
+                for (const t of (asset.postAchat?.travaux || [])) {
+                    if (!t.pdfFilename) continue;
+                    try {
+                        const res = await fetch(`/api/documents/${encodeURIComponent(id)}/${encodeURIComponent(t.pdfFilename)}`);
+                        if (!res.ok) continue;
+                        await cloudUploadDocumentAs(id, t.pdfFilename, await res.blob());
+                    } catch { /* PDF illisible localement — ignoré, les autres biens continuent */ }
+                }
+            }
+            let goals = {}, order = [];
+            try { goals = JSON.parse(localStorage.getItem('investissementWebPortfolioGoals')) || {}; } catch { /* rien à migrer */ }
+            try { order = JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder)) || []; } catch { /* rien à migrer */ }
+            const regime = localStorage.getItem('investissementWebOwnedRegime');
+            await cloudSaveMeta({ goals, order, ...(regime ? { regime } : {}) });
+            showToast(`${count} bien(s) importé(s) dans le cloud`, 'success');
+        } catch {
+            showToast(`Erreur pendant l'import — réessayez`, 'negative');
+            btn.disabled = false;
+            btn.textContent = 'Importer vers le cloud';
+        }
+    });
+}
+
 function renderCollections() {
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
         return;
     }
     nodes.collectionPanel.hidden = false;
+
+    const gate = document.getElementById('owned-auth-gate');
+    const regimeLabel = document.querySelector('.owned-regime-slider-label');
+    const regimeAnchor = document.getElementById('owned-regime-slider-anchor');
+    if (!_authUser) {
+        if (gate) gate.hidden = false;
+        _renderAuthGate();
+        if (regimeLabel) regimeLabel.hidden = true;
+        if (regimeAnchor) regimeAnchor.hidden = true;
+        if (nodes.ownedListView) nodes.ownedListView.hidden = true;
+        if (nodes.ownedDetailView) nodes.ownedDetailView.hidden = true;
+        return;
+    }
+    if (gate) gate.hidden = true;
+    if (regimeLabel) regimeLabel.hidden = false;
+    if (regimeAnchor) regimeAnchor.hidden = false;
+    // En attente du premier snapshot Firestore (biens ET regime/profil) : sans _metaLoaded,
+    // un rendu prematuré utiliserait la valeur par defaut locale de state.ownedRegime/profileData
+    // (ex. "Micro-foncier") le temps que watchPortfolioMeta reponde, provoquant un flash visible
+    // du CF net-net avant qu'il ne se corrige vers la vraie valeur (audit UX 2026-07-29).
+    if (!_cloudLoaded || !_metaLoaded) return;
 
     if (state.activeOwnedAssetId) {
         if (nodes.ownedListView) nodes.ownedListView.hidden = true;
@@ -3640,6 +4759,7 @@ function renderCollections() {
     } else {
         if (nodes.ownedListView) nodes.ownedListView.hidden = false;
         if (nodes.ownedDetailView) nodes.ownedDetailView.hidden = true;
+        _renderMigrationBanner();
         renderOwnedPortfolioList();
     }
 }

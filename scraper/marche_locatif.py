@@ -11,7 +11,7 @@ import statistics
 import time
 from datetime import datetime, timedelta
 
-from curl_cffi import requests as crequests
+from browser import browser_page
 from logger import get_logger
 
 _logger = get_logger("spark.marche")
@@ -24,23 +24,6 @@ _NEXT_DATA = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
     re.DOTALL,
 )
-# Même bypass DataDome que le scraper d'achat
-_HEADERS = {
-    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "accept-language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-    "accept-encoding": "gzip, deflate, br",
-    "cache-control": "no-cache",
-    "pragma": "no-cache",
-    "sec-ch-ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "document",
-    "sec-fetch-mode": "navigate",
-    "sec-fetch-site": "same-origin",
-    "sec-fetch-user": "?1",
-    "upgrade-insecure-requests": "1",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-}
 
 
 def est_stale(conn, villes: list[dict] | None = None, ttl_jours: int = TTL_JOURS) -> bool:
@@ -196,7 +179,7 @@ def _parse_location_ad(ad, ville: dict) -> dict | None:
 
 
 def _fetch_leboncoin_locations(villes: list[dict]) -> tuple[list[dict], bool]:
-    """Scrape LeBonCoin category=10 (locations). Nouvelle session par page (bypass DataDome).
+    """Scrape LeBonCoin category=10 (locations) via Playwright + stealth.
     Retourne (annonces, blocked) — blocked=True si HTTP 403 détecté."""
     result = []
     blocked = False
@@ -204,35 +187,43 @@ def _fetch_leboncoin_locations(villes: list[dict]) -> tuple[list[dict], bool]:
         cp = ville["code_postal"]
         time.sleep(random.uniform(2, 5))
         for page in range(1, 6):
-            session = crequests.Session(impersonate="chrome131")
             url = f"https://www.leboncoin.fr/recherche?category=10&locations={cp}&page={page}"
+            html = None
             try:
-                r = session.get(url, headers=_HEADERS, timeout=20)
-                if r.status_code == 403:
-                    _logger.warning("[Marché/LBC] %s p%d : HTTP 403 — IP bloquée", ville["ville"], page)
-                    blocked = True
-                    break
-                if r.status_code != 200:
-                    _logger.warning("[Marché/LBC] %s p%d : HTTP %d", ville["ville"], page, r.status_code)
-                    break
-                m = _NEXT_DATA.search(r.text)
-                if not m:
-                    break
-                data = json.loads(m.group(1))
-                sd   = data.get("props", {}).get("pageProps", {}).get("searchData", {})
-                ads  = sd.get("ads", [])
-                if not ads:
-                    break
-                for ad in ads:
-                    parsed = _parse_location_ad(ad, ville)
-                    if parsed:
-                        result.append(parsed)
-                if page >= sd.get("max_pages", 1):
-                    break
-                time.sleep(random.uniform(6, 10))
+                with browser_page() as p:
+                    resp = p.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    if resp and resp.status == 403:
+                        _logger.warning("[Marché/LBC] %s p%d : HTTP 403 — IP bloquée", ville["ville"], page)
+                        blocked = True
+                        break
+                    if resp and resp.status != 200:
+                        _logger.warning("[Marché/LBC] %s p%d : HTTP %d", ville["ville"], page, resp.status)
+                        break
+                    html = p.content()
             except Exception as e:
                 _logger.warning("[Marché/LBC] %s p%d : %s", ville["ville"], page, e)
                 break
+
+            if not html:
+                break
+            m = _NEXT_DATA.search(html)
+            if not m:
+                break
+            try:
+                data = json.loads(m.group(1))
+            except json.JSONDecodeError:
+                break
+            sd   = data.get("props", {}).get("pageProps", {}).get("searchData", {})
+            ads  = sd.get("ads", [])
+            if not ads:
+                break
+            for ad in ads:
+                parsed = _parse_location_ad(ad, ville)
+                if parsed:
+                    result.append(parsed)
+            if page >= sd.get("max_pages", 1):
+                break
+            time.sleep(random.uniform(6, 10))
     return result, blocked
 
 

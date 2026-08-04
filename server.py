@@ -4,7 +4,6 @@ import re
 import sys
 import threading
 import time
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -585,39 +584,6 @@ def _nominatim_lookup(query: str):
         return None, None
 
 
-@app.route("/api/geocode/address", methods=["POST"])
-def api_geocode_address():
-    """Géocode une adresse précise (portefeuille). Cache en base, y compris les échecs."""
-    payload = request.get_json(silent=True) or {}
-    adresse = (payload.get("adresse") or "").strip()
-    if not adresse:
-        return jsonify({"error": "adresse requise"}), 400
-
-    conn = _geocode_db()
-    try:
-        row = conn.execute(
-            "SELECT lat, lng FROM geocodes_adresse WHERE adresse = ?", (adresse,)
-        ).fetchone()
-        if row is not None:
-            return jsonify({"lat": row["lat"], "lng": row["lng"], "cached": True})
-
-        try:
-            lat, lng = _nominatim_lookup(adresse)
-        except Exception as exc:  # réseau coupé, timeout, JSON invalide…
-            return jsonify({"error": str(exc)}), 502
-
-        # On mémorise aussi les échecs (lat/lng NULL) pour ne pas re-solliciter
-        # Nominatim à chaque frappe sur une adresse introuvable.
-        conn.execute(
-            "INSERT OR REPLACE INTO geocodes_adresse (adresse, lat, lng) VALUES (?, ?, ?)",
-            (adresse, lat, lng),
-        )
-        conn.commit()
-        return jsonify({"lat": lat, "lng": lng, "cached": False})
-    finally:
-        conn.close()
-
-
 @app.route("/api/geocode/batch", methods=["POST"])
 def api_geocode_batch():
     """Géocode une liste de {ville, code_postal} (carte du scanner). Cache en base."""
@@ -838,39 +804,17 @@ def _ensure_exports_dir():
 
 DOCUMENTS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "documents"
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-MAX_DOCUMENT_SIZE = 20 * 1024 * 1024
 
 
 def _safe_bien_id(bien_id: str) -> bool:
     return bool(bien_id) and bool(_SAFE_ID_RE.match(bien_id))
 
 
-@app.route("/api/documents/<bien_id>/upload", methods=["POST"])
-def api_documents_upload(bien_id):
-    if not _safe_bien_id(bien_id):
-        return jsonify({"error": "invalid_bien_id"}), 400
-
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "file_missing"}), 400
-    if not file.filename.lower().endswith(".pdf"):
-        return jsonify({"error": "invalid_extension"}), 400
-
-    file.seek(0, os.SEEK_END)
-    size = file.tell()
-    file.seek(0)
-    if size > MAX_DOCUMENT_SIZE:
-        return jsonify({"error": "file_too_large"}), 400
-
-    bien_dir = DOCUMENTS_DIR / bien_id
-    bien_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}.pdf"
-    file.save(bien_dir / filename)
-    return jsonify({"filename": filename})
-
-
 @app.route("/api/documents/<bien_id>/<filename>", methods=["GET"])
 def api_documents_get(bien_id, filename):
+    """Lecture seule : ne sert plus qu'à relire les anciens PDF locaux pendant la migration
+    ponctuelle vers Firebase Storage (owned-portfolio.js, bouton "Importer vers le cloud").
+    L'upload/la suppression se font désormais directement depuis le client vers Storage."""
     if not _safe_bien_id(bien_id):
         return jsonify({"error": "invalid_bien_id"}), 400
     safe_filename = secure_filename(filename)
@@ -881,31 +825,6 @@ def api_documents_get(bien_id, filename):
     if not (bien_dir / filename).exists():
         return jsonify({"error": "not_found"}), 404
     return send_from_directory(bien_dir, filename, mimetype="application/pdf")
-
-
-@app.route("/api/documents/<bien_id>/<filename>", methods=["DELETE"])
-def api_documents_delete(bien_id, filename):
-    if not _safe_bien_id(bien_id):
-        return jsonify({"error": "invalid_bien_id"}), 400
-    safe_filename = secure_filename(filename)
-    if safe_filename != filename:
-        return jsonify({"error": "invalid_filename"}), 400
-
-    path = DOCUMENTS_DIR / bien_id / filename
-    if path.exists():
-        path.unlink()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/documents/<bien_id>", methods=["DELETE"])
-def api_documents_delete_all(bien_id):
-    if not _safe_bien_id(bien_id):
-        return jsonify({"error": "invalid_bien_id"}), 400
-    bien_dir = DOCUMENTS_DIR / bien_id
-    if bien_dir.exists():
-        import shutil
-        shutil.rmtree(bien_dir)
-    return jsonify({"ok": True})
 
 
 @app.route("/api/portfolio/export", methods=["POST"])

@@ -1,0 +1,33 @@
+# Build artifacts — inutiles pour le codage
+dist/
+dist-validate/
+Spark/
+build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+venv/
+.pytest_cache/
+
+# Base de données locale
+scraper/biens.db
+geocache.json
+
+# Logs
+scraper/spark_scraper.log
+
+# Secrets
+scraper/config.py
+
+# Worktrees & superpowers internals
+.worktrees/
+.superpowers/
+
+# Assets binaires
+*.png
+*.ico
+*.pdf

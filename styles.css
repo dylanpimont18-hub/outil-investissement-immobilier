@@ -3189,6 +3189,7 @@ html[data-theme='light'] select {
 /* ── Responsive ── */
 @media (max-width: 860px) {
     .shell { padding-top: 184px; }
+    .shell--owned { padding-top: 90px; }
     .topbar {
         top: 10px;
         width: min(100%, calc(100% - 18px));
@@ -3268,6 +3269,7 @@ html[data-theme='light'] select {
 
 @media (max-width: 560px) {
     .shell { width: min(100%, calc(100% - 18px)); padding: 198px 0 28px; }
+    .shell--owned { padding: 90px 0 28px; }
     .topbar {
         width: calc(100% - 12px);
         border-radius: 20px;
@@ -9683,6 +9685,118 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 .owned-list-table { width: 100%; }
 .owned-list-table--compact .owned-col-hideable { display: none; }
 
+/* Liste smartphone (owned.html) : cartes empilées tap-to-open, pas de tableau large */
+.owned-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.owned-mobile-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md, 12px);
+    text-align: left;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.owned-mobile-list__item:hover,
+.owned-mobile-list__item:active { background: var(--surface-low); border-color: var(--border); }
+.owned-mobile-list__info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.owned-mobile-list__name { font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owned-mobile-list__ville { font-size: 0.78rem; color: var(--text-secondary); }
+.owned-mobile-list__cf {
+    flex-shrink: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.owned-mobile-list__cf small { font-size: 0.68rem; font-weight: 500; opacity: .7; margin-left: 2px; }
+.owned-mobile-list__cf--positive { color: #3FB950; }
+.owned-mobile-list__cf--negative { color: #F85149; }
+
+/* Bouton "densité de la liste" : n'a de sens que pour le tableau desktop (compact/complet) */
+.shell--owned #owned-density-btn { display: none; }
+
+/* ── Ergonomie tactile iPhone (audit UX 2026-07-29) ──────────────────────────
+   Le HIG iOS recommande des cibles tactiles de 44×44pt minimum. Plusieurs
+   contrôles hérités du rendu desktop (pensés pour la souris) en étaient loin
+   (jusqu'à 15-27px). Scopé à .shell--owned : ne touche pas le rendu PC. */
+.shell--owned .btn { min-height: 44px; }
+.shell--owned .owned-nav-btn { min-width: 44px; }
+.shell--owned .owned-tab {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Bug trouvé le 2026-08-04 : .owned-tabs (display:flex, sans overflow ni wrap) laissait le
+   dernier onglet (ex. "Calcul", 4 onglets sur la fiche d'un bien) coupé sur un écran de
+   téléphone — la somme des paddings dépasse la largeur dispo. Rendu scrollable horizontalement
+   plutôt que coupé, scrollbar masquée (défilement au doigt déjà naturel sur iOS/Android). */
+.shell--owned .owned-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.shell--owned .owned-tabs::-webkit-scrollbar { display: none; }
+.shell--owned .owned-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.shell--owned .owned-regime-slider__btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Checkbox de sélection (impression des justificatifs) : agrandie, la cible
+   native reste petite mais nettement moins minuscule qu'un checkbox par défaut. */
+.shell--owned .owned-travaux-select { width: 20px; height: 20px; }
+/* Icônes crayon/croix/pdf : la grille compacte de .owned-travaux-row ne laisse
+   pas la place pour un vrai 44×44 sans casser la mise en page — zone de clic
+   invisible élargie via ::before plutôt qu'un agrandissement visuel (row-gap
+   porté à 12px directement sur .owned-travaux-row plus bas, pour que les zones
+   ±6px des deux lignes se rejoignent sans se chevaucher). */
+.shell--owned .owned-travaux-row .owned-travaux-edit,
+.shell--owned .owned-travaux-row .owned-travaux-delete,
+.shell--owned .owned-travaux-row .owned-travaux-pdf-btn {
+    position: relative;
+}
+.shell--owned .owned-travaux-row .owned-travaux-edit::before,
+.shell--owned .owned-travaux-row .owned-travaux-delete::before,
+.shell--owned .owned-travaux-row .owned-travaux-pdf-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+}
+
+/* ── Zones sûres iPhone (encoche / Dynamic Island / barre de geste) ─────────
+   owned.html se déclare apple-mobile-web-app-capable pour un usage plein écran
+   une fois ajoutée à l'écran d'accueil : sans env(safe-area-inset-*), le bandeau
+   ou le bas de page peuvent chevaucher la zone système sur ce mode d'affichage. */
+.shell--owned .topbar { top: max(12px, env(safe-area-inset-top)); }
+.shell--owned { padding-bottom: max(28px, env(safe-area-inset-bottom)); }
+
+/* Bouton "Recharger l'application" (topbar owned.html) : .topbar est une grille
+   3 colonnes pensée pour le topbar plus riche d'index.html (auto / 1fr / auto) —
+   sur owned.html il n'y a que .topbar-brand en 1re colonne, donc ce bouton doit
+   être placé explicitement en 3e colonne pour finir aligné à droite plutôt que
+   collé au nom juste après. */
+.shell--owned .topbar #app-reload-btn {
+    grid-column: 3;
+    justify-self: end;
+    min-width: 44px;
+    min-height: 44px;
+}
+
 .owned-list-table table {
     width: 100%;
     border-collapse: collapse;
@@ -9967,6 +10081,28 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 
 .owned-travaux-row:last-child { border-bottom: none; }
 
+/* Smartphone : la grille 8 colonnes à largeurs fixes (≥ 418px) déborde sur un écran de
+   390px de large — on la replie sur 2 lignes de 4 colonnes auto-dimensionnées. */
+.shell--owned .owned-travaux-row {
+    grid-template-columns: auto 1fr auto auto;
+    grid-template-areas:
+        "check desc edit del"
+        "date montant tag pdf";
+    /* 12px : exactement 2× l'expansion -6px des zones de clic invisibles des
+       icônes crayon/croix/pdf (voir plus bas), pour qu'elles se rejoignent
+       sans se chevaucher entre les deux lignes de la grille. */
+    row-gap: 12px;
+    column-gap: 8px;
+}
+.shell--owned .owned-travaux-row .owned-travaux-select { grid-area: check; }
+.shell--owned .owned-travaux-row .owned-travaux-desc { grid-area: desc; }
+.shell--owned .owned-travaux-row .owned-travaux-edit { grid-area: edit; }
+.shell--owned .owned-travaux-row .owned-travaux-delete { grid-area: del; }
+.shell--owned .owned-travaux-row .owned-travaux-date { grid-area: date; font-size: 0.78rem; color: var(--text-secondary); }
+.shell--owned .owned-travaux-row .owned-travaux-montant { grid-area: montant; }
+.shell--owned .owned-travaux-row .tag { grid-area: tag; }
+.shell--owned .owned-travaux-row .owned-travaux-pdf-btn { grid-area: pdf; }
+
 .owned-travaux-year { margin-bottom: 6px; }
 .owned-travaux-year__summary {
     display: flex;
@@ -9979,7 +10115,8 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     list-style: none;
 }
 .owned-travaux-year__summary::-webkit-details-marker { display: none; }
-.owned-travaux-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.owned-travaux-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.owned-travaux-search { flex: 1 1 200px; max-width: 320px; }
 .owned-travaux-pdf-btn {
     background: none;
     border: none;
@@ -10008,6 +10145,7 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     overflow: hidden;
 }
 .document-preview-embed { width: 100%; height: 100%; border: none; }
+.document-preview-img { width: 100%; height: 100%; object-fit: contain; background: var(--surface-strong, #e2e8f0); }
 .document-preview-close {
     position: absolute;
     top: 8px;
@@ -10036,8 +10174,162 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     flex-wrap: wrap;
 }
 
-.owned-travaux-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.owned-travaux-add-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; margin-top: 10px; }
+
+.owned-travaux-dropzone {
+    flex: 1 1 260px;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 18px 14px;
+    border: 1.5px dashed var(--border-strong, var(--border-subtle));
+    border-radius: var(--radius-lg, 10px);
+    background: var(--surface-low);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s, background-color .15s;
+}
+.owned-travaux-dropzone:hover,
+.owned-travaux-dropzone:focus-visible { border-color: var(--accent-color, #C5A059); }
+.owned-travaux-dropzone--dragover { border-color: var(--accent-color, #C5A059); background: rgba(197, 160, 89, 0.08); }
+.owned-travaux-dropzone--filled { border-style: solid; }
+.owned-travaux-dropzone__icon { font-size: 1.5rem; }
+.owned-travaux-dropzone__label { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.owned-travaux-dropzone__hint { font-size: 0.75rem; color: var(--text-tertiary); }
+.owned-travaux-dropzone__browse { color: var(--accent-color, #C5A059); text-decoration: underline; }
+.owned-travaux-dropzone__status { font-size: 0.8rem; line-height: 1.4; word-break: break-word; }
+.owned-travaux-dropzone__status--loading { color: var(--text-secondary); }
+.owned-travaux-dropzone__status--ok { color: #22c55e; }
+.owned-travaux-dropzone__status--error { color: #ef4444; }
+
+/* ─── Rail Actions rapides (#owned-quickrail, PC uniquement) ────────────────────────────────── */
+.owned-portfolio-layout { display: flex; align-items: flex-start; gap: 16px; }
+.owned-portfolio-main { flex: 1; min-width: 0; }
+.owned-quickrail {
+    flex: 0 0 190px;
+    width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 8px;
+    background: var(--surface-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg, 10px);
+    position: sticky;
+    top: 16px;
+}
+.owned-quickrail__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-tertiary); padding: 2px 8px 6px; }
+.owned-quickrail__action {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 8px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color .15s, opacity .15s;
+}
+.owned-quickrail__action:hover { background: var(--surface-raised, var(--surface)); }
+.owned-quickrail__action--active { background: var(--surface-raised, var(--surface)); color: var(--accent-color, #C5A059); font-weight: 600; }
+.owned-quickrail:has(.owned-quickrail__panel:not([hidden])) .owned-quickrail__action:not(.owned-quickrail__action--active) { opacity: .5; }
+.owned-quickrail__icon { font-size: 1rem; flex-shrink: 0; }
+.owned-quickrail__panel {
+    width: 260px;
+    padding: 12px;
+    margin: 2px 0 8px;
+    background: var(--surface-raised, var(--surface));
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.owned-quickrail__panel .variables-field { margin-bottom: 0; }
+.owned-quickrail__panel .owned-travaux-dropzone { padding: 12px 8px; }
+.owned-quickrail__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.owned-quickrail input.ai-filled, .owned-quickrail select.ai-filled {
+    border-color: var(--accent-color, #C5A059);
+    background: rgba(197, 160, 89, 0.08);
+}
+@media (max-width: 1100px) {
+    .owned-portfolio-layout { flex-direction: column; }
+    .owned-quickrail { width: 100%; flex-direction: row; flex-wrap: wrap; position: static; }
+    .owned-quickrail__panel { width: 100%; }
+}
+
+/* ─── Bouton flottant "Ajouter une facture" (#owned-quickfab, mobile uniquement) ─────────────── */
+.owned-quickfab {
+    position: fixed;
+    right: 18px;
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent-color, #C5A059);
+    color: #1e1e1e;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    z-index: 150;
+    cursor: pointer;
+}
+.owned-quickfab__plus {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #1e1e1e;
+    color: var(--accent-color, #C5A059);
+    font-size: .75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+#owned-quickfab-modal .owned-add-modal__box { width: 340px; max-height: 88vh; overflow-y: auto; }
+
+.owned-travaux-form { flex: 1 1 320px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; align-content: flex-start; margin-top: 0; }
 .owned-travaux-form input, .owned-travaux-form select { flex: 1; min-width: 100px; }
+.owned-travaux-form input.ai-filled, .owned-travaux-form select.ai-filled {
+    border-color: var(--accent-color, #C5A059);
+    background: rgba(197, 160, 89, 0.08);
+}
+.owned-travaux-ai-banner {
+    flex: 1 1 100%;
+    font-size: 0.78rem;
+    color: var(--accent-color, #C5A059);
+    background: rgba(197, 160, 89, 0.08);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+.owned-travaux-tag-wrap { position: relative; display: flex; flex: 0 0 130px; }
+.owned-travaux-tag-wrap select { flex: 1; }
+.owned-tag-suggested-badge {
+    position: absolute;
+    top: -9px;
+    right: 4px;
+    font-size: 0.65rem;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: var(--accent-color, #C5A059);
+    color: #1a1a1a;
+    white-space: nowrap;
+}
 
 .owned-notes-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 
@@ -10379,6 +10671,23 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
 .owned-alert--info { background: color-mix(in srgb, var(--info) 12%, transparent); border-left: 3px solid var(--info); color: var(--text); }
 .owned-caveat { font-size: 11px; color: var(--text-tertiary, var(--muted)); font-style: italic; margin-left: 4px; }
 
+/* Grille de connexion cloud (compte unique PC + iPhone) */
+.owned-auth-gate {
+    max-width: 360px;
+    margin: 48px auto;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 12px);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.owned-auth-gate h2 { margin: 0; font-size: 1.1rem; }
+.owned-auth-gate__hint { margin: 0; font-size: .82rem; color: var(--text-tertiary, var(--muted)); }
+.owned-auth-gate form { display: flex; flex-direction: column; gap: 12px; }
+.owned-auth-gate__error { font-size: .82rem; color: var(--danger); }
+
 /* Badge régime optimal */
 .owned-badge {
     display: inline-block;
@@ -10409,6 +10718,13 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: .04em;
+}
+
+/* Camembert des dépenses : hauteur bridée (Chart.js maintainAspectRatio:false), sinon le
+   graphique s'étire à la largeur du bloc pleine largeur et devient démesuré. */
+.owned-depenses-chart-canvas-wrap {
+    position: relative;
+    height: 120px;
 }
 
 /* Tableau loyers réels */
@@ -10471,15 +10787,6 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     border-radius: var(--radius-md);
     margin-bottom: 8px;
 }
-.owned-deficit-form {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    margin-top: 8px;
-}
-.owned-deficit-form .variables-input { flex: 1; min-width: 80px; }
-
 /* Modal overlay */
 .owned-modal-overlay {
     position: fixed;
@@ -10504,6 +10811,7 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     box-shadow: 0 20px 60px rgba(0,0,0,.25);
 }
 .owned-modal--wide { max-width: 680px; }
+.owned-modal--xwide { max-width: 960px; }
 .owned-modal-head {
     display: flex;
     align-items: flex-start;
@@ -10520,6 +10828,59 @@ html[data-theme='dark'] .scanner-meta-chip--muted {
     margin-top: 16px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
+}
+
+/* Import groupé de factures (modale, onglet Travaux) */
+.owned-batch-table-wrap { overflow-x: auto; margin: 4px 0; }
+.owned-batch-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.owned-batch-table th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: var(--text-tertiary);
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.owned-batch-table td { padding: 6px; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
+.owned-batch-table input, .owned-batch-table select { min-width: 90px; }
+.owned-batch-table td:nth-child(3) input { min-width: 130px; }
+.owned-batch-table td:nth-child(4) input { min-width: 160px; }
+.owned-batch-filename { white-space: nowrap; font-size: 0.8rem; }
+.owned-batch-status { font-size: 0.72rem; color: var(--text-tertiary); margin-top: 2px; }
+.owned-batch-status--ok { color: #22c55e; }
+.owned-batch-status--error { color: #ef4444; }
+
+/* Ecran etroit : 6 colonnes ne tiennent pas (illisible/peu manipulable au doigt meme avec scroll
+   horizontal) — chaque ligne devient une carte empilee, meme principe que la variante mobile de
+   .owned-travaux-row plus haut. Media query plutot que .shell--owned : la modale est ajoutee a
+   document.body par _showOwnedModal, donc hors de l'arborescence .shell--owned (le selecteur
+   descendant ne matcherait jamais) — la vraie contrainte ici est la largeur d'ecran, pas la page. */
+@media (max-width: 480px) {
+    .owned-batch-table-wrap { overflow-x: visible; }
+    .owned-batch-table thead { display: none; }
+    .owned-batch-table tbody { display: block; }
+    .owned-batch-table tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    .owned-batch-table td { display: block; border-bottom: none; padding: 0; }
+    .owned-batch-table td:nth-child(1) { flex: 0 0 auto; }
+    .owned-batch-table td:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+    .owned-batch-table td:nth-child(3),
+    .owned-batch-table td:nth-child(4),
+    .owned-batch-table td:nth-child(5),
+    .owned-batch-table td:nth-child(6) { flex: 1 1 100%; }
+    .owned-batch-table td:nth-child(3) input,
+    .owned-batch-table td:nth-child(4) input,
+    .owned-batch-table td:nth-child(5) input,
+    .owned-batch-table td:nth-child(6) select { width: 100%; min-width: 0; }
 }
 
 /* Compte de résultat */

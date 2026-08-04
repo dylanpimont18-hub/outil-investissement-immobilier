@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Spark Portefeuille</title>
+    <meta name="theme-color" content="#060912">
+
+    <!-- PWA iPhone : rendu plein écran une fois ajouté à l'écran d'accueil (Safari → Partager → Sur l'écran d'accueil) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Spark Portefeuille">
+    <link rel="apple-touch-icon" href="Logo_site.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+    <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="shell shell--owned">
+        <header class="topbar">
+            <div class="topbar-brand">
+                <figure class="topbar-logo">
+                    <img src="Logo_site.png" alt="Logo" width="24" height="24">
+                </figure>
+                <div class="topbar-brand-copy">
+                    <span class="topbar-name">Spark Portefeuille</span>
+                </div>
+            </div>
+            <button id="app-reload-btn" class="topbar-btn topbar-btn--icon" type="button" title="Recharger l'application (récupère la dernière version en ligne)" aria-label="Recharger l'application">⟳</button>
+        </header>
+
+        <main class="workspace-board" data-layout="1">
+            <section id="collection-panel" class="workspace-panel" aria-label="Portefeuille">
+
+    <div id="owned-auth-gate" hidden></div>
+    <div class="owned-regime-slider-label" data-tooltip="Régime fiscal appliqué à tous les calculs du portefeuille (dashboard, alertes, comptes de résultat). Le bloc « Comparaison des régimes » plus bas, lui, affiche les 3 régimes côte à côte pour le bien sélectionné.">Régime fiscal du portefeuille</div>
+    <div id="owned-regime-slider-anchor"></div>
+    <!-- Vue liste (défaut) -->
+    <div id="owned-list-view">
+        <div class="owned-list-header">
+            <div>
+                <p class="brand-kicker">Portefeuille</p>
+                <h2>Mes biens détenus</h2>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button id="owned-density-btn" class="btn btn--ghost btn--sm" type="button" title="Densité de la liste"></button>
+                <button id="owned-add-btn" class="btn btn--primary" type="button">+ Ajouter un bien</button>
+            </div>
+        </div>
+        <!-- Navigation onglets portefeuille (Impôt reste PC uniquement, cf. simplification mobile) -->
+        <div class="owned-tabs owned-list-tabs" role="tablist">
+            <button class="owned-tab owned-tab--active" data-tab="overview" role="tab" aria-selected="true">Vue d'ensemble</button>
+            <button class="owned-tab" data-tab="profil" role="tab" aria-selected="false">Profil</button>
+        </div>
+
+        <div id="owned-list-tab-overview" class="owned-tab-panel" role="tabpanel">
+            <div id="owned-migration-banner" hidden></div>
+            <div id="owned-dashboard-wrap"></div>
+            <div id="owned-kpi-banner" class="owned-kpi-banner"></div>
+            <!-- Carte des biens détenus (géocodés depuis leur adresse) -->
+            <section id="owned-map-section" class="owned-map-section" hidden>
+                <div class="owned-section-title">Carte du portefeuille</div>
+                <div class="owned-map-shell">
+                    <div id="owned-map" class="owned-map-canvas"></div>
+                    <div id="owned-map-empty" class="owned-map-empty" hidden></div>
+                </div>
+                <div id="owned-map-unloc" class="owned-map-unloc"></div>
+            </section>
+            <div id="owned-portfolio-charts" class="owned-charts-row owned-portfolio-charts" hidden></div>
+            <div id="owned-list-table" class="owned-list-table"></div>
+            <div id="owned-portfolio-cf-consolidated"></div>
+        </div>
+
+        <div id="owned-list-tab-profil" class="owned-tab-panel" hidden role="tabpanel">
+            <div id="owned-profil-content"></div>
+        </div>
+    </div>
+
+    <!-- Modal ajout bien -->
+    <div id="owned-add-modal" class="owned-add-modal" hidden aria-modal="true" role="dialog">
+        <div class="owned-add-modal__box">
+            <h3>Ajouter un bien</h3>
+            <form id="owned-add-form" novalidate>
+                <label class="variables-field">
+                    <span class="variables-label">Nom du bien</span>
+                    <input id="owned-add-nom" name="nom" type="text" class="variables-input" placeholder="ex : Appartement Lyon 3e" required>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Ville</span>
+                    <input id="owned-add-ville" name="ville" type="text" class="variables-input" placeholder="ex : Lyon">
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Code postal</span>
+                    <input class="variables-input" type="text" maxlength="5"
+                        id="owned-add-cp" placeholder="ex : 18100">
+                </label>
+                <div class="owned-add-modal__actions">
+                    <button type="button" id="owned-add-cancel" class="btn btn--ghost">Annuler</button>
+                    <button type="submit" class="btn btn--primary">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bouton flottant "Ajouter une facture" (2026-08-04, mobile uniquement) : visible partout sur
+         cette page (liste et fiche d'un bien), ouvre la modale ci-dessous sans quitter la vue courante.
+         Équivalent mobile de l'action "Ajouter une facture" du rail Actions rapides PC. -->
+    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter une facture">📄<span class="owned-quickfab__plus">+</span></button>
+    <div id="owned-quickfab-modal" class="owned-add-modal" hidden aria-modal="true" role="dialog">
+        <div class="owned-add-modal__box">
+            <h3>Ajouter une facture</h3>
+            <label class="variables-field">
+                <span class="variables-label">Bien concerné</span>
+                <select data-quick-asset-select class="variables-input"></select>
+            </label>
+            <div class="owned-travaux-dropzone" data-quick-dropzone tabindex="0" role="button" aria-label="Déposer une facture ou une photo">
+                <input type="file" accept="application/pdf,image/jpeg,image/png" data-quick-file-input hidden>
+                <div data-quick-dropzone-body>
+                    <div class="owned-travaux-dropzone__label">Prendre une photo ou choisir un fichier</div>
+                </div>
+                <div class="owned-travaux-dropzone__status" data-quick-status hidden></div>
+            </div>
+            <form data-quick-facture-form novalidate>
+                <label class="variables-field">
+                    <span class="variables-label">Date</span>
+                    <input type="date" name="date" class="variables-input" data-quick-field="date" required>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Description</span>
+                    <input type="text" name="description" class="variables-input" data-quick-field="description" required>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Montant (€)</span>
+                    <input type="number" name="montant" class="variables-input" data-quick-field="montant" min="0" step="1" required>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Nature</span>
+                    <select name="tag" class="variables-input" data-quick-field="tag">
+                        <option value="a-classifier">À classifier</option>
+                        <option value="deductible">Déductible</option>
+                        <option value="non-deductible">Non déductible</option>
+                    </select>
+                </label>
+                <div class="owned-add-modal__actions">
+                    <button type="button" data-quickcancel class="btn btn--ghost">Annuler</button>
+                    <button type="submit" class="btn btn--primary">Ajouter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modale suppression sécurisée -->
+    <div id="owned-delete-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
+        <div class="owned-delete-modal__box">
+            <h3>Supprimer un bien</h3>
+            <p>Vous êtes sur le point de supprimer <strong id="owned-delete-modal-name"></strong>. Cette action est irréversible.</p>
+            <p>Pour confirmer, saisissez <strong>Supprimer</strong> ci-dessous.</p>
+            <input id="owned-delete-modal-input" class="variables-input" type="text" placeholder="Supprimer" autocomplete="off">
+            <div class="owned-delete-modal__actions">
+                <button id="owned-delete-modal-cancel" class="btn btn--ghost" type="button">Annuler</button>
+                <button id="owned-delete-modal-confirm" class="btn btn--negative" type="button" disabled>Supprimer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue détaillée -->
+    <div id="owned-detail-view" hidden>
+        <div class="owned-detail-header">
+            <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button">← Retour</button>
+            <div id="owned-detail-title" class="owned-detail-title"></div>
+            <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>✦ Diagnostic IA</button>
+        </div>
+
+        <!-- Synthèse financière calculée -->
+        <div id="owned-synthese" class="owned-synthese"></div>
+
+        <!-- Bloc verdict (4 métriques clés) -->
+        <div id="owned-verdict" class="owned-verdict"></div>
+
+        <!-- Navigation onglets -->
+        <div class="owned-tabs" role="tablist">
+            <button class="owned-tab owned-tab--active" data-tab="acquisition" role="tab" aria-selected="true">Acquisition</button>
+            <button class="owned-tab" data-tab="exploitation" role="tab" aria-selected="false">Exploitation</button>
+            <button class="owned-tab" data-tab="travaux" role="tab" aria-selected="false">Travaux</button>
+            <button class="owned-tab" data-tab="calcul" role="tab" aria-selected="false">Calcul</button>
+        </div>
+
+        <!-- Panneau Acquisition -->
+        <div id="owned-tab-acquisition" class="owned-tab-panel" role="tabpanel">
+            <div id="acc-acquisition-content"></div>
+        </div>
+
+        <!-- Panneau Exploitation -->
+        <div id="owned-tab-exploitation" class="owned-tab-panel" hidden role="tabpanel">
+            <div id="acc-postachat-content"></div>
+        </div>
+
+        <!-- Panneau Travaux -->
+        <div id="owned-tab-travaux" class="owned-tab-panel" hidden role="tabpanel">
+            <div id="owned-travaux-content"></div>
+        </div>
+
+        <!-- Panneau Calcul : détail de tous les indicateurs d'un bien (indicateurs clés, défiscalisation,
+             détail CF net-net, flux de trésorerie annuels, comparatif régimes dans le temps, accès compte
+             de résultat) — identique PC et mobile, voir docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md -->
+        <div id="owned-tab-calcul" class="owned-tab-panel" hidden role="tabpanel">
+            <div id="owned-calcul-top"></div>
+            <div id="owned-cf-table-wrap" class="owned-cf-table-wrap"></div>
+            <div id="owned-calcul-bottom"></div>
+        </div>
+
+        <!-- IDs legacy conservés pour compatibilité JS existant -->
+        <div id="acc-acquisition-summary" hidden></div>
+        <div id="acc-postachat-summary" hidden></div>
+        <div id="acc-simulateur-content" hidden></div>
+
+        <!-- Drawer Diagnostic IA (indisponible depuis cette page — pas de serveur local sur iPhone) -->
+        <div id="owned-ai-drawer" class="portfolio-ai-drawer" role="dialog" aria-modal="true" aria-label="Diagnostic IA">
+            <div class="portfolio-ai-drawer__header">
+                <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
+                <button id="owned-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer">✕</button>
+            </div>
+            <div id="owned-ai-drawer-content" class="portfolio-ai-drawer__content"></div>
+        </div>
+        <div id="owned-ai-overlay" class="portfolio-ai-overlay"></div>
+    </div>
+
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="owned-entry.js"></script>
+</body>
+</html>

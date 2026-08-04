@@ -3,7 +3,7 @@ import { buildDecisionPrintDocument } from './pdf.js';
 import { initScanner, onScannerTabActivated } from './scanner.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
 import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel } from './utils.js';
-import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections } from './owned-portfolio.js';
+import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections, syncProfileToCloud, invalidateOwnedMap } from './owned-portfolio.js';
 
 const _counterState = new WeakMap();
 
@@ -103,6 +103,7 @@ const VARIABLE_DEFAULTS = {
     'taux-input': 3.17,
     duree: 20,
     assurance: 0.3,
+    'assurance-mode': 'initial',
     'frais-bancaires': 1500,
     vacance: 5,
     copro: 40,
@@ -232,6 +233,7 @@ const WIZARD_STEPS = [
     }
 ];
 const REGIME_VALUES = new Set(['micro-foncier', 'reel', 'sci-is']);
+const ASSURANCE_MODE_VALUES = new Set(['initial', 'crd']);
 const TYPE_BIEN_VALUES = new Set(['appartement', 'maison', 'immeuble']);
 const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 const COPRO_RISK_VALUES = new Set(['stable', 'medium', 'high']);
@@ -259,6 +261,8 @@ const state = {
     ownedRegime: localStorage.getItem('investissementWebOwnedRegime') || 'micro-foncier',
     ownedYearFilter: 1,
     ownedYearFilters: JSON.parse(localStorage.getItem('investissementWebOwnedYearFilters') || '{}'),
+    ownedPieYear: JSON.parse(localStorage.getItem('investissementWebOwnedPieYear') || '{}'),
+    ownedPieMonth: JSON.parse(localStorage.getItem('investissementWebOwnedPieMonth') || '{}'),
     ownedOrder: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder) || '[]'),
     ownedCompact: localStorage.getItem(STORAGE_KEYS.ownedCompact) === '1',
     ownedSort: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedSort) || 'null'),
@@ -658,7 +662,11 @@ function sanitizeProfileData(rawProfile) {
         children: Math.max(0, Math.round(Number(rawProfile.children) || 0)),
         objectifCF: Math.max(0, Number(rawProfile.objectifCF) || 1000),
         revaloAnnuelle: Math.max(0, Math.min(20, Number(rawProfile.revaloAnnuelle) || 2)),
-        autresCredits: Array.isArray(rawProfile.autresCredits) ? rawProfile.autresCredits : []
+        autresCredits: Array.isArray(rawProfile.autresCredits) ? rawProfile.autresCredits : [],
+        // Historique des revenus (voir resolveRevenuFoyer, calculs.js) : passe-plat, pas edite par
+        // cette modale (onboarding uniquement) mais a preserver — sinon un save modale apres coup
+        // ecraserait silencieusement les entrees ajoutees depuis l'onglet Profil (owned-portfolio.js).
+        revenuHistorique: Array.isArray(rawProfile.revenuHistorique) ? rawProfile.revenuHistorique : []
     };
 }
 
@@ -692,6 +700,7 @@ function sanitizeVariablesData(rawVariables) {
         'taux-input': Math.max(0, Number(rawVariables['taux-input']) || 0),
         duree: Math.max(1, Number(rawVariables.duree) || 1),
         assurance: Math.max(0, Number(rawVariables.assurance) || 0),
+        'assurance-mode': ASSURANCE_MODE_VALUES.has(rawVariables['assurance-mode']) ? rawVariables['assurance-mode'] : 'initial',
         'frais-bancaires': Math.max(0, Number(rawVariables['frais-bancaires']) || 0),
         vacance: Math.max(0, Number(rawVariables.vacance) || 0),
         copro: Math.max(0, Number(rawVariables.copro) || 0),
@@ -732,6 +741,9 @@ function createAssetId() {
 
 function saveProfileData() {
     localStorage.setItem(STORAGE_KEYS.profileData, JSON.stringify(state.profileData));
+    // income/adults/children pilotent le TMI donc le CF net-net apres impot du portefeuille :
+    // synchronises vers owned.html (iPhone, sans formulaire Profil) via Firestore.
+    syncProfileToCloud();
 }
 
 function saveVariablesData() {
@@ -1660,6 +1672,17 @@ function canDismissProfileModal() {
 }
 
 function openProfileModal() {
+    // Une fois le profil configuré, la modale ne sert plus qu'au tout premier remplissage
+    // (onboarding, voir l'appel gardé par !state.profileConfigured plus bas dans ce fichier) :
+    // le bouton du topbar renvoie désormais vers l'onglet Profil du portefeuille pour toute
+    // édition courante (revenus historisés, adultes/enfants...), disponible aussi sur owned.html.
+    if (state.profileConfigured) {
+        document.querySelector('.workspace-tab[data-target="collection-panel"]')?.click();
+        window.requestAnimationFrame(() => {
+            document.querySelector('.owned-list-tabs .owned-tab[data-tab="profil"]')?.click();
+        });
+        return;
+    }
     const activeElement = document.activeElement;
     const canRestoreToActiveElement = activeElement instanceof HTMLElement
         && activeElement !== document.body
@@ -1719,7 +1742,7 @@ function closeProfileModal() {
 function applyProfilePreset(profileKey) {
     state.profilePreset = profileKey;
     localStorage.setItem(STORAGE_KEYS.profilePreset, state.profilePreset);
-    state.profileData = { ...createProfileData(profileKey), autresCredits: state.profileData.autresCredits };
+    state.profileData = { ...createProfileData(profileKey), autresCredits: state.profileData.autresCredits, revenuHistorique: state.profileData.revenuHistorique };
     saveProfileData();
     emitStateUpdate();
     render({ syncProfile: false, syncVariables: false });
@@ -2524,7 +2547,8 @@ function updateProfileFromForm() {
         children: nodes.profileChildren.value,
         objectifCF: nodes.profileObjectifCF?.value,
         revaloAnnuelle: nodes.profileRevaloAnnuelle?.value,
-        autresCredits: state.profileData.autresCredits
+        autresCredits: state.profileData.autresCredits,
+        revenuHistorique: state.profileData.revenuHistorique
     });
     saveProfileData();
     emitStateUpdate();
@@ -2732,7 +2756,7 @@ function initWorkspaceTabs() {
             if (target === 'collection-panel') {
                 collectionPanel.style.display = '';
                 collectionPanel.style.animation = 'tabFadeIn 200ms ease-out';
-                if (typeof _portfolioMap !== 'undefined' && _portfolioMap) { window.requestAnimationFrame(() => _portfolioMap.invalidateSize()); }
+                window.requestAnimationFrame(() => invalidateOwnedMap());
             } else if (target === 'scanner-panel') {
                 if (scannerPanel) {
                     scannerPanel.style.display = '';
@@ -2861,7 +2885,7 @@ function initSliders() {
 }
 
 console.log('[Spark] Init start');
-initOwnedPortfolio({ state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW });
+initOwnedPortfolio({ state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE: false });
 populateProfiles();
 setupCrossWindowSync();
 bindEvents();

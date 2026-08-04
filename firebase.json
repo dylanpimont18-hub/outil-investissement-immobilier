@@ -1,0 +1,63 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      ".git/**",
+      ".github/**",
+      ".claude/**",
+      ".vscode/**",
+      ".pytest_cache/**",
+      ".worktrees/**",
+      ".superpowers/**",
+      "**/__pycache__/**",
+      "**/node_modules/**",
+      "functions/**",
+      "scraper/**",
+      "tests/**",
+      "docs/**",
+      "exports/**",
+      "documents/**",
+      "data/**",
+      "scripts/**",
+      "dist/**",
+      "Spark/**",
+      "Spark-*/**",
+      "*.db",
+      "*.log",
+      "*.spec",
+      "*.bat",
+      "*.py",
+      "*.zip",
+      "*.txt",
+      "*.ico",
+      "ss_scanner_dark_scroll.png",
+      "geocache.json",
+      "CHANGELOG.md",
+      "CLAUDE.md",
+      "CODEBASE_MAP.md",
+      "vendor/fonts/**"
+    ],
+    "rewrites": [
+      { "source": "/portefeuille", "destination": "/owned.html" }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(html|js|css)",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+        ]
+      }
+    ]
+  }
+}
