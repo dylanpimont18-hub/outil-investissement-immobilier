@@ -12,6 +12,26 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png'];
 const ALLOWED_TAGS = ['deductible', 'non-deductible', 'a-classifier'];
 const ALLOWED_CONFIANCE = ['haute', 'moyenne', 'basse'];
 
+// Limite le crédit Mammouth AI consommable par un compte compromis/abusif : pas de
+// persistance nécessaire (usage familial, faux négatifs après redémarrage acceptables),
+// une fenêtre glissante en mémoire suffit et évite une dépendance Firestore/admin SDK.
+const RATE_LIMIT_MAX_CALLS = 10;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 heure
+const MAX_BASE64_LENGTH = 7_000_000; // ~5 Mo de fichier source (base64 gonfle de ~33%)
+const _callTimestampsByUid = new Map();
+
+function _checkRateLimit(uid) {
+    const now = Date.now();
+    const timestamps = (_callTimestampsByUid.get(uid) || []).filter(
+        (t) => now - t < RATE_LIMIT_WINDOW_MS
+    );
+    if (timestamps.length >= RATE_LIMIT_MAX_CALLS) {
+        throw new HttpsError('resource-exhausted', 'Trop de requêtes, réessayez plus tard');
+    }
+    timestamps.push(now);
+    _callTimestampsByUid.set(uid, timestamps);
+}
+
 const SYSTEM_PROMPT = `Tu es un assistant qui extrait les informations d'une facture ou d'un devis de travaux immobiliers français.
 Tu réponds uniquement avec du JSON valide, sans markdown ni texte hors JSON, au format exact :
 {"date": "YYYY-MM-DD", "description": "...", "montant": 0, "tagSuggestion": "deductible|non-deductible|a-classifier", "confiance": "haute|moyenne|basse"}
@@ -33,10 +53,14 @@ exports.extraireFraisFacture = onCall({ secrets: [mammouthApiKey], region: 'euro
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Authentification requise');
     }
+    _checkRateLimit(request.auth.uid);
 
     const { base64, mimeType } = request.data || {};
     if (!base64 || typeof base64 !== 'string') {
         throw new HttpsError('invalid-argument', 'Fichier manquant');
+    }
+    if (base64.length > MAX_BASE64_LENGTH) {
+        throw new HttpsError('invalid-argument', 'Fichier trop volumineux (5 Mo max)');
     }
     if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
         throw new HttpsError('invalid-argument', 'Format non supporté (JPG ou PNG uniquement)');

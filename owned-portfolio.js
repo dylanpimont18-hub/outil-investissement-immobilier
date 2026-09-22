@@ -19,7 +19,8 @@ import {
     computeDeclaration2044, parseDateAchat, computeDeficitFoncierHistorique,
     computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer
 } from './calculs.js';
-import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency } from './utils.js';
+import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
+import { buildBankDossierPrintDocument } from './pdf.js';
 import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
@@ -696,6 +697,145 @@ function openObjectifsModal() {
         modal.hidden = true;
         renderOwnedPortfolioList();
     });
+}
+
+// ─── DOSSIER BANCAIRE (PDF multi-biens) ─────────────────────────────────────
+// Voir docs/superpowers/specs/2026-09-22-pdf-dossier-bancaire.md. Modale en 2 écrans : biens +
+// blocs de contenu à inclure (écran 1), puis surbrillance des indicateurs individuels parmi les
+// blocs cochés (écran 2, même sélection appliquée à tous les biens). buildBankDossierPrintDocument
+// (pdf.js) fait tout le calcul/rendu HTML ; ce module ne fait que collecter la sélection utilisateur.
+
+const BANK_DOSSIER_SECTION_DEFS = [
+    { key: 'donnees', label: 'Données du bien', detail: 'Adresse, prix, surface, date d\'achat, valeur estimée' },
+    { key: 'indicateurs', label: 'Indicateurs clés', detail: 'Mensualité, investissement total, CF, rendement, DSCR, patrimoine net' },
+    { key: 'credit', label: 'Crédit & fiscalité', detail: 'Comparatif des 3 régimes + tableau des flux de trésorerie (5 ans)' },
+];
+
+// Même liste que BANK_DOSSIER_METRIC_DEFS dans pdf.js (dupliquée volontairement : ce module ne doit
+// pas dépendre du détail interne de la fonction de rendu PDF pour construire son propre formulaire).
+const BANK_DOSSIER_INDICATEUR_DEFS = [
+    { key: 'mensualiteTotale', label: 'Mensualité crédit', section: 'indicateurs' },
+    { key: 'investissementTotal', label: 'Investissement total', section: 'indicateurs' },
+    { key: 'cfAvantImpot', label: 'CF avant impôt', section: 'indicateurs' },
+    { key: 'cfNetNet', label: 'CF après impôt', section: 'indicateurs' },
+    { key: 'rentaBrute', label: 'Rendement brut', section: 'indicateurs' },
+    { key: 'dscr', label: 'DSCR', section: 'indicateurs' },
+    { key: 'patrimoineNet', label: 'Patrimoine net', section: 'indicateurs' },
+    { key: 'regimeOptimal', label: 'Régime optimal', section: 'credit' },
+];
+
+function openBankDossierModal(startAssetId) {
+    const assets = Object.values(loadOwnedAssets());
+    const assetsHTML = assets.map(a => `
+        <label class="owned-bank-dossier__asset-row">
+            <input type="checkbox" data-bank-asset="${escapeHtml(a.id)}" ${a.id === startAssetId ? 'checked' : ''}>
+            <span>${escapeHtml(a.nom || 'Bien sans nom')}</span>
+            <span class="owned-bank-dossier__asset-ville">${escapeHtml(a.ville || '')}</span>
+        </label>
+    `).join('');
+
+    const sectionsHTML = BANK_DOSSIER_SECTION_DEFS.map(s => `
+        <label class="owned-bank-dossier__section-row">
+            <input type="checkbox" data-bank-section="${s.key}" checked>
+            <span>
+                <strong>${escapeHtml(s.label)}</strong>
+                <small>${escapeHtml(s.detail)}</small>
+            </span>
+        </label>
+    `).join('');
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--wide owned-bank-dossier-modal">
+            <div class="owned-modal-head">
+                <h3 class="owned-modal-title">Dossier bancaire</h3>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+            </div>
+            <div class="cr-section">
+                <div class="owned-bank-dossier__step-label">Étape 1/2 — Biens et contenu</div>
+                <div class="owned-bank-dossier__group">
+                    <div class="owned-bank-dossier__group-title">Biens à inclure</div>
+                    ${assetsHTML || '<p style="color:var(--text-tertiary)">Aucun bien dans le portefeuille.</p>'}
+                </div>
+                <div class="owned-bank-dossier__group">
+                    <div class="owned-bank-dossier__group-title">Contenu à inclure</div>
+                    ${sectionsHTML}
+                </div>
+            </div>
+            <div class="owned-modal-actions">
+                <button class="btn btn--ghost" data-close-modal>Annuler</button>
+                <button class="btn btn--primary" id="bank-dossier-next" ${assets.length ? '' : 'disabled'}>Suivant →</button>
+            </div>
+        </div>
+    `, 'owned-bank-dossier-modal');
+
+    modal.querySelector('#bank-dossier-next')?.addEventListener('click', () => {
+        const selectedAssetIds = Array.from(modal.querySelectorAll('[data-bank-asset]:checked')).map(el => el.dataset.bankAsset);
+        const sections = Object.fromEntries(
+            BANK_DOSSIER_SECTION_DEFS.map(s => [s.key, !!modal.querySelector(`[data-bank-section="${s.key}"]`)?.checked])
+        );
+        if (!selectedAssetIds.length) { showToast('Sélectionnez au moins un bien', 'negative'); return; }
+        if (!Object.values(sections).some(Boolean)) { showToast('Sélectionnez au moins un bloc de contenu', 'negative'); return; }
+        openBankDossierHighlightStep(selectedAssetIds, sections);
+    });
+}
+
+function openBankDossierHighlightStep(selectedAssetIds, sections) {
+    const applicableIndicateurs = BANK_DOSSIER_INDICATEUR_DEFS.filter(i => sections[i.section]);
+    const rowsHTML = applicableIndicateurs.map(i => `
+        <label class="owned-bank-dossier__highlight-row">
+            <input type="checkbox" data-bank-highlight="${i.key}">
+            <span>${escapeHtml(i.label)}</span>
+        </label>
+    `).join('');
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--wide owned-bank-dossier-modal">
+            <div class="owned-modal-head">
+                <h3 class="owned-modal-title">Dossier bancaire</h3>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+            </div>
+            <div class="cr-section">
+                <div class="owned-bank-dossier__step-label">Étape 2/2 — Mise en surbrillance</div>
+                <p style="font-size:.85rem;color:var(--text-tertiary);margin-bottom:12px">
+                    Les indicateurs cochés seront mis en avant visuellement dans le PDF, sur chaque bien du dossier.
+                </p>
+                <div class="owned-bank-dossier__group">
+                    ${rowsHTML || '<p style="color:var(--text-tertiary)">Aucun indicateur disponible avec le contenu sélectionné.</p>'}
+                </div>
+            </div>
+            <div class="owned-modal-actions">
+                <button class="btn btn--ghost" id="bank-dossier-back">← Retour</button>
+                <button class="btn btn--primary" id="bank-dossier-generate">Générer le PDF</button>
+            </div>
+        </div>
+    `, 'owned-bank-dossier-modal');
+
+    modal.querySelector('#bank-dossier-back')?.addEventListener('click', () => {
+        openBankDossierModal(selectedAssetIds[0]);
+        // Ré-ouvrir l'écran 1 réinitialise les cases à leur défaut (tout coché) — cohérent avec le
+        // choix produit de ne pas persister la sélection entre deux ouvertures (voir spec).
+    });
+
+    modal.querySelector('#bank-dossier-generate')?.addEventListener('click', async () => {
+        const highlights = new Set(
+            Array.from(modal.querySelectorAll('[data-bank-highlight]:checked')).map(el => el.dataset.bankHighlight)
+        );
+        modal.hidden = true;
+        await _generateBankDossierPdf(selectedAssetIds, sections, highlights);
+    });
+}
+
+async function _generateBankDossierPdf(selectedAssetIds, sections, highlights) {
+    const assets = selectedAssetIds.map(id => getOwnedAsset(id)).filter(Boolean);
+    if (!assets.length) { showToast('Aucun bien sélectionné', 'negative'); return; }
+    const { documentHTML, filename } = buildBankDossierPrintDocument({
+        assets,
+        sections,
+        highlights,
+        profileData: state.profileData,
+        regime: getOwnedRegime(),
+    });
+    await openPrintDocument(documentHTML, filename, 'owned-bank-dossier-btn');
 }
 
 // ─── RAPPORT ANNUEL ────────────────────────────────────────────────────────────
@@ -1451,6 +1591,12 @@ function initOwnedPortfolioEvents() {
             if (id) callOwnedDiagnosticIA(id);
         });
     }
+    if (nodes.ownedBankDossierBtn) {
+        nodes.ownedBankDossierBtn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (id) openBankDossierModal(id);
+        });
+    }
     if (nodes.ownedAiDrawerClose) {
         nodes.ownedAiDrawerClose.addEventListener('click', () => {
             nodes.ownedAiDrawer?.classList.remove('is-open');
@@ -1496,80 +1642,6 @@ function initOwnedPortfolioEvents() {
             openCompteResultatModal(id);
         } else if (action === 'open-simu-travaux' && id) {
             openSimulationTravauxModal(id);
-        } else if (action === 'analyse-loyer-marche' && id) {
-            const assetForLoyer = getOwnedAsset(id);
-            if (!assetForLoyer?.ville) return;
-            const acqForLoyer = assetForLoyer.acquisition || {};
-            if (!acqForLoyer.surface) { showToast('Renseignez la surface dans l\'accordéon Acquisition'); return; }
-
-            const _fetchLoyerMarche = () => fetch('/api/loyer-marche', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ville: assetForLoyer.ville,
-                    type_bien: acqForLoyer.typeBien || 'appartement',
-                    surface: acqForLoyer.surface
-                })
-            }).then(r => r.json());
-
-            if (btn.dataset.loyerState === 'no-data') {
-                // État B → C : lancer le refresh
-                if (!assetForLoyer.codePostal) {
-                    showToast('Renseignez le code postal dans l\'accordéon Acquisition');
-                    return;
-                }
-                btn.disabled = true;
-                btn.textContent = '⏳ Récupération…';
-                fetch('/api/loyer-marche/refresh', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ville: assetForLoyer.ville,
-                        code_postal: assetForLoyer.codePostal,
-                        type_bien: acqForLoyer.typeBien || 'appartement'
-                    })
-                }).then(r => r.json()).then(data => {
-                    if (data.error) {
-                        showToast(`Erreur lors de la récupération : ${data.error}`, 'negative');
-                        btn.disabled = false;
-                        btn.dataset.loyerState = 'no-data';
-                        btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
-                        return;
-                    }
-                    return _fetchLoyerMarche().then(d => {
-                        btn.disabled = false;
-                        delete btn.dataset.loyerState;
-                        if (d.error) {
-                            showToast(`Aucune annonce de location trouvée pour ${assetForLoyer.ville}`, 'neutral');
-                            btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
-                            btn.dataset.loyerState = 'no-data';
-                        } else {
-                            updateOwnedAsset(id, { loyerMarche: { loyerMedian: d.loyerMedian, nbSamples: d.nbSamples } });
-                            renderOwnedSynthese(getOwnedAsset(id));
-                        }
-                    });
-                }).catch(() => {
-                    showToast('Erreur réseau lors de la récupération', 'negative');
-                    btn.disabled = false;
-                    btn.dataset.loyerState = 'no-data';
-                    btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
-                });
-            } else {
-                // État A : tentative normale
-                btn.disabled = true;
-                btn.textContent = '…';
-                _fetchLoyerMarche().then(data => {
-                    btn.disabled = false;
-                    if (data.error) {
-                        btn.dataset.loyerState = 'no-data';
-                        btn.textContent = `📡 Récupérer pour ${assetForLoyer.ville}`;
-                    } else {
-                        delete btn.dataset.loyerState;
-                        updateOwnedAsset(id, { loyerMarche: { loyerMedian: data.loyerMedian, nbSamples: data.nbSamples } });
-                        renderOwnedSynthese(getOwnedAsset(id));
-                    }
-                }).catch(() => { btn.disabled = false; btn.textContent = '📈 Loyer marché'; });
-            }
         } else if (action === 'focus-valeur-estimee') {
             e.preventDefault();
             const accBtn = document.querySelector('[data-acc="acquisition"]');
@@ -2688,6 +2760,9 @@ function renderOwnedDetail() {
         const hasData = (asset.acquisition?.prix || 0) > 0;
         nodes.ownedDiagnosticBtn.hidden = IS_MOBILE_PAGE || !hasData;
         nodes.ownedDiagnosticBtn.disabled = !hasData;
+    }
+    if (nodes.ownedBankDossierBtn) {
+        nodes.ownedBankDossierBtn.hidden = IS_MOBILE_PAGE;
     }
 
     renderOwnedRegimeSelector();
@@ -4183,9 +4258,7 @@ function renderAccordionPostAchat(asset) {
         </p>
         <button type="button" class="btn btn--ghost btn--sm" data-action="goto-travaux-tab">Gérer les frais &amp; justificatifs →</button>
 
-        <div class="owned-section-title" style="margin-top:20px">Loyer
-            ${asset.ville ? `<button class="btn btn--ghost btn--sm" data-action="analyse-loyer-marche" style="margin-left:auto;font-size:0.75rem" title="Comparer le loyer au marché local">📈 Loyer marché</button>` : ''}
-        </div>
+        <div class="owned-section-title" style="margin-top:20px">Loyer</div>
         ${(() => {
             const isImmeubleLoyer = (asset.lots || []).length > 0;
             if (isImmeubleLoyer) {

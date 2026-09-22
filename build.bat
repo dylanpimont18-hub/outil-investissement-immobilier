@@ -62,25 +62,15 @@ echo [5/6] Copie des fichiers statiques...
 set DEST=Spark
 copy /Y VERSION         "%DEST%\" >nul
 copy /Y index.html      "%DEST%\" >nul
-:: Tous les modules JS de la racine (main, calculs, owned-portfolio, utils, pdf, ui, scanner).
+:: Tous les modules JS de la racine (main, calculs, owned-portfolio, utils, pdf, ui).
 :: Copie par joker : une liste figee avait ete oubliee lors de l'extraction de
 :: owned-portfolio.js / utils.js, ce qui produisait un exe sans le module Portefeuille.
 copy /Y *.js            "%DEST%\" >nul
 copy /Y styles.css      "%DEST%\" >nul
 copy /Y Logo_site.png   "%DEST%\" >nul
 copy /Y server.py       "%DEST%\" >nul
+if exist config.example.py copy /Y config.example.py "%DEST%\" >nul
 if exist charte_graphique.txt copy /Y charte_graphique.txt "%DEST%\" >nul
-
-:: Copie du dossier scraper (source Python + config)
-if not exist "%DEST%\scraper" mkdir "%DEST%\scraper"
-copy /Y scraper\*.py "%DEST%\scraper\" >nul
-if exist scraper\config.example.py copy /Y scraper\config.example.py "%DEST%\scraper\" >nul
-if not exist "%DEST%\scraper\scrapers" mkdir "%DEST%\scraper\scrapers"
-copy /Y scraper\scrapers\*.py "%DEST%\scraper\scrapers\" >nul
-
-:: Copie du dossier data (communes JSON)
-if exist data if not exist "%DEST%\data" mkdir "%DEST%\data"
-if exist data\communes_centre_val.json copy /Y data\communes_centre_val.json "%DEST%\data\" >nul
 
 :: Copie de Leaflet
 if not exist "%DEST%\vendor\leaflet" mkdir "%DEST%\vendor\leaflet"

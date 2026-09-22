@@ -1,3 +1,5 @@
+import { computeOwnedAssetCF, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer } from './calculs.js';
+
 function buildPDFParts(uploadedPhotos) {
     const projectName = document.getElementById('project-name').value.trim() || 'Investissement';
     const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -2205,6 +2207,533 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       </section>
 
       <p class="footer-note">Document généré localement depuis Spark Investissement. Cette synthèse aide à la décision et ne remplace pas un conseil fiscal, juridique ou bancaire personnalisé.</p>
+    </main>
+    <script>
+      (function () {
+        function launchPrint() {
+          var ready = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+          ready.then(function () {
+            window.focus();
+            window.setTimeout(function () {
+              window.print();
+            }, 60);
+          }).catch(function () {
+            window.print();
+          });
+        }
+
+        window.addEventListener('load', launchPrint, { once: true });
+        window.addEventListener('afterprint', function () {
+          window.close();
+        });
+      })();
+    <\/script>
+  </body>
+  </html>`;
+
+    return { documentHTML, filename };
+}
+
+// ─── PDF dossier bancaire (Portefeuille, multi-biens) ───────────────────────
+// Voir docs/superpowers/specs/2026-09-22-pdf-dossier-bancaire.md pour le parcours utilisateur
+// (modale 2 écrans dans owned-portfolio.js) et le détail des champs par bloc.
+
+const BANK_DOSSIER_METRIC_DEFS = [
+    { key: 'mensualiteTotale', label: 'Mensualité crédit', kind: 'currency' },
+    { key: 'investissementTotal', label: 'Investissement total', kind: 'currency' },
+    { key: 'cfAvantImpot', label: 'CF avant impôt', kind: 'signedCurrency' },
+    { key: 'cfNetNet', label: 'CF après impôt', kind: 'signedCurrency' },
+    { key: 'rentaBrute', label: 'Rendement brut', kind: 'percent' },
+    { key: 'dscr', label: 'DSCR', kind: 'ratio' },
+    { key: 'patrimoineNet', label: 'Patrimoine net', kind: 'currency' }
+];
+
+function formatBankDossierMetricValue(kind, value) {
+    if (value === null || value === undefined) return 'Non renseigné';
+    if (kind === 'currency') return formatDecisionPdfCurrency(value);
+    if (kind === 'signedCurrency') return formatDecisionPdfSignedCurrency(value);
+    if (kind === 'percent') return formatDecisionPdfPercent(value);
+    if (kind === 'ratio') return formatDecisionPdfRatio(value);
+    return String(value);
+}
+
+function buildBankDossierAssetSection(asset, { sections, highlights, profileData, regime, tmi, isFirst }) {
+    const acq = asset.acquisition || {};
+
+    const pageBreak = isFirst ? '' : '<div class="bank-page-break"></div>';
+
+    let donneesHTML = '';
+    if (sections.donnees) {
+        const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+        const dateAchatLabel = `${String(moisAchat).padStart(2, '0')}/${anneeAchat}`;
+        donneesHTML = `
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Données du bien</p>
+                    <h2>Identification</h2>
+                </div>
+            </div>
+            <ul class="mini-list">
+                <li><span>Adresse</span><strong>${escapeDecisionPdfHtml(acq.adresse || (asset.ville ? `${asset.ville} (adresse non renseignée)` : 'Non renseignée'))}</strong></li>
+                <li><span>Type de bien</span><strong>${escapeDecisionPdfHtml(getTypeBienLabelForPdf(acq.typeBien))}</strong></li>
+                <li><span>Surface</span><strong>${acq.surface ? escapeDecisionPdfHtml(`${acq.surface} m²`) : 'Non renseignée'}</strong></li>
+                <li><span>Prix d'achat</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(acq.prix || 0))}</strong></li>
+                <li><span>Date d'achat</span><strong>${escapeDecisionPdfHtml(dateAchatLabel)}</strong></li>
+                <li><span>Valeur estimée actuelle</span><strong>${acq.valeurEstimee ? escapeDecisionPdfHtml(formatDecisionPdfCurrency(acq.valeurEstimee)) : 'Non renseignée'}</strong></li>
+            </ul>
+        </article>`;
+    }
+
+    let indicateursHTML = '';
+    if (sections.indicateurs) {
+        const scenario = getOwnedDefaultScenarioForPdf(asset);
+        const cf = computeOwnedAssetCF(asset, scenario.variables || {}, tmi, regime);
+        const patrimoine = computePatrimoineNet(asset);
+        const investissementTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
+        const values = {
+            mensualiteTotale: cf.mensualiteTotale,
+            investissementTotal,
+            cfAvantImpot: cf.cfNetNet + (cf.impotsAnnee / 12),
+            cfNetNet: cf.cfNetNet,
+            rentaBrute: cf.rentaBrute,
+            dscr: cf.dscr,
+            patrimoineNet: patrimoine.patrimoineNet
+        };
+
+        const cardsHTML = BANK_DOSSIER_METRIC_DEFS.map(def => {
+            const isHighlighted = highlights.has(def.key);
+            const value = values[def.key];
+            const toneClass = def.key === 'cfNetNet' || def.key === 'cfAvantImpot'
+                ? (value >= 0 ? 'tone-positive' : 'tone-negative')
+                : '';
+            return `
+            <article class="metric-card metric-card--accent ${toneClass} ${isHighlighted ? 'metric-card--highlight' : ''}">
+                <span class="label">${escapeDecisionPdfHtml(def.label)}</span>
+                <strong>${escapeDecisionPdfHtml(formatBankDossierMetricValue(def.kind, value))}</strong>
+            </article>`;
+        }).join('');
+
+        indicateursHTML = `
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Indicateurs clés</p>
+                    <h2>Chiffres du dossier</h2>
+                </div>
+            </div>
+            <div class="metric-grid">${cardsHTML}</div>
+        </article>`;
+    }
+
+    let creditHTML = '';
+    if (sections.credit) {
+        const comparison = computeRegimeComparison(asset, profileData, [1]);
+        const regimeLabels = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI à l\'IS' };
+        const optimalRegime = comparison.optimal[1];
+        const isRegimeHighlighted = highlights.has('regimeOptimal');
+
+        const regimeCardsHTML = Object.keys(regimeLabels).map(r => {
+            const cf = comparison.byRegime[r][1];
+            const isOptimal = r === optimalRegime;
+            // La couleur suit le signe réel du CF (jamais "positif" seulement parce que c'est le
+            // régime le moins défavorable) — un banquier ne doit jamais lire du vert sur un négatif.
+            const toneClass = cf === null ? '' : (cf >= 0 ? 'tone-positive' : 'tone-negative');
+            return `
+            <article class="metric-card ${toneClass} ${isOptimal ? 'metric-card--optimal' : ''} ${isOptimal && isRegimeHighlighted ? 'metric-card--highlight' : ''}">
+                <span class="label">${escapeDecisionPdfHtml(regimeLabels[r])}</span>
+                <strong>${cf === null ? '—' : escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(cf))}</strong>
+                <span class="metric-note">${isOptimal ? '★ Régime optimal' : 'CF net-net / mois'}</span>
+            </article>`;
+        }).join('');
+
+        const timeline = computeOwnedAssetTimeline(asset, profileData, regime);
+        const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
+        const tableRowsHTML = timeline.years.slice(0, 5).map(y => `
+            <tr>
+                <td>${y.year}</td>
+                <td>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(y.recettesAnnee))}</td>
+                <td>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(y.depensesAnnee))}</td>
+                <td>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(y.cfAnnuel))}</td>
+            </tr>`).join('');
+
+        creditHTML = `
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Crédit &amp; fiscalité</p>
+                    <h2>Comparatif des régimes (année en cours)</h2>
+                </div>
+            </div>
+            <div class="metric-grid metric-grid--3col">${regimeCardsHTML}</div>
+            <table class="bank-table">
+                <thead><tr><th>Année</th><th>Recettes</th><th>Dépenses</th><th>CF net</th></tr></thead>
+                <tbody>${tableRowsHTML}</tbody>
+            </table>
+        </article>`;
+    }
+
+    return `
+    ${pageBreak}
+    <section class="bank-asset-section">
+        <div class="bank-asset-header">
+            <p class="eyebrow">Bien du dossier</p>
+            <h1>${escapeDecisionPdfHtml(asset.nom || 'Bien sans nom')}</h1>
+            <span class="meta-chip">${escapeDecisionPdfHtml(asset.ville || 'Ville non renseignée')}</span>
+        </div>
+        ${donneesHTML}
+        ${indicateursHTML}
+        ${creditHTML}
+    </section>`;
+}
+
+function getTypeBienLabelForPdf(type) {
+    if (type === 'maison') return 'Maison';
+    if (type === 'immeuble') return 'Immeuble de rapport';
+    return 'Appartement';
+}
+
+function getOwnedDefaultScenarioForPdf(asset) {
+    const scenarios = asset.scenarios || [];
+    return scenarios.find(s => s.id === 'realiste') || scenarios[0] || { variables: {} };
+}
+
+export function buildBankDossierPrintDocument({ assets, sections, highlights, profileData, regime }) {
+    const generatedOn = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const tmi = resolveTmiFoyer(profileData, new Date().getFullYear());
+    const assetBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+    const assetsHTML = assets.map((asset, idx) => buildBankDossierAssetSection(asset, {
+        sections, highlights, profileData, regime, tmi, isFirst: idx === 0
+    })).join('');
+
+    const dossierLabel = assets.length > 1 ? `${assets.length} biens` : (assets[0]?.nom || 'Bien');
+    const filename = `Dossier-bancaire-${slugifyDecisionPdfLabel(dossierLabel)}.pdf`;
+
+    const documentHTML = `<!DOCTYPE html>
+  <html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeDecisionPdfHtml(filename.replace(/\.pdf$/i, ''))}</title>
+    <style>
+      ${buildLocalFontFaceCss(assetBaseUrl)}
+      :root {
+        color-scheme: light;
+        --paper: #f3f6fa;
+        --paper-deep: #e8eef5;
+        --surface: #ffffff;
+        --surface-soft: #f6f9fc;
+        --text: #17202a;
+        --muted: #5b6673;
+        --border: rgba(23, 32, 42, 0.12);
+        --accent: #2f6e8e;
+        --accent-strong: #1f536e;
+        --success: #2d6a4f;
+        --success-soft: rgba(45, 106, 79, 0.10);
+        --watch: #9a6700;
+        --danger: #b42318;
+        --danger-soft: rgba(180, 35, 24, 0.10);
+        --gold: #c9a84c;
+        --gold-soft: rgba(201, 168, 76, 0.16);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+        color: var(--text);
+        font-family: 'Manrope', sans-serif;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      body { padding: 22px; }
+
+      .sheet {
+        max-width: 980px;
+        margin: 0 auto;
+        display: grid;
+        gap: 18px;
+      }
+
+      .dossier-header {
+        padding: 22px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, var(--surface-soft) 0%, var(--surface) 100%);
+        border: 1px solid var(--border);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+      }
+
+      .dossier-header .eyebrow {
+        font-family: 'IBM Plex Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 11px;
+        color: var(--accent-strong);
+        margin: 0 0 10px;
+      }
+
+      .dossier-header h1 {
+        margin: 0;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      .dossier-header .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 12px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .bank-asset-section {
+        display: grid;
+        gap: 16px;
+      }
+
+      .bank-asset-header {
+        padding: 18px 22px;
+        border-radius: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+      }
+
+      .bank-asset-header .eyebrow {
+        font-family: 'IBM Plex Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 10px;
+        color: var(--accent-strong);
+        margin: 0 0 6px;
+      }
+
+      .bank-asset-header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .bank-asset-header .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 8px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .panel {
+        padding: 18px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* break-inside:avoid EST nécessaire ici : sans lui, un panel qui commence tout en bas d'une
+         page peut chevaucher visuellement le panel suivant en Edge headless (constaté — le texte de
+         deux panels se superposait). Le compromis accepté : un panel trop haut pour l'espace restant
+         est intégralement repoussé à la page suivante (page courante partiellement vide) — c'est un
+         gaspillage de papier, jamais un défaut de lisibilité. Les enfants directs (grille de cartes,
+         tableau) gardent en plus leur propre protection pour ne jamais couper UNE carte ou UNE ligne.
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 14px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .panel-kicker {
+        margin: 0;
+        font-family: 'IBM Plex Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .panel h2 { margin: 4px 0 0; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+
+      /* flex-wrap plutôt que grid : le support de la pagination d'impression (break-inside sur les
+         enfants) est nettement plus fiable en flex dans Chromium/Edge — avec display:grid, une carte
+         pouvait se couper en deux entre le label et la valeur malgré break-inside:avoid dessus
+         (constaté avec Edge headless). Largeur fixe en % pour retrouver visuellement les 4 colonnes. */
+      .metric-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .metric-grid--3col .metric-card { flex-basis: calc(33.333% - 8px); }
+
+      .metric-card {
+        flex: 0 0 calc(25% - 9px);
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface-soft);
+        min-height: 88px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .metric-card--accent { border-color: rgba(47, 110, 142, 0.22); }
+
+      .metric-card--optimal { border-color: rgba(46, 106, 74, 0.35); }
+
+      /* Surbrillance : fond + bordure dorée ET un repère textuel (label ★) redondant avec la
+         couleur — reste lisible sur une impression noir & blanc, où la couleur seule disparaît. */
+      .metric-card--highlight {
+        border-color: var(--gold);
+        border-width: 2px;
+        background: linear-gradient(180deg, var(--gold-soft) 0%, #fffaf0 100%);
+        box-shadow: 0 8px 20px rgba(201, 168, 76, 0.32);
+      }
+
+      .metric-card--highlight .label {
+        color: #8a6d1f;
+        font-weight: 700;
+      }
+
+      .metric-card--highlight .label::before {
+        content: '★ ';
+      }
+
+      .metric-card .label {
+        font-family: 'IBM Plex Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 9px;
+        color: var(--muted);
+      }
+
+      .metric-card strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      .metric-card.tone-positive {
+        background: linear-gradient(180deg, #f4faf7 0%, var(--surface) 100%);
+      }
+      .metric-card.tone-negative {
+        background: linear-gradient(180deg, #fff6f5 0%, var(--surface) 100%);
+      }
+      .metric-card.tone-positive strong { color: var(--success); }
+      .metric-card.tone-negative strong { color: var(--danger); }
+
+      /* La surbrillance doit rester le signal le plus fort de la carte, même sur un tone-positive/
+         negative déjà teinté — sinon deux systèmes de couleur se neutralisent visuellement. */
+      .metric-card.tone-positive.metric-card--highlight,
+      .metric-card.tone-negative.metric-card--highlight {
+        background: linear-gradient(180deg, var(--gold-soft) 0%, #fffaf0 100%);
+      }
+
+      .metric-note {
+        display: block;
+        margin-top: 6px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      .mini-list { list-style: none; padding: 0; margin: 14px 0 0; }
+      .mini-list li {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 9px 0;
+        border-top: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .mini-list li:first-child { padding-top: 0; border-top: 0; }
+      .mini-list span { color: var(--muted); }
+      .mini-list strong { font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right; }
+
+      .bank-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+        font-size: 12px;
+      }
+      .bank-table thead tr { background: var(--accent-strong); }
+      .bank-table th {
+        padding: 8px 10px;
+        text-align: right;
+        color: #ffffff;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+      }
+      .bank-table th:first-child { text-align: left; border-top-left-radius: 8px; }
+      .bank-table th:last-child { border-top-right-radius: 8px; }
+      .bank-table td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+      .bank-table td:first-child { text-align: left; color: var(--muted); }
+      .bank-table tbody tr:nth-child(even) { background: var(--surface-soft); }
+      .bank-table tr { break-inside: avoid; page-break-inside: avoid; }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        font-family: 'IBM Plex Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .footer-note {
+        margin: 4px 0 0;
+        padding: 16px 0 6px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .bank-page-break { page-break-before: always; height: 1px; }
+
+      @page { size: A4 portrait; margin: 12mm; }
+
+      @media print {
+        body { padding: 0; background: #ffffff; }
+        .sheet { max-width: none; gap: 12px; }
+        .panel, .dossier-header, .bank-asset-header { box-shadow: none; }
+      }
+
+      @media (max-width: 900px) {
+        .metric-card { flex-basis: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="dossier-header">
+        <p class="eyebrow">Dossier de financement</p>
+        <h1>Dossier bancaire — ${assets.length} bien${assets.length > 1 ? 's' : ''}</h1>
+        <span class="meta-chip">Généré le ${escapeDecisionPdfHtml(generatedOn)}</span>
+      </header>
+      ${assetsHTML}
+      <p class="footer-note">Document généré depuis Spark Investissement. Simulation indicative — ne remplace pas un conseil bancaire, fiscal ou juridique personnalisé.</p>
     </main>
     <script>
       (function () {

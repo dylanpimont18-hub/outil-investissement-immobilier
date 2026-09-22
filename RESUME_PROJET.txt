@@ -87,22 +87,6 @@ Export PDF :
     • Métriques par actif : score, CF, rendement, DSCR
 
 
-── MODULE SCANNER (onglet "Scanner") ────────────────────────────────────────
-
-    • Scraper multi-sites immobiliers (Centre-Val de Loire)
-      Sites supportés : Leboncoin (actif) — autres en cours
-    • Déclenchement via "Lancer le scan" (POST /api/scan)
-      Option "scan complet" : efface la base avant de relancer (POST /api/scan/full)
-    • Saisie ville + code postal avant le scan
-    • Progression en temps réel : barre + logs (polling /api/status toutes les 2 s)
-    • Résultats dans une table triable/filtrable
-    • Pipeline backend (Python) :
-        – Scraping → Déduplication (URL + empreinte cross-sites) → Enrichissement IA
-          (Anthropic batch : nb pièces, travaux, DPE, résumé) → Calculs financiers
-          → Stockage SQLite (biens.db : tables biens, annonces, historique_prix)
-    • Serveur Flask local (server.py) : API /api/scan, /api/status, /api/results
-
-
 ============================================================
 2. DIRECTION ARTISTIQUE — CHARTE GRAPHIQUE
 ============================================================
@@ -196,8 +180,8 @@ RÈGLES D'ESPACEMENT & HIÉRARCHIE
   Backend   : Python / Flask (serveur local)
   Desktop   : PyWebView (fenêtre native) + system tray
   Packaging : PyInstaller → dist/Spark/Spark.exe
-  Base de données : SQLite (scraper/biens.db)
-  IA        : API Anthropic (batch enrichment des annonces)
+  Cloud     : Firebase (Firestore + Storage + Auth + Functions) pour le Portefeuille
+  IA        : API Anthropic (diagnostic IA du Portefeuille)
   Cartographie : Leaflet.js (vendor local)
 
 

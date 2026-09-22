@@ -12,29 +12,16 @@ Pas de fonctions exportées — exécuté directement par `python app.py` ou PyI
 ---
 
 ## server.py
-Serveur Flask : sert les fichiers statiques + API scraper + diagnostic IA + export PDF + import/export portefeuille.
-- `api_scan` POST — lance scan partiel sur une ville ; accepte `{ville, code_postal, rayon_km}`
-- `api_scan_full` POST — réinitialise DB puis scan complet ; même body que `api_scan`
-- `_run_scanner(full, ville, code_postal, rayon_km)` — thread worker : purge sys.modules scrapers avant reload, inject `rayon_km` dans `villes_override`
+Serveur Flask : sert les fichiers statiques + diagnostic IA du Portefeuille + export PDF + import/export portefeuille. Écoute sur `127.0.0.1` uniquement (audit sécurité 2026-09-22 : corrigé de `0.0.0.0`, qui exposait toutes les routes `/api/*` — zéro authentification — à tout le réseau local si `server.py` était lancé seul hors du packaging desktop normal, où `app.py` forçait déjà `127.0.0.1`). Module Scanner (scraper multi-sites + son API) supprimé entièrement le 2026-09-22, jugé non fonctionnel — voir `scanner.js`/`scraper/` retirés du dépôt.
+- `ALLOWED_ORIGINS` / `_add_cors(response)` — CORS restreint à `http://127.0.0.1:8080`/`http://localhost:8080` (corrigé le 2026-09-22 : `Access-Control-Allow-Origin: *` permettait à n'importe quel onglet de navigateur ouvert en parallèle de piloter l'app via `fetch()` — DNS rebinding/localhost CSRF)
+- `api_version` GET `/api/version` — lit le fichier `VERSION` à la racine, retourne `{version}` (`'dev'` si absent)
+- `api_portfolio_diagnostic` POST `/api/portfolio-diagnostic` — accepte `{ bien: {...} }` (bien unique), retourne 3-5 recommandations JSON via Claude API ; lit `ANTHROPIC_API_KEY` depuis `config.py` (racine, gitignored — relogé le 2026-09-22 depuis l'ex `scraper/config.py` lors de la suppression du scanner)
+- `api_generate_pdf` POST `/api/generate-pdf` — génère un PDF via Edge headless, sauvegarde dans ~/Downloads, retourne `{saved_to, filename}` ; `filename` passé par `secure_filename()` depuis le 2026-09-22 (audit sécurité : le nom venait du JSON POST tel quel, un `../../` aurait permis d'écrire hors de ~/Downloads)
+- `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
+- `api_documents_get` GET `/api/documents/<bien_id>/<filename>` — lecture seule, sert le PDF (`Content-Type: application/pdf`) ; ne sert plus qu'à la migration ponctuelle vers Firebase Storage (upload/suppression/aperçu PDF se font désormais côté client, voir `owned-cloud.js`) — routes `upload`/`delete`/`delete_all` retirées le 2026-07-27 (sync cloud portefeuille)
 - `api_portfolio_export` POST — sauvegarde `{portfolio}` dans `exports/portefeuille-YYYY-MM-DD.json`
 - `api_portfolio_import_list` GET — liste les `.json` dans `exports/`
 - `api_portfolio_import` POST — lit `{filename}` dans `exports/` et retourne le JSON
-- `_query_results_data(conn, ...)` — SELECT biens + jointure annonces + sous-requêtes `baisse`/`date_baisse` (historique_prix)
-- `api_enrich` POST — déclenche enrichissement IA des biens
-- `api_status` GET — statut du scan en cours (progress, logs)
-- `api_results` GET — liste paginée des biens avec stats
-- `api_bien_detail` GET — détails complets d'un bien + analyses
-- `api_pending_count` GET — nombre de biens en attente d'enrichissement
-- `api_communes` GET — communes par code postal
-- `api_version` GET `/api/version` — lit le fichier `VERSION` à la racine, retourne `{version}` (`'dev'` si absent)
-- `api_portfolio_diagnostic` POST `/api/portfolio-diagnostic` — accepte `{ bien: {...} }` (bien unique), retourne 3-5 recommandations JSON via Claude API
-- `api_generate_pdf` POST `/api/generate-pdf` — génère un PDF via Edge headless, sauvegarde dans ~/Downloads, retourne `{saved_to, filename}`
-- `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
-- `api_loyer_marche` POST `/api/loyer-marche` — accepte `{ville, type_bien, surface}`, retourne `{loyerMedian, nbSamples}` depuis `loyers_marche` table
-- `api_loyer_marche_refresh` POST `/api/loyer-marche/refresh` — accepte `{ville, code_postal, type_bien}`, lance `marche_locatif.main()` pour cette ville (~15-30 s), retourne `{ok: true}`
-- `api_documents_get` GET `/api/documents/<bien_id>/<filename>` — lecture seule, sert le PDF (`Content-Type: application/pdf`) ; ne sert plus qu'à la migration ponctuelle vers Firebase Storage (upload/suppression/aperçu PDF se font désormais côté client, voir `owned-cloud.js`) — routes `upload`/`delete`/`delete_all` retirées le 2026-07-27 (sync cloud portefeuille)
-- `api_geocode_batch` POST `/api/geocode/batch` — accepte `[{ville, code_postal}]`, retourne `{"ville|cp": {lat, lng}}` ; cache en table `geocodes`. Utilisé par la carte du scanner (route supprimée par erreur en juin 2026, recréée le 2026-07-27). Route soeur `/api/geocode/address` (portefeuille) retirée le 2026-07-27 — géocodage du portefeuille désormais client-side (`owned-cloud.js` → `cloudGeocode`)
-- `_nominatim_lookup(query)` — appel Nominatim sérialisé par un lock + délai 1,1 s (limite 1 req/s de l'instance publique) ; nécessite `requests` (dans requirements.txt et les hiddenimports de `spark.spec`)
 
 ---
 
@@ -55,7 +42,6 @@ le Comparateur, le profil, le shell (thème, onglets, sync cross-fenêtres) et l
   - `createOrUpdateCurrentAsset()` — enregistre/actualise l'étude active dans le comparateur (bouton "Enregistrer"/"Mettre à jour")
   - `loadAssetIntoWorkspace(assetId)` — recharge une étude sauvegardée dans le formulaire Analyse
   - `syncAssetActionLabels()` — barre de statut Analyse (nouveau/modifié/à jour)
-  - `saveCurrentStudy()` — exportée, utilisée par `scanner.js` pour importer un dossier scrapé comme étude
 - `getPanelMode()` — détecte si on est dans la vue analysis ou workspace
 - `isEssentialDataMissing()` / `buildNeutralAnalysisPlaceholder()` — état neutre ("Renseignez le prix et le loyer") tant que `prix`/`loyer` ne sont pas saisis, utilisé par `buildWorkspaceHero`/`buildAnalysisStickySummary`/`buildAnalysisAcquisitionDecision`
 - `renderCFWaterfall(analysisModel)` — bloc "② Économie du deal" (`#analysis-cf-waterfall`) : header + barres de décomposition uniquement (Loyers/Crédit/Charges/Impôts/Net net). N'affiche plus de mini-cartes Rendement brut/CF/DSCR en tête — doublon exact avec `buildAnalysisMetrics` juste en dessous (corrigé, audit UX 2026-07 bug #3), classes CSS `.cf-waterfall__kpi*` supprimées
@@ -102,7 +88,7 @@ Module "portefeuille biens détenus" — CRUD, rendu (liste, fiche détail, ongl
 - `openOwnedDetail(assetId)` / `closeOwnedDetail()` — navigation vue liste ↔ vue détaillée
 - `renderOwnedDetail()` — header fiche + câblage accordéons/onglets. `renderOwnedSynthese` (alertes) et `renderOwnedCalculTab` (onglet Calcul) sont rendus identiquement PC et mobile ; seuls `renderOwnedVerdictBlock`/`renderAccordionSimulateur` restent gardés `IS_MOBILE_PAGE` (masque aussi le bouton Diagnostic IA sur mobile)
 - `renderAccordionAcquisition(asset)` — formulaire données figées + crédit + valeurEstimee/dateEstimation + **champ Adresse complète** (`data-owned-field="adresse"`, déclenche le géocodage) ; si `typeBien === 'immeuble'`, affiche la section "Lots de l'immeuble" (CRUD `asset.lots[]`). Le champ Loyer y est **toujours en lecture seule** depuis 2026-07-27 : il affiche le loyer résolu et renvoie vers l'onglet Exploitation (ou vers les lots pour un immeuble) — plus de double source de saisie. Champ crédit `data-credit-field="assuranceMode"` (`'initial'`|`'crd'`, 2026-07-28) : base de calcul de l'assurance emprunteur, voir `computeAmortizationSchedule` (calculs.js). Champ `data-owned-field="dateAchat"` (`type="month"`, remplace l'ancien `anneeAchat` le 2026-07-28 — voir `parseDateAchat`/`formatDateAchat`) : date d'achat au mois précis, pilote tout le moteur crédit (le crédit ne démarre pas forcément en janvier)
-- `renderAccordionPostAchat(asset)` — onglet Exploitation, formulaire de saisie pur depuis le 2026-08-04 (le détail CF/compte de résultat a été déplacé dans l'onglet Calcul, voir `renderOwnedCalculTab`) : **Charges récurrentes** (champ `chargesCopro` masqué si `asset.acquisition.typeBien === 'maison'` — pas de copropriété pour une maison — sinon champ nombre classique ; `gestionLocative` toujours affiché sous forme case à cocher `[data-gestion-toggle]` + champ montant révélé seulement si coché, décocher remet le champ à `0` et redéclenche un `change` natif sur `[data-post-field="gestionLocative"]` pour réutiliser le handler générique existant plutôt que dupliquer la sauvegarde — ajouté le 2026-08-04), Évolution charges (P0-A+P0-B), résumé travaux (lecture seule, renvoie vers l'onglet Travaux), **section Loyer** (loyer actuel + historique des prises d'effet + formulaire montant/mois + bouton `[data-action="analyse-loyer-marche"]`), **déficits fonciers reportables** (lecture seule depuis le 2026-07-28, calculés par `computeDeficitFoncierHistorique` — plus de saisie manuelle), notes. Pour un immeuble avec lots, la section Loyer affiche un renvoi vers l'onglet Acquisition au lieu du formulaire
+- `renderAccordionPostAchat(asset)` — onglet Exploitation, formulaire de saisie pur depuis le 2026-08-04 (le détail CF/compte de résultat a été déplacé dans l'onglet Calcul, voir `renderOwnedCalculTab`) : **Charges récurrentes** (champ `chargesCopro` masqué si `asset.acquisition.typeBien === 'maison'` — pas de copropriété pour une maison — sinon champ nombre classique ; `gestionLocative` toujours affiché sous forme case à cocher `[data-gestion-toggle]` + champ montant révélé seulement si coché, décocher remet le champ à `0` et redéclenche un `change` natif sur `[data-post-field="gestionLocative"]` pour réutiliser le handler générique existant plutôt que dupliquer la sauvegarde — ajouté le 2026-08-04), Évolution charges (P0-A+P0-B), résumé travaux (lecture seule, renvoie vers l'onglet Travaux), **section Loyer** (loyer actuel + historique des prises d'effet + formulaire montant/mois), **déficits fonciers reportables** (lecture seule depuis le 2026-07-28, calculés par `computeDeficitFoncierHistorique` — plus de saisie manuelle), notes. Pour un immeuble avec lots, la section Loyer affiche un renvoi vers l'onglet Acquisition au lieu du formulaire
 - `renderAccordionSimulateur(asset)` — matrice scénarios avec CF net-net recalculé
 - `renderOwnedCalculTab(asset)` — onglet Calcul (2026-08-04, PC et mobile identiques, plus de garde `IS_MOBILE_PAGE`) : indicateurs clés (7 cartes — mensualité crédit, investissement total/apport, CF avant/après impôt, renta brute, DSCR, patrimoine net — reprises de l'ancien `renderOwnedSynthese`), défiscalisation (comparaison des 3 régimes pour le scénario courant + bouton `[data-action="open-simu-travaux"]`), détail CF net-net avec sélecteur d'année propre (`[data-calcul-year]`, état partagé `state.ownedYearFilters` avec `renderOwnedVerdictBlock` — cliquer l'un re-rend l'autre pour rester synchronisés), `renderOwnedCfTable` (cible `#owned-cf-table-wrap`, appelée en interne), comparatif des régimes dans le temps (`renderRegimeComparisonHTML`, ex-onglet Projection) + bouton `[data-action="open-compte-resultat"]`. Cible deux conteneurs statiques `#owned-calcul-top`/`#owned-calcul-bottom` (le tableau CF annuel `#owned-cf-table-wrap` reste entre les deux dans le DOM pour respecter l'ordre du spec)
 - `renderOwnedDashboard(list, profileData, regime)` — dashboard dirigeant : snapshot 4 KPIs, Centre d'actions (fusion des alertes `computePortfolioAlerts`, triées par sévérité error>warning>info), objectifs (rendu dans #owned-dashboard-wrap). Signature passée de `tmi` à `profileData` le 2026-08-04 (résout un TMI par année pour `computePortfolioAlerts`/le déficit foncier historique, un TMI figé sur l'année courante pour le CF total via `computeOwnedAssetCF`)
@@ -119,6 +105,7 @@ Module "portefeuille biens détenus" — CRUD, rendu (liste, fiche détail, ongl
 - `openDeclarationFiscaleModal()` — modal "Déclaration fiscale" (bouton dashboard) : récap 2044 case par case + copier si régime réel (`computeDeclaration2044`) ; message dédié 2065/expert-comptable si SCI-IS ; note 2042 case 4BE si micro-foncier
 - `renderOwnedImpotTab()` — ajouté le 2026-07-29 : rendu de l'onglet "Impôt" (`#owned-impot-content`, vue liste portefeuille) — reprend le revenu salarial du profil pour l'**année sélectionnée** (`resolveRevenuFoyer(state.profileData, annee)`, depuis le 2026-08-04 — avant, `state.profileData.income` figé sur le revenu actuel quelle que soit l'année choisie) + le revenu foncier imposable du portefeuille (`computeRevenuFoncierPortefeuille`), calcule l'IR complet (`computeImpotFoyer`, calculs.js) et affiche le détail pédagogique : KPIs (revenu salarial/foncier/global/total à payer), détail par bien si régime réel, tableau tranche par tranche du barème, décote, prélèvements sociaux fonciers. Sélecteur d'année `#owned-impot-annee` (même pattern que `openDeclarationFiscaleModal`). Appelée à chaque rendu de `renderOwnedPortfolioList()`, non appelée si `IS_MOBILE_PAGE` (pas de markup correspondant sur `owned.html`)
 - `callOwnedDiagnosticIA(assetId)` — appel `POST /api/portfolio-diagnostic` + drawer résultat
+- `openBankDossierModal(startAssetId)` / `openBankDossierHighlightStep(selectedAssetIds, sections)` / `_generateBankDossierPdf(...)` — modale "Dossier bancaire" PDF multi-biens (2026-09-22, PC uniquement, bouton `#owned-bank-dossier-btn` à côté du Diagnostic IA ; voir `docs/superpowers/specs/2026-09-22-pdf-dossier-bancaire.md`). 2 écrans : sélection biens + blocs de contenu (`BANK_DOSSIER_SECTION_DEFS`), puis surbrillance des indicateurs individuels parmi les blocs cochés (`BANK_DOSSIER_INDICATEUR_DEFS`, même sélection appliquée à tous les biens). Pas de persistance de la sélection entre deux ouvertures (choix produit assumé). Délègue tout le calcul/rendu à `buildBankDossierPrintDocument` (pdf.js), génère via `openPrintDocument` (utils.js)
 - `_showOwnedModal(html, id)` — ouvre une modale générique (Compte de résultat, Simuler travaux, Capacité d'emprunt, Objectifs, Rapport annuel) ; ferme sur clic croix/fond **et** sur Échap (`_wireOwnedModalEscape`, wiring global une seule fois)
 - `renderOwnedCfTable(asset)` — tableau "Flux de trésorerie annuels" (onglet Calcul depuis le 2026-08-04, PC et mobile, plus de garde `IS_MOBILE_PAGE`) ; cible `#owned-cf-table-wrap`, appelée en interne par `renderOwnedCalculTab`. Dépenses affichées hors apport initial (apport indiqué séparément via `y.apportAnnee`, badge "+ apport") pour que Recettes − Dépenses = CF annuel sur chaque ligne. Depuis 2026-08-05 : repliée à 5 ans par défaut (`CF_TABLE_YEARS_COLLAPSED`), bouton "Voir les N années" pour déplier jusqu'à 20 ; état déplié suivi en mémoire par asset (`expandedCfTables`, module-level `Set`, non persisté)
 - Bannière/badge "régime optimal" (dans `renderOwnedCalculTab`, section défiscalisation) : quand le régime optimal est `sci-is`, ajoute un caveat visible "(hors frais de structure et fiscalité de sortie)" + tooltip sur le badge `.owned-badge--optimal` — ce n'est qu'une comparaison de CF net-net, pas un coût total réel de la SCI. L'alerte équivalente au niveau de la fiche (`renderOwnedSynthese`) reste séparée, toujours visible au-dessus des onglets
@@ -136,20 +123,22 @@ Helpers partagés — formatage, échappement HTML, toast. Zéro dépendance sur
 - `getMetricClass(value)` / `getDecisionClass(tone)` — classes CSS selon signe/tonalité
 - `getRegimeLabel(regime)` / `getTypeBienLabel(type)` — libellés régime fiscal / type de bien
 - `getChecklistTone(status)` / `getChecklistLabel(status)` — tonalité/libellé checklist
+- `openPrintDocument(documentHTML, filename, triggerBtnId = null)` — POST `/api/generate-pdf` + alerte résultat ; extrait de `main.js` le 2026-09-22 (était locale à ce fichier, codait en dur `#export-decision-pdf`) pour être réutilisable par `owned-portfolio.js` (dossier bancaire) — `triggerBtnId` passé explicitement par chaque appelant au lieu d'un id fixe
 - Effet de bord au chargement du module (2026-08-05) : `document.addEventListener('click', ...)` rend tous les `[data-tooltip]`/`[data-tooltip-below]` (styles.css) tap-friendly en plus du survol souris (classe `.tooltip-tap-open`) — sans ça ces bulles sont invisibles sur `owned.html` (écran tactile, pas de `:hover`). Un seul listener global couvre toutes les bulles existantes et futures, PC et mobile, sans ajout d'élément visuel
 - Icônes du dashboard Portefeuille (2026-08-05, suite panel UX personas — voir [[feedback_ux_brainstorm_visual_angle]] en mémoire) : les 4 boutons d'action du header (`open-capacite`/`open-objectifs`/`open-rapport`/`open-declaration`, `renderOwnedPortfolioDashboard`) sont passés en texte seul (retrait des emoji 💳⚙📋📄, incohérents avec la charte graphique et le reste des glyphes de l'app). Les puces de sévérité 🔴🟡🔵 du "Centre d'actions" (`SEVERITY_ICON`) sont supprimées : elles dupliquaient — et parfois contredisaient (info = fond indigo mais puce bleue) — le code couleur déjà posé en CSS ; la sévérité est maintenant portée par `border-left: 3px solid var(--danger|--warning|--info)` sur `.owned-dashboard-alert--*`, même convention que `.owned-alert--*` (alertes par bien). D'autres emoji subsistent ailleurs dans le fichier (⚠, ✓, 📄 pour les justificatifs, ✦, 🔧, 📈) — volontairement non touchés, hors du périmètre convenu avec l'utilisateur
 
 ---
 
 ## firebase-init.js
-Initialisation du SDK Firebase (projet dédié `spark-investissement`, plan **Blaze** depuis le 2026-08-04 pour les Cloud Functions) — importé par `owned-cloud.js`. `apiKey` volontairement publique (norme Firebase : la sécurité vient des règles Firestore/Storage + Auth, pas du secret de la clé), contrairement à `scraper/config.py` qui lui reste privé.
+Initialisation du SDK Firebase (projet dédié `spark-investissement`, plan **Blaze** depuis le 2026-08-04 pour les Cloud Functions) — importé par `owned-cloud.js`. `apiKey` volontairement publique (norme Firebase : la sécurité vient des règles Firestore/Storage + Auth, pas du secret de la clé), contrairement à `config.py` (racine) qui lui reste privé.
 - `auth` / `db` / `storage` / `functions` — instances exportées (Auth, Firestore, Storage, Functions région `europe-west1`), SDK modulaire chargé depuis le CDN gstatic (pas de bundler dans ce projet)
 
 ---
 
 ## functions/index.js
-Cloud Functions Firebase (Node 20, `firebase deploy --only functions`) — backend serveur pour le portefeuille, appelé à l'identique depuis PC (`index.html`) et mobile (`owned.html`), contrairement à `server.py` (Flask) qui n'existe que sur PC. Clé `ANTHROPIC_API_KEY` stockée en secret Firebase (`firebase functions:secrets:set`), distincte de `scraper/config.py`.
+Cloud Functions Firebase (Node 20, `firebase deploy --only functions`) — backend serveur pour le portefeuille, appelé à l'identique depuis PC (`index.html`) et mobile (`owned.html`), contrairement à `server.py` (Flask) qui n'existe que sur PC. Clé `MAMMOUTH_API_KEY` stockée en secret Firebase (`firebase functions:secrets:set`), distincte de `config.py` (racine, clé Anthropic du diagnostic IA `server.py`).
 - `extraireFraisFacture` (callable, `onCall`) — reçoit `{base64, mimeType}` (**JPG/PNG uniquement**), appelle Mammouth AI (`https://api.mammouth.ai/v1/chat/completions`, proxy OpenAI-compatible, modèle `gpt-4o`, `response_format: json_object`) avec l'image en pièce jointe, renvoie `{date, description, montant, tagSuggestion, confiance}` extrait de la facture. **Changement de fournisseur le 2026-08-04** (crédit Anthropic épuisé, voir mémoire `project_portfolio_audit`) : remplace l'appel direct à l'API Messages Anthropic (`claude-sonnet-4-6`). Le PDF n'est plus supporté (Mammouth le rejette sur ce plan/région) — retiré de `ALLOWED_MIME_TYPES` côté serveur uniquement ; le client (`TRAVAUX_ACCEPTED_MIME`, inchangé) continue d'accepter le PDF pour le stockage manuel d'un justificatif, le repli gracieux existant (fichier attaché avant la tentative d'extraction) gère déjà le cas "extraction refusée → remplir à la main" sans changement de code client. Nécessite l'en-tête `User-Agent` navigateur (Mammouth est derrière Cloudflare, bloque sinon en 403). N'écrit rien en Firestore/Storage — utilisé par `renderOwnedTravauxTab` (owned-portfolio.js) pour pré-remplir le formulaire d'ajout d'un frais. Voir `docs/superpowers/specs/2026-08-04-onglet-travaux-refonte.md`.
+- `_checkRateLimit(uid)` / `_callTimestampsByUid` — rate-limit en mémoire (2026-09-22, audit sécurité) : 10 appels/heure/uid glissants, `HttpsError('resource-exhausted', ...)` au-delà. Volontairement sans Firestore/admin SDK (pas de dépendance ajoutée, reset acceptable au redémarrage de l'instance — usage familial, objectif = limiter l'abus de crédit Mammouth par un compte compromis, pas une précision de facturation). `MAX_BASE64_LENGTH` (~5 Mo) rejette aussi les fichiers surdimensionnés avant l'appel à Mammouth.
 
 ---
 
@@ -168,7 +157,7 @@ Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le 
 ---
 
 ## owned.html
-Page statique autonome pour l'iPhone — sous-ensemble de `index.html` ne contenant que le panneau `#collection-panel` (portefeuille biens détenus), sans scanner ni outil d'analyse. Ajoutable à l'écran d'accueil Safari (meta `apple-mobile-web-app-capable`) pour un rendu plein écran. Servie par Firebase Hosting (voir `firebase.json`, rewrite `/portefeuille` → `/owned.html`). `<div class="shell shell--owned">` (au lieu de `.shell` seul) : padding-top mobile réduit (topbar une seule ligne, contrairement au topbar multi-lignes d'`index.html`) et variante empilée de `.owned-travaux-row` — voir `styles.css`. Rendu minimal depuis le 2026-07-28 (`IS_MOBILE_PAGE`, voir `owned-portfolio.js`) pour le dashboard portefeuille/carte/bloc Verdict/diagnostic IA, qui restent PC uniquement. Depuis le 2026-08-04 en revanche, la fiche détail d'un bien (onglets Acquisition/Exploitation/Travaux/**Calcul**) est **identique à `index.html`** : l'onglet Calcul (indicateurs clés, détail CF, flux de trésorerie annuel, comparatif régimes) et les alertes au-dessus des onglets s'affichent désormais aussi sur mobile — voir `docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md`. Vue liste à onglets (`.owned-list-tabs`, "Vue d'ensemble"/"Profil" — pas "Impôt", resté PC uniquement, ajouté le 2026-08-04), pour permettre l'édition du profil du foyer (revenus historisés notamment) depuis le téléphone. Bouton flottant `#owned-quickfab` (2026-08-04, "Ajouter une facture", voir `initOwnedQuickFab` owned-portfolio.js) visible partout sur la page. `#app-reload-btn` (topbar, câblé dans `owned-entry.js`) — ajouté le 2026-07-29 : en mode standalone (ajouté à l'écran d'accueil), iOS reprend souvent la page depuis la mémoire au lieu de la recharger après un déploiement, ce bouton évite d'avoir à supprimer/réinstaller l'icône pour récupérer une mise à jour.
+Page statique autonome pour l'iPhone — sous-ensemble de `index.html` ne contenant que le panneau `#collection-panel` (portefeuille biens détenus), sans outil d'analyse. Ajoutable à l'écran d'accueil Safari (meta `apple-mobile-web-app-capable`) pour un rendu plein écran. Servie par Firebase Hosting (voir `firebase.json`, rewrite `/portefeuille` → `/owned.html`). `<div class="shell shell--owned">` (au lieu de `.shell` seul) : padding-top mobile réduit (topbar une seule ligne, contrairement au topbar multi-lignes d'`index.html`) et variante empilée de `.owned-travaux-row` — voir `styles.css`. Rendu minimal depuis le 2026-07-28 (`IS_MOBILE_PAGE`, voir `owned-portfolio.js`) pour le dashboard portefeuille/carte/bloc Verdict/diagnostic IA, qui restent PC uniquement. Depuis le 2026-08-04 en revanche, la fiche détail d'un bien (onglets Acquisition/Exploitation/Travaux/**Calcul**) est **identique à `index.html`** : l'onglet Calcul (indicateurs clés, détail CF, flux de trésorerie annuel, comparatif régimes) et les alertes au-dessus des onglets s'affichent désormais aussi sur mobile — voir `docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md`. Vue liste à onglets (`.owned-list-tabs`, "Vue d'ensemble"/"Profil" — pas "Impôt", resté PC uniquement, ajouté le 2026-08-04), pour permettre l'édition du profil du foyer (revenus historisés notamment) depuis le téléphone. Bouton flottant `#owned-quickfab` (2026-08-04, "Ajouter une facture", voir `initOwnedQuickFab` owned-portfolio.js) visible partout sur la page. `#app-reload-btn` (topbar, câblé dans `owned-entry.js`) — ajouté le 2026-07-29 : en mode standalone (ajouté à l'écran d'accueil), iOS reprend souvent la page depuis la mémoire au lieu de la recharger après un déploiement, ce bouton évite d'avoir à supprimer/réinstaller l'icône pour récupérer une mise à jour.
 
 ---
 
@@ -179,7 +168,7 @@ Bootstrap minimal pour `owned.html` — équivalent, pour le seul module portefe
 ---
 
 ## firebase.json / firestore.rules / storage.rules / .firebaserc
-Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `scraper/`, `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, les binaires de build et fichiers Python — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `scraper/config.py`. Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt).
+Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, les binaires de build et fichiers Python — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt).
 
 ---
 
@@ -218,30 +207,11 @@ Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
 
 ---
 
-## scanner.js
-Interface scanner immobilier : déclenchement scrape, polling statut, rendu résultats, filtrage, carte, détails.
-- `initScanner(opts)` — initialise l'interface scanner complète
-- `onScannerTabActivated()` — refresh des résultats quand l'onglet devient actif
-- `_getScannerRayonKm()` / `_setRayonKm(km)` — rayon actif (5/10/20/30 km), persisté en localStorage `scannerRayonKm`
-- `_setScanTarget(cp, commune, label)` — cible du scan ; persiste en localStorage `investissementWebScannerTarget`
-- `_updateScannerHeaderSub()` — met à jour `#scanner-header-sub` et `#scanner-zone-chip` avec zone + rayon + nb biens
-- `_renderFreshnessLabel(date)` — badge "Vu il y a X j" (classe `--stale` si > 10 j)
-- `_buildScannerSummaryRow(r)` — construit la ligne résumé (inclut `baisseLabel`, `distLabel`, `distTone`)
-- `_renderGlobalOverviewTable(rows)` — tableau 8 colonnes (Rang/Bien/Prix/Loyer/CF/Renta/DPE/Score)
-- `_renderScannerRankingStrip(rows)` — top 5 curation cards avec résumé IA 120 chars
-- `_statCard(val, label, cls, note, extraClass)` — carte stat mini (`.workspace-hero-mini-card`)
-- `_haversineKm(lat1,lng1,lat2,lng2)` — distance géodésique en km
-- `_getDistanceKmFromVierzon(cp)` — distance depuis Vierzon via `_COMMUNE_COORDS` fallback statique
-- `_matchDistance(r)` — filtre JS par distance max (slider `#scanner-dist-filter`)
-- `_initMap()` — initialise carte Leaflet centrée sur Vierzon (47.222, 2.069) zoom 10
-- `_updateMapRadiusCircle()` — dessine/met à jour le cercle de rayon sur la carte
-
----
-
 ## pdf.js
-Génération du PDF de décision investissement sous forme de HTML standalone.
-- `buildDecisionPrintDocument(opts)` — PDF complet avec analyse + décision + scénarios
+Génération de PDF sous forme de HTML standalone (via `/api/generate-pdf`, Edge headless). Importe `calculs.js` (seul fichier du trio pdf.js/main.js/owned-portfolio.js à en dépendre directement pour un export).
+- `buildDecisionPrintDocument(opts)` — PDF complet avec analyse + décision + scénarios (outil Analyse)
 - `buildPrintDocument(photos)` — snapshot rapide (photos + métriques)
+- `buildBankDossierPrintDocument({ assets, sections, highlights, profileData, regime })` — PDF dossier bancaire multi-biens (2026-09-22, voir `docs/superpowers/specs/2026-09-22-pdf-dossier-bancaire.md`) : une section par bien (Données/Indicateurs clés/Crédit & fiscalité selon `sections`), indicateurs individuels en `highlights` (Set de clés) mis en surbrillance dorée (`.metric-card--highlight`) sur tous les biens du dossier. `.metric-grid` en `display:flex; flex-wrap:wrap` (pas `grid`) : avec `display:grid`, Edge headless coupait une carte en deux entre page (label sur une page, valeur sur la suivante) malgré `break-inside:avoid` sur chaque carte — bug constaté uniquement en générant un vrai PDF, invisible dans un aperçu navigateur classique (CSS Grid + pagination d'impression mal supporté par Chromium/Edge). `.panel` garde `break-inside:avoid` : sans lui, un panel démarrant en bas de page chevauche visuellement le panel suivant (autre bug constaté, pire que le gaspillage de page qu'évite `break-inside:avoid`) — compromis assumé : un panel trop haut pour l'espace restant est repoussé en entier à la page suivante. La couleur `tone-positive`/`tone-negative` des cartes régime fiscal suit toujours le signe réel du CF (jamais vert sur un négatif, même si c'est le régime "le moins pire" — `.metric-card--optimal` porte l'info "meilleur régime" séparément).
 
 ---
 
@@ -261,7 +231,7 @@ Composants UI réutilisables : graphes, tableaux comparatifs, validation, toasts
 
 ## index.html
 Structure DOM statique — tous les panels et formulaires pré-déclarés.
-- Panels principaux : `#workspace-panel`, `#analysis-panel`, `#collection-panel`, `#feasibility-panel`, `#scanner-panel`
+- Panels principaux : `#workspace-panel`, `#analysis-panel`, `#collection-panel`, `#feasibility-panel`
 - Formulaires : `#variables-form`, `#profile-form`, `#profile-modal` (bouton `#profile-skip` = "Plus tard", visible tant que profil non configuré ; champ `#profile-income` = revenus salariaux, toggle `#profile-income-unit-toggle` mensuel/annuel + `#profile-income-hint` "soit X €/an|mois")
 - Zones de rendu : `#analysis-sticky-summary`, `#analysis-metrics`
 - Analyse — sections avancées (Robustesse, Scénarios de stress, Régimes fiscaux, Journal, Projection/matrice, Cash-flow annuel, Comparatif des leviers) en `<details>` repliées par défaut, masquées en Vue rapide via `.analysis-section--{robustesse,scenarios,regime,journal,visuals}` + `.analysis-forward`/`.analysis-section--sensitivity`/`.analysis-section--cashflow` (CSS `[data-analysis-view="quick"]`)
@@ -273,7 +243,7 @@ Structure DOM statique — tous les panels et formulaires pré-déclarés.
   - `.owned-regime-slider-label` "Régime fiscal du portefeuille" — libellé statique au-dessus du sélecteur `#owned-regime-slider-anchor` (Micro-foncier/Réel/SCI-IS)
   - `#owned-portfolio-layout` (flex, ajouté le 2026-08-04) enveloppe `#owned-quickrail` (rail Actions rapides, PC uniquement, absent de `owned.html`) + `.owned-portfolio-main` (`#owned-list-view` + `#owned-detail-view`) — voir `initOwnedQuickRail`, owned-portfolio.js. Remplace l'ancien bouton `#owned-add-btn` + modale `#owned-add-modal` comme point d'entrée unique sur PC pour ajouter un bien ; `#owned-add-modal`/`#owned-add-form`/`#owned-add-nom`/`#owned-add-ville` n'existent plus que sur `owned.html` (mobile)
   - Vue liste : `#owned-list-view`, `#owned-kpi-banner`, `#owned-list-table` — onglets `.owned-list-tabs` (ajouté le 2026-07-29) : `#owned-list-tab-overview` (contenu historique) / `#owned-list-tab-impot` → `#owned-impot-content` (rendu par `renderOwnedImpotTab`, owned-portfolio.js)
-  - Vue détaillée : `#owned-detail-view`, `#owned-back-btn`, `#owned-detail-title`, `#owned-diagnostic-btn`
+  - Vue détaillée : `#owned-detail-view`, `#owned-back-btn`, `#owned-detail-title`, `#owned-diagnostic-btn`, `#owned-bank-dossier-btn` (2026-09-22, PDF dossier bancaire, voir `owned-portfolio.js`)
   - Accordéons : `#acc-acquisition`, `#acc-acquisition-body`, `#acc-acquisition-content`, `#acc-postachat`, `#acc-simulateur`
   - Onglet Travaux : `#owned-travaux-content` (rendu par `renderOwnedTravauxTab`, formulaire `[data-form="add-travail-tab"]` avec champ PDF)
   - Onglet Calcul (PC et mobile identiques depuis le 2026-08-04, remplace l'ancien onglet Projection et ses 4 graphiques, supprimés) : `#owned-calcul-top`, `#owned-cf-table-wrap`, `#owned-calcul-bottom` — rendu par `renderOwnedCalculTab`, owned-portfolio.js
@@ -296,10 +266,8 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 - `.shell--owned .owned-travaux-row` : variante 2 lignes/4 colonnes (`grid-template-areas`) de `.owned-travaux-row` (8 colonnes à largeurs fixes ≥ 418px sur desktop) pour ne pas déborder sur `owned.html`.
 - Piège `position: sticky` variante 2 (audit UX 2026-07) : `.variables-panel`/`.form-kpi-bar` ne doivent être `position: sticky` (rail + max-height + overflow-y:auto) que sous `.workspace-board[data-layout="2"]` (vrai mode 2 colonnes) — en `data-layout="1"` (mode par défaut, colonnes empilées), les rendre sticky les laisse épinglés au-dessus de `.analysis-panel` qui défile juste en dessous et ça entre en collision avec les sticky propres à `.analysis-panel` (`.analysis-toc`, `#analysis-sticky-summary`). Toujours scoper `[data-layout="2"] <sélecteur>` avant d'ajouter un sticky dans `.workspace-board`.
 - `.app-sidebar` (rail gauche, `position: sticky; top: 80px`) : ne pas lui remettre une `height`/`min-height` fixe (ex. `calc(100vh - 96px)`) — son contenu (`nav`+`mode`+`save`, tous `flex-shrink:0`) ne remplit jamais cette hauteur et ça laisse ~40% du viewport vide en bas du rail (bug UX 2026-07). Le laisser se dimensionner à son contenu.
-- Scanner workspace : `.scanner-workspace-hero`, `.scanner-command-panel`, `.scanner-command-card`, `.scanner-rayon-group`, `.scanner-options-dropdown`
-- Scanner table : `.scanner-dpe-badge--a/b/c/d/e/f/g`, `.scanner-price-drop`, `.scanner-dist-badge--near/mid/far`, `.scanner-freshness`, `.scanner-score-decision`
-- Scanner stats : `.workspace-hero-mini-card.scanner-stat--gold/pos/warn`, `.scanner-stat--insight`
 - Portefeuille biens détenus : `.owned-list-header`, `.owned-kpi-banner`, `.owned-kpi-card`, `.owned-list-table`, `.owned-add-modal` (mobile uniquement depuis le 2026-08-04), `.owned-detail-header`, `.owned-accordion`, `.owned-accordion__header[aria-expanded]`, `.owned-form-grid`, `.owned-travaux-row` (grille 7 colonnes : checkbox/date/desc/montant/tag/pdf/suppr.), `.owned-travaux-year` (`<details>` classeur par année), `.owned-notes-add`, `.owned-simulator-table`
+- `.owned-bank-dossier__*` (2026-09-22, modale "Dossier bancaire" 2 écrans, `owned-portfolio.js`) : `__step-label`/`__group`/`__group-title` (structure générique), `__asset-row`/`__section-row`/`__highlight-row` (lignes à cocher, écrans 1 et 2), `__asset-ville`/`__section-row small` (méta discrète)
 - `.owned-portfolio-layout`/`.owned-portfolio-main`/`.owned-quickrail`/`.owned-quickrail__*` (2026-08-04, PC uniquement) — rail Actions rapides fixe (`position:sticky`) à gauche de la section Portefeuille, ~190px au repos, un panneau (`.owned-quickrail__panel`, 260px) s'ouvre sur place à droite de l'action cliquée (`.owned-quickrail:has(.owned-quickrail__panel:not([hidden])) .owned-quickrail__action:not(.owned-quickrail__action--active)` estompe les actions inactives). Repasse en ligne horizontale sous 1100px (`@media`). Réutilise `.owned-travaux-dropzone` (styles.css, section Travaux) telle quelle
 - `.owned-quickfab`/`.owned-quickfab__plus` (2026-08-04, mobile uniquement) — bouton rond flottant (`position:fixed`, bas droite, respecte `env(safe-area-inset-bottom)`), équivalent mobile de l'action "Ajouter une facture" du rail PC. `#owned-quickfab-modal` réutilise directement `.owned-add-modal`/`.owned-add-modal__box` (overlay centré) plutôt qu'une classe dédiée
 - `.owned-alert--info` / `.owned-dashboard-alert--info` (ton bleu, distinct de `--error`/`--warning`) — utilisé pour les suggestions d'optimisation fiscale (non des risques réels) ; `.owned-caveat` (texte italique tertiaire) pour les mises en garde inline (ex. coûts de structure SCI-IS non comptés) ; `.owned-cf-table__note` pour la note "hors apport initial"
@@ -319,79 +287,8 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 
 ---
 
-## scraper/main.py
-Orchestrateur du scrape multi-sites Centre-Val de Loire.
-- `main(progress_callback, villes_override, force_marche)` — scrape → filtre → IA → stockage SQLite ; détecte blocage 403 en < 5s et émet warning dans logs UI
-- `_hydrate_descriptions(scraper, annonces, emit, pct)` — récupère descriptions manquantes en parallèle (ThreadPoolExecutor 3 workers, 1s/req)
-
----
-
-## scraper/db.py
-Schéma SQLite et connexion à `biens.db`.
-- `init_db(path)` — crée/ouvre la DB, retourne la connexion
-- Tables : `biens`, `annonces`, `historique_prix`, `loyers_marche`, `geocodes`
-
----
-
-## scraper/filtrage.py
-Tri des annonces avant enrichissement IA : URL connue / doublon fingerprint / nouvelle.
-- `filtrer_nouvelles_annonces(annonces, conn)` — retourne `(nouvelles, stats)`
-
----
-
-## scraper/ia.py
-Enrichissement IA via API Anthropic (batch) : nb_pièces, travaux, DPE, résumé.
-- `enrichir_batch(annonces, poll_interval)` — soumet batch Anthropic + poll + parse JSON
-
----
-
-## scraper/utils.py
-CRUD SQLite pour les tables biens/annonces/historique.
-- `inserer_bien(annonce, fp, conn)` — INSERT dans `biens`
-- `inserer_annonce(bien_id, enrichie, conn)` — INSERT dans `annonces`
-- `url_existe(url, conn)` — SELECT bien par URL
-- `fingerprint_existe(fp, conn)` — SELECT bien par fingerprint
-
----
-
-## scraper/calculs.py
-Calculs financiers côté scraper : loyer marché, CF, score investisseur.
-- `get_loyer_marche(ville, type_bien, surface, conn)` — loyer médian de référence
-- `enrichir(bien_id, annonce, conn)` — calcule CF + DSCR + score + régimes fiscaux
-
----
-
-## scraper/enrich.py
-Pipeline d'enrichissement : récupère les descriptions manquantes + IA + calculs financiers.
-- `enrich_pending(conn, progress_callback)` — traite tous les biens en attente ; exclut pré-IA les biens sans description+surface+type_bien
-
----
-
-## scraper/logger.py
-Logger unifié pour tous les modules scraper (console + fichier `spark_scraper.log`).
-- `get_logger(name)` — retourne un logger configuré pour le module
-
----
-
-## scraper/scrapers/base.py
-Classe abstraite commune à tous les scrapers (retry, filtrage prix, interface).
-- `BaseScraper` — `fetch_all(villes)`, `fetch_ville(ville)` (abstract) ; filtre CP désactivé si `ville.get("rayon_km")` défini
-
----
-
-## scraper/scrapers/__init__.py
-Registre des scrapers disponibles.
-- `REGISTRY` — dict `{site: ScraperClass}` — ajouter un nouveau scraper ici
-
----
-
-## scraper/browser.py
-Singleton Playwright + stealth partagé par tous les scrapers. Lance Chromium headless une seule fois par run, ferme via atexit.
-- `browser_page()` — context manager : yield une page Playwright avec stealth appliqué (navigator.webdriver=false, locale fr-FR, UA Chrome 131)
-
-## scraper/scrapers/leboncoin.py
-Scraper LeBonCoin via parsing `__NEXT_DATA__` avec Playwright+stealth (remplace curl_cffi). Délais aléatoires 2–5s initial + 6–10s entre pages.
-- `LeBonCoinScraper` — `fetch_ville(ville)`, `_fetch_page(loc_param, page)`, `fetch_description(url)`
+## config.py / config.example.py
+Secrets locaux racine (gitignored, copier `config.example.py` → `config.py`). Contient `ANTHROPIC_API_KEY`, lue par `server.py` (`/api/portfolio-diagnostic`). Créé le 2026-09-22 en relogeant la clé de l'ex `scraper/config.py`, supprimé avec tout le module Scanner.
 
 ---
 

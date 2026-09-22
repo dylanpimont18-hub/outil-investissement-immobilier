@@ -1,7 +1,7 @@
 // Initialisation Firebase (projet dedie "spark-investissement") — importee par owned-cloud.js.
 // La cle apiKey ci-dessous est volontairement publique : Firebase distingue "identification du projet"
 // (cette config) et "autorisation d'acces" (regles Firestore/Storage + Auth), contrairement a
-// scraper/config.py qui doit lui rester prive.
+// config.py qui doit lui rester prive.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';

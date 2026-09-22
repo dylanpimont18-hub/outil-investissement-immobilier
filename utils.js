@@ -147,3 +147,31 @@ export function getChecklistLabel(status) {
     if (status === 'watch') return 'A verifier';
     return 'Bloquant';
 }
+
+// Poste le HTML d'un document imprimable à /api/generate-pdf (server.py, Edge headless) et
+// alerte le résultat. `triggerBtnId` (optionnel) : bouton dont le libellé bascule sur
+// "Génération…" pendant l'appel — chaque appelant a son propre bouton (export-decision-pdf,
+// owned-bank-dossier-generate…), passé explicitement plutôt que codé en dur ici.
+export async function openPrintDocument(documentHTML, filename, triggerBtnId = null) {
+    const btn = triggerBtnId ? document.getElementById(triggerBtnId) : null;
+    const originalLabel = btn ? btn.textContent : null;
+    if (btn) { btn.textContent = 'Génération…'; btn.disabled = true; }
+    try {
+        const resp = await fetch('/api/generate-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html: documentHTML, filename }),
+        });
+        const json = await resp.json().catch(() => null);
+        if (!resp.ok) {
+            window.alert('Erreur lors de la génération du PDF : ' + ((json && json.error) || resp.statusText));
+            return;
+        }
+        const savedTo = json && json.saved_to ? json.saved_to : '';
+        window.alert('PDF sauvegardé dans le dossier Téléchargements :\n' + (savedTo || filename));
+    } catch (err) {
+        window.alert('Erreur lors de la génération du PDF : ' + err.message);
+    } finally {
+        if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
+    }
+}

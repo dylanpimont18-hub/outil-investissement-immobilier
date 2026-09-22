@@ -1,8 +1,7 @@
 ﻿import { calculateTMI, computeAnalysisViewModel, getHouseholdTaxParts, capitalRestantDu } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
-import { initScanner, onScannerTabActivated } from './scanner.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
-import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel } from './utils.js';
+import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel, openPrintDocument } from './utils.js';
 import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections, syncProfileToCloud, invalidateOwnedMap } from './owned-portfolio.js';
 
 const _counterState = new WeakMap();
@@ -305,6 +304,7 @@ const nodes = {
     ownedBackBtn: document.getElementById('owned-back-btn'),
     ownedDetailTitle: document.getElementById('owned-detail-title'),
     ownedDiagnosticBtn: document.getElementById('owned-diagnostic-btn'),
+    ownedBankDossierBtn: document.getElementById('owned-bank-dossier-btn'),
     accAcquisitionBody: document.getElementById('acc-acquisition-body'),
     accAcquisitionContent: document.getElementById('acc-acquisition-content'),
     accAcquisitionSummary: document.getElementById('acc-acquisition-summary'),
@@ -1458,25 +1458,6 @@ function loadAssetIntoWorkspace(assetId) {
     if (workspaceTab && !IS_ANALYSIS_WINDOW) workspaceTab.click();
 }
 
-export function saveCurrentStudy() {
-    const existingIndex = state.assetRecords.findIndex(a => a.id === state.activeAssetId);
-    const now = Date.now();
-    const base = existingIndex >= 0 ? state.assetRecords[existingIndex] : null;
-    const id = base?.id || createAssetId();
-    const record = {
-        id,
-        variablesData: sanitizeVariablesData(state.variablesData),
-        createdAt: base?.createdAt || now,
-        updatedAt: now,
-    };
-    if (existingIndex >= 0) state.assetRecords.splice(existingIndex, 1, record);
-    else state.assetRecords.push(record);
-    state.activeAssetId = id;
-    saveAssetRecords();
-    saveActiveAssetId();
-    emitStateUpdate();
-}
-
 function applyTheme() {
     document.documentElement.dataset.theme = state.theme;
     document.body.classList.toggle('panel-analysis', IS_ANALYSIS_WINDOW);
@@ -1776,30 +1757,6 @@ function openAnalysisWindow(options = {}) {
     }
 }
 
-async function openPrintDocument(documentHTML, filename) {
-    const btn = document.getElementById('export-decision-pdf');
-    const originalLabel = btn ? btn.textContent : null;
-    if (btn) { btn.textContent = 'Génération…'; btn.disabled = true; }
-    try {
-        const resp = await fetch('/api/generate-pdf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: documentHTML, filename }),
-        });
-        const json = await resp.json().catch(() => null);
-        if (!resp.ok) {
-            window.alert('Erreur lors de la génération du PDF : ' + ((json && json.error) || resp.statusText));
-            return;
-        }
-        const savedTo = json && json.saved_to ? json.saved_to : '';
-        window.alert('PDF sauvegardé dans le dossier Téléchargements :\n' + (savedTo || filename));
-    } catch (err) {
-        window.alert('Erreur lors de la génération du PDF : ' + err.message);
-    } finally {
-        if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
-    }
-}
-
 async function handleDecisionSummaryExport() {
     const analysisModel = getCurrentAnalysisModel();
     const { documentHTML, filename } = buildDecisionPrintDocument({
@@ -1808,7 +1765,7 @@ async function handleDecisionSummaryExport() {
         variablesData: state.variablesData
     });
 
-    await openPrintDocument(documentHTML, filename);
+    await openPrintDocument(documentHTML, filename, 'export-decision-pdf');
 }
 
 function closeAnalysisWindow() {
@@ -2740,9 +2697,7 @@ function initWorkspaceTabs() {
     const tabs = document.querySelectorAll('.workspace-tab');
     const workspacePanel = document.querySelector('.workspace-panel');
     const collectionPanel = document.getElementById('collection-panel');
-    const scannerPanel = document.getElementById('scanner-panel');
     collectionPanel.style.display = 'none';
-    if (scannerPanel) scannerPanel.style.display = 'none';
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -2751,18 +2706,11 @@ function initWorkspaceTabs() {
             const target = tab.dataset.target;
             workspacePanel.style.display = 'none';
             collectionPanel.style.display = 'none';
-            if (scannerPanel) scannerPanel.style.display = 'none';
 
             if (target === 'collection-panel') {
                 collectionPanel.style.display = '';
                 collectionPanel.style.animation = 'tabFadeIn 200ms ease-out';
                 window.requestAnimationFrame(() => invalidateOwnedMap());
-            } else if (target === 'scanner-panel') {
-                if (scannerPanel) {
-                    scannerPanel.style.display = '';
-                    scannerPanel.style.animation = 'tabFadeIn 200ms ease-out';
-                    onScannerTabActivated();
-                }
             } else {
                 workspacePanel.style.display = '';
                 workspacePanel.style.animation = 'tabFadeIn 200ms ease-out';
@@ -2899,7 +2847,6 @@ try {
 applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 _initAnalysisViewToggle();
-initScanner({ saveCurrentStudy });
 initOwnedPortfolioEvents();
 if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
     setTimeout(() => openProfileModal(), 400);

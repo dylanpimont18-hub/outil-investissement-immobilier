@@ -20,7 +20,7 @@ To build the distributable: run `build.bat`.
 | File | Role |
 |---|---|
 | `app.py` | Desktop entry point: starts Flask thread, opens PyWebView window, manages system tray icon |
-| `server.py` | Flask server: serves static files + scanner API (`/api/scan`, `/api/status`, `/api/results`) |
+| `server.py` | Flask server: serves static files + portfolio AI diagnostic, PDF export, portfolio import/export |
 | `spark.spec` | PyInstaller build config |
 | `build.bat` | Build script → `dist/Spark/Spark.exe` |
 | `index.html` | Complete HTML structure with all panels and forms pre-declared |
@@ -29,7 +29,6 @@ To build the distributable: run `build.bat`.
 | `utils.js` | Shared formatting/escaping/toast helpers, no `state`/`nodes` dependency — imported by `main.js` and `owned-portfolio.js` |
 | `calculs.js` | Pure financial engine — all calculations, zero DOM access |
 | `pdf.js` | Generates the printable decision PDF as a standalone HTML string |
-| `scanner.js` | Scanner UI: triggers scraper, polls status, renders results table |
 | `styles.css` | Full design system (light/dark themes, all component classes) |
 | `ui.js` | Supplementary UI helpers (charts, table markup) |
 
@@ -39,15 +38,6 @@ To build the distributable: run `build.bat`.
 2. `main.js` reads form values → calls `sanitizeVariablesData()` → writes to `state.variablesData` and `localStorage`
 3. On any change, `main.js` calls `computeAnalysisViewModel()` from `calculs.js`, which returns a fully computed view model
 4. `main.js` renders that view model into the pre-declared DOM containers via `innerHTML` injection
-
-### Data flow — scanner
-
-1. User clicks "Lancer le scan" in the scanner panel
-2. `scanner.js` POSTs to `/api/scan` (or `/api/scan/full` to clear the DB first)
-3. `server.py` runs `scraper/main.py` in a background thread with a `progress_callback`
-4. `scanner.js` polls `/api/status` every 2 s to update the progress bar and logs
-5. When scan finishes, `scanner.js` fetches `/api/results` — `server.py` reads from `scraper/biens.db` (SQLite) and returns JSON
-6. Results are rendered in a sortable/filterable table
 
 ### Two-window mode
 
@@ -70,23 +60,6 @@ The app supports a split-screen mode where the analysis panel opens in a second 
 - `computeResaleTimeline(...)` — resale gain projection (used in `pdf.js`)
 - `computeOwnedAssetCF`, `computeOwnedAssetTimeline`, `computeCFBreakdown`, `computeRegimeComparison`, `computePortfolioAlerts`, etc. — owned-portfolio-specific, imported by `owned-portfolio.js`
 - Tax logic handles three regimes: `micro-foncier`, `reel` (foncier réel), `sci-is`
-
-### Scraper (`scraper/`)
-
-Multi-site real estate scraper targeting Centre-Val de Loire.
-
-| File | Role |
-|---|---|
-| `scraper/main.py` | Orchestration: scrape → filter → AI enrichment → financial calc → SQLite |
-| `scraper/db.py` | SQLite schema and connection (`biens.db` — `biens`, `annonces`, `historique_prix` tables) |
-| `scraper/filtrage.py` | Deduplication: URL match, fingerprint cross-site match, new listing |
-| `scraper/fingerprint.py` | Canonical fingerprint for cross-site dedup |
-| `scraper/ia.py` | Anthropic batch enrichment (nb_pieces, travaux, DPE, résumé…) |
-| `scraper/calculs.py` | Financial calculations specific to the scraper (CF, DSCR, score) |
-| `scraper/utils.py` | DB insert helpers |
-| `scraper/scrapers/` | One file per site (leboncoin, pap, seloger, logicimmo, bienici, orpi, century21, laforet, notaires, bellesdemeures) |
-| `scraper/config.py` | **gitignored** — API keys and local parameters (copy from `config.example.py`) |
-| `scraper/config.example.py` | Template for config.py |
 
 ### Decision model (analysis tool)
 
@@ -117,4 +90,4 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
 - New form fields require entries in: `VARIABLE_DEFAULTS`, `VARIABLE_KEYS` (derived), `sanitizeVariablesData()`, and the corresponding `<fieldset>` in `index.html`.
 - `calculs.js` exports are pure functions — keep them free of DOM, `localStorage`, and `window` references.
 - `computeAnalysisViewModel` is called on every keystroke; keep it synchronous and fast.
-- `scraper/config.py` must never be committed — it contains API keys.
+- `config.py` (root, gitignored) must never be committed — it contains the Anthropic API key used by the portfolio's AI diagnostic (`/api/portfolio-diagnostic`). Copy from `config.example.py`.

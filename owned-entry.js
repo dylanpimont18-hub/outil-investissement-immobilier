@@ -39,6 +39,7 @@ const nodes = {
     ownedBackBtn: document.getElementById('owned-back-btn'),
     ownedDetailTitle: document.getElementById('owned-detail-title'),
     ownedDiagnosticBtn: document.getElementById('owned-diagnostic-btn'),
+    ownedBankDossierBtn: document.getElementById('owned-bank-dossier-btn'),
     ownedSynthese: document.getElementById('owned-synthese'),
     ownedVerdict: document.getElementById('owned-verdict'),
     ownedCfTableWrap: document.getElementById('owned-cf-table-wrap'),

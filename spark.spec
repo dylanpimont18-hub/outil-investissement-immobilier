@@ -1,6 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(SPEC), 'scraper'))
+import os
 
 with open(os.path.join(os.path.dirname(SPEC), 'VERSION'), encoding='utf-8') as _f:
     _version = _f.read().strip()
@@ -8,11 +7,10 @@ with open(os.path.join(os.path.dirname(SPEC), 'VERSION'), encoding='utf-8') as _
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 webview_datas, webview_binaries, webview_hiddenimports = collect_all('webview')
-scraper_site_hiddenimports = collect_submodules('scrapers')
 
 a = Analysis(
     ['app.py'],
-    pathex=['.', 'scraper'],
+    pathex=['.'],
     binaries=webview_binaries,
     datas=webview_datas,
     hiddenimports=[
@@ -20,28 +18,17 @@ a = Analysis(
         'flask', 'jinja2', 'jinja2.ext', 'markupsafe', 'werkzeug',
         'werkzeug.routing', 'werkzeug.serving', 'werkzeug.middleware',
         'werkzeug.middleware.proxy_fix',
-        # Scraper multi-sites
-        'main', 'db', 'filtrage', 'fingerprint', 'ia', 'calculs', 'utils',
-        'enrich', 'logger', 'marche_locatif',
-        'scrapers',
-        # Anthropic SDK
+        # Anthropic SDK (diagnostic IA du Portefeuille)
         'anthropic', 'httpx', 'httpcore', 'anyio', 'sniffio',
         'certifi', 'charset_normalizer', 'distro',
         # Pystray
         'pystray', 'pystray._win32',
         # PIL
         'PIL', 'PIL.Image', 'PIL.PngImagePlugin', 'PIL.JpegImagePlugin',
-        # Curl / réseau
-        'curl_cffi', 'curl_cffi.requests',
-        # HTTP (géocodage Nominatim)
-        'requests', 'urllib3', 'idna',
-        # Email
-        'smtplib', 'email.mime.multipart', 'email.mime.text',
         # SQLite
         'sqlite3',
         # WebView
         *webview_hiddenimports,
-        *scraper_site_hiddenimports,
         *collect_submodules('webview'),
     ],
     hookspath=[],
