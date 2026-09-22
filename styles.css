@@ -6672,6 +6672,27 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .owned-quickrail__panel .variables-field { margin-bottom: 0; }
 .owned-quickrail__panel .owned-travaux-dropzone { padding: 12px 8px; }
 .owned-quickrail__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.owned-quickrail__divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .72rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+}
+.owned-quickrail__divider::before, .owned-quickrail__divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-subtle);
+}
+.owned-import-dossier-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
 .owned-quickrail input.ai-filled, .owned-quickrail select.ai-filled {
     border-color: var(--accent-color, #C5A059);
     background: rgba(197, 160, 89, 0.08);

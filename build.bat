@@ -76,6 +76,11 @@ if exist charte_graphique.txt copy /Y charte_graphique.txt "%DEST%\" >nul
 if not exist "%DEST%\vendor\leaflet" mkdir "%DEST%\vendor\leaflet"
 if exist vendor\leaflet\leaflet.js  copy /Y vendor\leaflet\leaflet.js  "%DEST%\vendor\leaflet\" >nul
 if exist vendor\leaflet\leaflet.css copy /Y vendor\leaflet\leaflet.css "%DEST%\vendor\leaflet\" >nul
+
+:: Copie de pdf.js (conversion PDF -> image pour l'import de dossier bien)
+if not exist "%DEST%\vendor\pdfjs" mkdir "%DEST%\vendor\pdfjs"
+if exist vendor\pdfjs\pdf.min.mjs        copy /Y vendor\pdfjs\pdf.min.mjs        "%DEST%\vendor\pdfjs\" >nul
+if exist vendor\pdfjs\pdf.worker.min.mjs copy /Y vendor\pdfjs\pdf.worker.min.mjs "%DEST%\vendor\pdfjs\" >nul
 if exist vendor\fonts (
   if not exist "%DEST%\vendor\fonts" mkdir "%DEST%\vendor\fonts"
   copy /Y vendor\fonts\*.ttf "%DEST%\vendor\fonts\" >nul

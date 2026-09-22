@@ -109,6 +109,19 @@ export async function cloudExtraireFraisFacture(base64, mimeType) {
     return data;
 }
 
+// ─── Extraction IA multi-documents (import de dossier bien) : Cloud Function ─
+// functions/index.js, extraireDossierBien — voir spec
+// docs/superpowers/specs/2026-09-22-import-dossier-bien.md. Un appel par document ; la fusion
+// entre documents se fait cote client (owned-portfolio.js). Renvoie
+// {documentType, confiance, bien?, acquisition?, credit?, charges?, travail?} — sous-objets
+// absents si rien n'a ete lu avec certitude dans le document.
+const _extraireDossierBien = httpsCallable(functions, 'extraireDossierBien');
+
+export async function cloudExtraireDossierBien(base64, mimeType) {
+    const { data } = await _extraireDossierBien({ base64, mimeType });
+    return data;
+}
+
 // ─── Geocodage : Nominatim + cache Firestore ─────────────────────────────────
 // Remplace le proxy server.py /api/geocode/address (indisponible sans serveur local sur iPhone).
 // Nominatim impose 1 req/s ; le cache Firestore evite de re-solliciter l'API a chaque saisie

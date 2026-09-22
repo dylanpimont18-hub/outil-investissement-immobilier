@@ -24,7 +24,8 @@ import { buildBankDossierPrintDocument } from './pdf.js';
 import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
-    cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture
+    cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
+    cloudExtraireDossierBien
 } from './owned-cloud.js';
 
 let state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
@@ -2583,6 +2584,12 @@ function initOwnedQuickRail() {
         openOwnedDetail(asset.id);
     });
 
+    // ─── Importer un dossier (création directe depuis des documents) ──────────
+    document.getElementById('owned-quick-import-dossier-btn')?.addEventListener('click', () => {
+        closeOwnedQuickPanels();
+        openImportDossierModal(null);
+    });
+
     // ─── Ajouter une facture ──────────────────────────────────────────────────
     _wireQuickFactureForm(rail, assetId => {
         closeOwnedQuickPanels();
@@ -3127,6 +3134,130 @@ async function _runWithConcurrencyLimit(items, limit, worker) {
     await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next));
 }
 
+// ─── IMPORT DE DOSSIER BIEN : conversion PDF, extraction multi-documents, fusion ─────────────
+// Voir spec docs/superpowers/specs/2026-09-22-import-dossier-bien.md. PC uniquement
+// (IS_MOBILE_PAGE) — le mobile reste un usage de visualisation/édition légère.
+
+const DOSSIER_ACCEPTED_EXT = /\.(pdf|jpe?g|png)$/i;
+const DOSSIER_MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 Mo, comme TRAVAUX_MAX_FILE_SIZE
+
+let _pdfjsModulePromise = null;
+// Charge pdf.js à la demande (jamais au démarrage de l'app) : évite d'alourdir le chargement
+// initial pour une fonctionnalité utilisée ponctuellement. Fichiers vendorisés localement
+// (vendor/pdfjs/), pas de CDN — cohérent avec le fonctionnement 100% local de l'app.
+function _loadPdfjs() {
+    if (!_pdfjsModulePromise) {
+        _pdfjsModulePromise = import('/vendor/pdfjs/pdf.min.mjs').then(pdfjs => {
+            pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs';
+            return pdfjs;
+        });
+    }
+    return _pdfjsModulePromise;
+}
+
+// Rasterise la première page d'un PDF en PNG (échelle 2x pour la lisibilité OCR). Un acte de
+// vente de plusieurs pages perd les pages suivantes — acceptable car les informations clés
+// (prix, date, parties, surface) sont presque toujours en première page pour les documents visés.
+async function _pdfFirstPageToPngFile(file) {
+    const pdfjs = await _loadPdfjs();
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('pdf_to_png_failed');
+    const pngName = file.name.replace(/\.pdf$/i, '.png');
+    return new File([blob], pngName, { type: 'image/png' });
+}
+
+// Convertit chaque PDF du dossier en PNG avant extraction (Mammouth AI n'accepte que
+// image/jpeg|png côté serveur — voir functions/index.js). Les fichiers JPG/PNG natifs passent
+// tels quels. Un échec de conversion (PDF chiffré, scan illisible) ne bloque pas le reste du
+// dossier : le fichier original est conservé avec un statut d'erreur.
+async function _prepareDossierFiles(files) {
+    return Promise.all(files.map(async (original) => {
+        if (!/\.pdf$/i.test(original.name)) {
+            return { original, imageFile: original, conversionError: null };
+        }
+        try {
+            const imageFile = await _pdfFirstPageToPngFile(original);
+            return { original, imageFile, conversionError: null };
+        } catch (err) {
+            return { original, imageFile: null, conversionError: 'Conversion PDF impossible (fichier chiffré ou illisible)' };
+        }
+    }));
+}
+
+// Chemins de champs fusionnables (bien/acquisition/credit/charges) -> where ils s'écrivent sur
+// l'asset. `sub` = null pour les champs top-level (ville, codePostal...), sinon le nom du
+// sous-objet cible (acquisition/credit/postAchat).
+const DOSSIER_FIELD_MAP = {
+    'bien.adresse':          { label: 'Adresse',                 sub: null,         key: 'adresse' },
+    'bien.ville':             { label: 'Ville',                   sub: null,         key: 'ville' },
+    'bien.codePostal':        { label: 'Code postal',             sub: null,         key: 'codePostal' },
+    'bien.surface':           { label: 'Surface (m²)',            sub: 'acquisition', key: 'surface' },
+    'bien.typeBien':          { label: 'Type de bien',            sub: 'acquisition', key: 'typeBien' },
+    'acquisition.prix':       { label: "Prix d'achat (€)",        sub: 'acquisition', key: 'prix' },
+    'acquisition.fraisNotaire': { label: 'Frais de notaire (€)',  sub: 'acquisition', key: 'fraisNotaire' },
+    'acquisition.fraisAgence': { label: "Frais d'agence (€)",     sub: 'acquisition', key: 'fraisAgence' },
+    'acquisition.dateAchat':  { label: "Date d'achat",            sub: null,         key: 'dateAchat' },
+    'acquisition.valeurEstimee': { label: 'Valeur estimée (€)',   sub: 'acquisition', key: 'valeurEstimee' },
+    'acquisition.dateEstimation': { label: "Date d'estimation",   sub: 'acquisition', key: 'dateEstimation' },
+    'credit.montant':         { label: 'Montant emprunté (€)',    sub: 'credit',     key: 'montant' },
+    'credit.duree':           { label: 'Durée du crédit (ans)',   sub: 'credit',     key: 'duree' },
+    'credit.taux':            { label: 'Taux (%)',                sub: 'credit',     key: 'taux' },
+    'credit.assurance':       { label: 'Assurance (%/an)',        sub: 'credit',     key: 'assurance' },
+    'charges.taxeFonciere':   { label: 'Taxe foncière (€/an)',    sub: 'postAchat',  key: 'taxeFonciere' },
+    'charges.chargesCopro':   { label: 'Charges copro (€/mois)',  sub: 'postAchat',  key: 'chargesCopro' },
+    'charges.assurancePNO':   { label: 'Assurance PNO (€/an)',    sub: 'postAchat',  key: 'assurancePNO' },
+    'charges.gestionLocative': { label: 'Gestion locative (%)',   sub: 'postAchat',  key: 'gestionLocative' }
+};
+const DOSSIER_CONFIANCE_RANK = { haute: 3, moyenne: 2, basse: 1 };
+
+// Fusionne les résultats d'extraction de plusieurs documents en un seul jeu de champs "bien".
+// Règle : en cas de valeurs différentes pour le même champ, la confiance la plus haute gagne
+// (égalité -> premier document traité dans l'ordre du tableau qui gagne). Chaque champ retenu
+// garde sa provenance (fichier + confiance) pour affichage dans le tableau de revue. Les
+// documents facture_travaux ne participent pas à cette fusion (traités à part, voir _extractDossierTravaux).
+function _mergeDossierResults(rows) {
+    const merged = {}; // path -> { value, source: filename, confiance }
+    for (const row of rows) {
+        if (row.status !== 'ok' || !row.result) continue;
+        const { result, file } = row;
+        const confRank = DOSSIER_CONFIANCE_RANK[result.confiance] || 1;
+        for (const path of Object.keys(DOSSIER_FIELD_MAP)) {
+            const [group, field] = path.split('.');
+            const groupData = result[group];
+            if (!groupData || groupData[field] === undefined) continue;
+            const candidate = { value: groupData[field], source: file.name, confiance: result.confiance || 'basse' };
+            const existing = merged[path];
+            if (!existing || confRank > (DOSSIER_CONFIANCE_RANK[existing.confiance] || 1)) {
+                merged[path] = candidate;
+            }
+        }
+    }
+    return merged;
+}
+
+// Extrait les lignes "travaux détectés" (documentType facture_travaux) des résultats — traitées
+// séparément de la fusion de champs bien, une ligne par facture comme le batch Travaux existant.
+function _extractDossierTravaux(rows) {
+    return rows
+        .filter(row => row.status === 'ok' && row.result?.documentType === 'facture_travaux' && row.result.travail)
+        .map(row => ({
+            file: row.file,
+            date: row.result.travail.date || '',
+            description: row.result.travail.description || '',
+            montant: Number(row.result.travail.montant) || 0,
+            tag: ['deductible', 'non-deductible', 'a-classifier'].includes(row.result.travail.tagSuggestion)
+                ? row.result.travail.tagSuggestion : 'a-classifier'
+        }));
+}
+
 function renderOwnedTravauxTab(asset) {
     const el = nodes.ownedTravauxContent || document.getElementById('owned-travaux-content');
     if (!el) return;
@@ -3549,6 +3680,230 @@ async function openTravauxBatchModal(files) {
     });
 }
 
+// ─── IMPORT DE DOSSIER BIEN ────────────────────────────────────────────────────────────────
+// PC uniquement (voir bouton d'entrée, gate IS_MOBILE_PAGE). `existingAssetId` = null pour un
+// nouveau bien (pas encore créé — création différée à la validation), sinon l'id du bien à
+// compléter. Voir spec docs/superpowers/specs/2026-09-22-import-dossier-bien.md.
+async function openImportDossierModal(existingAssetId) {
+    const existingAsset = existingAssetId ? getOwnedAsset(existingAssetId) : null;
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.webkitdirectory = true;
+    fileInput.multiple = true;
+    fileInput.hidden = true;
+    document.body.appendChild(fileInput);
+
+    const allFiles = await new Promise(resolve => {
+        fileInput.addEventListener('change', () => resolve(Array.from(fileInput.files || [])), { once: true });
+        fileInput.click();
+    });
+    fileInput.remove();
+
+    const files = allFiles.filter(f => DOSSIER_ACCEPTED_EXT.test(f.name));
+    if (files.length === 0) {
+        if (allFiles.length > 0) showToast('Aucun PDF/JPG/PNG trouvé dans ce dossier', 'negative');
+        return;
+    }
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--xwide">
+            <div class="owned-modal-head">
+                <div>
+                    <h3 class="owned-modal-title">Import de dossier — ${files.length} document${files.length > 1 ? 's' : ''}</h3>
+                    <div class="owned-modal-sub" data-dossier-progress>Analyse en cours… 0 / ${files.length}</div>
+                </div>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+            </div>
+            <div data-dossier-body>
+                <p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Lecture des documents…</p>
+            </div>
+            <div class="owned-modal-actions">
+                <button type="button" class="btn btn--ghost" data-close-modal>Annuler</button>
+                <button type="button" class="btn btn--primary" data-dossier-submit disabled>Valider l'import</button>
+            </div>
+        </div>
+    `, 'owned-dossier-import-modal');
+
+    const progressEl = modal.querySelector('[data-dossier-progress]');
+    const bodyEl = modal.querySelector('[data-dossier-body]');
+    const submitBtn = modal.querySelector('[data-dossier-submit]');
+
+    // ─── Conversion PDF -> PNG puis extraction IA (concurrence limitée à 3, même pattern que
+    // le batch Travaux) ────────────────────────────────────────────────────────────────────
+    const prepared = await _prepareDossierFiles(files);
+    const rows = prepared.map((p, idx) => ({
+        idx, file: p.original, imageFile: p.imageFile,
+        status: p.conversionError ? 'error' : 'loading',
+        errorReason: p.conversionError,
+        result: null
+    }));
+
+    let doneCount = rows.filter(r => r.status === 'error').length;
+    const updateProgress = () => {
+        progressEl.textContent = doneCount < files.length
+            ? `Analyse en cours… ${doneCount} / ${files.length}`
+            : `Analyse terminée — vérifie les champs avant de valider`;
+    };
+    updateProgress();
+
+    await _runWithConcurrencyLimit(rows.filter(r => r.status !== 'error'), 3, async row => {
+        try {
+            const base64 = await _fileToBase64(row.imageFile);
+            row.result = await cloudExtraireDossierBien(base64, row.imageFile.type);
+            row.status = 'ok';
+        } catch (err) {
+            row.status = 'error';
+            row.errorReason = err?.message === 'resource-exhausted'
+                ? 'Limite horaire atteinte, réessayez plus tard'
+                : 'Extraction impossible';
+        }
+        doneCount++;
+        updateProgress();
+    });
+
+    // ─── Fusion + rendu du tableau de revue ───────────────────────────────────────────────
+    const merged = _mergeDossierResults(rows);
+    const travauxRows = _extractDossierTravaux(rows);
+    const failedRows = rows.filter(r => r.status === 'error');
+
+    const currentValueOf = (sub, key) => {
+        if (!existingAsset) return null;
+        const src = sub === null ? existingAsset : (sub === 'acquisition' ? existingAsset.acquisition : sub === 'credit' ? existingAsset.acquisition?.credit : existingAsset.postAchat);
+        const v = src?.[key];
+        return (v !== undefined && v !== null && v !== '' && v !== 0) ? v : null;
+    };
+
+    const bienFieldsHtml = Object.entries(DOSSIER_FIELD_MAP).map(([path, meta]) => {
+        const found = merged[path];
+        if (!found) return '';
+        const current = currentValueOf(meta.sub, meta.key);
+        return `
+        <tr data-dossier-field-row="${escapeHtml(path)}">
+            <td><input type="checkbox" data-dossier-field-check="${escapeHtml(path)}" checked ${current !== null ? 'data-has-current="1"' : ''}></td>
+            <td>${escapeHtml(meta.label)}</td>
+            <td><input type="text" class="variables-input" data-dossier-field-value="${escapeHtml(path)}" value="${escapeHtml(String(found.value))}"></td>
+            <td>
+                <span class="owned-caveat">${escapeHtml(found.source)} — confiance ${escapeHtml(found.confiance)}</span>
+                ${current !== null ? `<br><span class="owned-caveat" style="color:var(--warning, #d97706)">valeur actuelle : ${escapeHtml(String(current))}</span>` : ''}
+            </td>
+        </tr>`;
+    }).join('');
+
+    const travauxRowsHtml = travauxRows.map((t, idx) => `
+        <tr>
+            <td><input type="checkbox" data-dossier-travail-check="${idx}" checked></td>
+            <td class="owned-batch-filename">📄 ${escapeHtml(t.file.name)}</td>
+            <td><input type="date" class="variables-input" data-dossier-travail-field="date" data-idx="${idx}" value="${escapeHtml(t.date)}"></td>
+            <td><input type="text" class="variables-input" data-dossier-travail-field="description" data-idx="${idx}" value="${escapeHtml(t.description)}"></td>
+            <td><input type="number" class="variables-input" data-dossier-travail-field="montant" data-idx="${idx}" min="0" value="${t.montant || ''}"></td>
+            <td>
+                <select class="variables-input" data-dossier-travail-field="tag" data-idx="${idx}">
+                    <option value="a-classifier" ${t.tag === 'a-classifier' ? 'selected' : ''}>À classifier</option>
+                    <option value="deductible" ${t.tag === 'deductible' ? 'selected' : ''}>Déductible</option>
+                    <option value="non-deductible" ${t.tag === 'non-deductible' ? 'selected' : ''}>Non déductible</option>
+                </select>
+            </td>
+        </tr>`).join('');
+
+    const failedHtml = failedRows.map(r => `
+        <div class="owned-batch-filename">📄 ${escapeHtml(r.file.name)} — <span class="owned-caveat" style="color:#ef4444">${escapeHtml(r.errorReason || 'échec')}</span></div>
+    `).join('');
+
+    bodyEl.innerHTML = `
+        ${Object.keys(merged).length ? `
+        <div class="owned-section-title">Bien</div>
+        <div class="owned-batch-table-wrap">
+            <table class="owned-batch-table">
+                <thead><tr><th></th><th>Champ</th><th>Valeur</th><th>Provenance</th></tr></thead>
+                <tbody>${bienFieldsHtml}</tbody>
+            </table>
+        </div>` : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune information de bien détectée dans ce dossier.</p>'}
+
+        ${travauxRows.length ? `
+        <div class="owned-section-title" style="margin-top:20px">Travaux détectés</div>
+        <div class="owned-batch-table-wrap">
+            <table class="owned-batch-table">
+                <thead><tr><th></th><th>Fichier</th><th>Date</th><th>Description</th><th>Montant</th><th>Tag</th></tr></thead>
+                <tbody>${travauxRowsHtml}</tbody>
+            </table>
+        </div>` : ''}
+
+        ${failedRows.length ? `
+        <details class="owned-travaux-year" style="margin-top:20px">
+            <summary class="owned-travaux-year__summary"><span>Non traités (${failedRows.length})</span></summary>
+            <div class="owned-travaux-list">${failedHtml}</div>
+        </details>` : ''}
+    `;
+
+    submitBtn.disabled = Object.keys(merged).length === 0 && travauxRows.length === 0;
+
+    submitBtn.addEventListener('click', async () => {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Import en cours…';
+
+        let assetId = existingAssetId;
+        if (!assetId) {
+            const villeField = modal.querySelector('[data-dossier-field-value="bien.ville"]');
+            const nom = villeField?.value ? `Bien ${villeField.value}` : `Nouveau bien ${new Date().toLocaleDateString('fr-FR')}`;
+            const asset = createOwnedAsset(nom, villeField?.value || '');
+            assetId = asset.id;
+        }
+
+        const acqPatch = {}, creditPatch = {}, postAchatPatch = {}, assetPatch = {};
+        modal.querySelectorAll('[data-dossier-field-check]:checked').forEach(cb => {
+            const path = cb.dataset.dossierFieldCheck;
+            const meta = DOSSIER_FIELD_MAP[path];
+            const valueInput = modal.querySelector(`[data-dossier-field-value="${path}"]`);
+            if (!meta || !valueInput || !valueInput.value.trim()) return;
+            const raw = valueInput.value.trim();
+            const isNumeric = !['adresse', 'ville', 'codePostal', 'dateAchat', 'dateEstimation', 'typeBien'].includes(meta.key);
+            const value = isNumeric ? (Number(raw) || 0) : raw;
+            if (meta.sub === 'acquisition') acqPatch[meta.key] = value;
+            else if (meta.sub === 'credit') creditPatch[meta.key] = value;
+            else if (meta.sub === 'postAchat') postAchatPatch[meta.key] = value;
+            else assetPatch[meta.key] = value;
+        });
+
+        if (Object.keys(assetPatch).length) updateOwnedAsset(assetId, assetPatch);
+        if (Object.keys(acqPatch).length) updateOwnedAcquisition(assetId, acqPatch);
+        if (Object.keys(creditPatch).length) updateOwnedCredit(assetId, creditPatch);
+        if (Object.keys(postAchatPatch).length) updateOwnedPostAchat(assetId, postAchatPatch);
+
+        let travauxAdded = 0;
+        for (let idx = 0; idx < travauxRows.length; idx++) {
+            const checked = modal.querySelector(`[data-dossier-travail-check="${idx}"]`)?.checked;
+            if (!checked) continue;
+            const date = modal.querySelector(`[data-dossier-travail-field="date"][data-idx="${idx}"]`)?.value;
+            const description = modal.querySelector(`[data-dossier-travail-field="description"][data-idx="${idx}"]`)?.value.trim();
+            const montant = Number(modal.querySelector(`[data-dossier-travail-field="montant"][data-idx="${idx}"]`)?.value);
+            const tag = modal.querySelector(`[data-dossier-travail-field="tag"][data-idx="${idx}"]`)?.value;
+            if (!date || !description || !montant) continue;
+            let pdfFilename = null;
+            try {
+                pdfFilename = await uploadOwnedDocument(assetId, travauxRows[idx].file);
+            } catch { /* justificatif optionnel, on continue sans */ }
+            addOwnedTravail(assetId, { date, description, montant, tag, commentaire: '', pdfFilename, financeParCredit: false });
+            travauxAdded++;
+        }
+
+        modal.hidden = true;
+        showToast(`Import du dossier terminé — bien mis à jour${travauxAdded ? `, ${travauxAdded} frais ajoutés` : ''}`);
+
+        if (!existingAssetId) {
+            openOwnedDetail(assetId);
+        } else {
+            const fresh = getOwnedAsset(assetId);
+            renderAccordionAcquisition(fresh);
+            renderAccordionPostAchat(fresh);
+            renderOwnedTravauxTab(fresh);
+            renderOwnedSynthese(fresh);
+            renderOwnedCalculTab(fresh);
+            renderAccordionSimulateur(fresh);
+        }
+    });
+}
+
 let _ownedPortfolioCfChart = null;
 let _ownedPortfolioEcartChart = null;
 
@@ -3875,6 +4230,11 @@ function renderAccordionAcquisition(asset) {
         : '';
 
     nodes.accAcquisitionContent.innerHTML = `
+        ${IS_MOBILE_PAGE ? '' : `
+        <div class="owned-import-dossier-row">
+            <button type="button" class="btn btn--ghost btn--sm" data-action="import-dossier">📁 Importer un dossier de documents</button>
+            <span class="owned-caveat">Acte de vente, offre de prêt, taxe foncière, charges copro… pré-remplit les champs ci-dessous</span>
+        </div>`}
         <div class="owned-form-grid">
             <label class="variables-field">
                 <span class="variables-label">Prix d'achat (€)</span>
@@ -4046,6 +4406,12 @@ function renderAccordionAcquisition(asset) {
                 renderAccordionAcquisition(freshAsset);
                 renderOwnedSynthese(freshAsset);
                 renderOwnedCalculTab(freshAsset);
+                return;
+            }
+            if (e.target.closest('[data-action="import-dossier"]')) {
+                const id = state.activeOwnedAssetId;
+                if (!id) return;
+                openImportDossierModal(id);
             }
         });
         nodes.accAcquisitionContent.addEventListener('submit', e => {

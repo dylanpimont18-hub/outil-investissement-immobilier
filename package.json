@@ -9,7 +9,8 @@
     "test": "for f in tests/*.mjs; do node \"$f\" || exit 1; done"
   },
   "devDependencies": {
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "pdfjs-dist": "^4.10.38"
   },
   "license": "ISC"
 }
