@@ -97,6 +97,71 @@ def api_portfolio_diagnostic():
         return jsonify({'error': str(e)}), 502
 
 
+ASSISTANT_SYSTEM_PROMPT = (
+    "Tu es l'assistant investissement immobilier locatif de Spark Investissement, un conseiller français "
+    "expert en fiscalité foncière, financement bancaire et gestion locative. "
+    "Tu réponds UNIQUEMENT à des questions liées à l'investissement immobilier locatif de l'utilisateur : "
+    "analyse de son portefeuille, fiscalité, financement, négociation bancaire, rédaction de courriers ou "
+    "emails (ex. à un banquier, un notaire, un locataire), stratégie patrimoniale. "
+    "Si une question sort de ce cadre, décline poliment et recentre sur l'investissement immobilier. "
+    "Réponds en français naturel, de façon concise et actionnable, en t'appuyant sur les chiffres précis du "
+    "contexte fourni ci-dessous quand c'est pertinent. Pas de markdown superflu, du texte simple adapté à un "
+    "email ou une explication directe selon la demande."
+)
+ASSISTANT_MAX_MESSAGES = 40
+
+
+@app.route('/api/portfolio-chat', methods=['POST'])
+def api_portfolio_chat():
+    try:
+        from config import MAMMOUTH_API_KEY
+    except (ImportError, AttributeError):
+        return jsonify({'error': 'Clé API non configurée dans config.py'}), 503
+
+    payload = request.get_json(silent=True)
+    if not payload:
+        return jsonify({'error': 'Payload JSON manquant'}), 400
+
+    messages = payload.get('messages')
+    if not isinstance(messages, list) or not messages:
+        return jsonify({'error': 'Historique de conversation manquant'}), 400
+    if len(messages) > ASSISTANT_MAX_MESSAGES:
+        return jsonify({'error': 'Conversation trop longue'}), 400
+    for m in messages:
+        if not isinstance(m, dict) or m.get('role') not in ('user', 'assistant') or not isinstance(m.get('content'), str):
+            return jsonify({'error': 'Message invalide'}), 400
+
+    contexte = payload.get('contextePortefeuille')
+    system_content = ASSISTANT_SYSTEM_PROMPT
+    if contexte:
+        system_content += (
+            "\n\nContexte actuel du portefeuille de l'utilisateur (données à jour, utilise-les pour "
+            "personnaliser tes réponses) :\n" + json.dumps(contexte, ensure_ascii=False, indent=2)
+        )
+
+    try:
+        import requests
+        resp = requests.post(
+            'https://api.mammouth.ai/v1/chat/completions',
+            headers={
+                'content-type': 'application/json',
+                'authorization': f'Bearer {MAMMOUTH_API_KEY}',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+            },
+            json={
+                'model': 'gpt-4o',
+                'messages': [{'role': 'system', 'content': system_content}] + messages,
+            },
+            timeout=60,
+        )
+        if not resp.ok:
+            return jsonify({'error': f'Erreur IA ({resp.status_code})'}), 502
+        reply = resp.json()['choices'][0]['message']['content'].strip()
+        return jsonify({'reply': reply})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+
 EXPORTS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "exports"
 
 

@@ -170,7 +170,7 @@ function createOwnedAsset(nom, ville) {
             { id: 'realiste',   nom: 'Réaliste',   variables: { vacance: 5, regime: state.ownedRegime || 'micro-foncier' } },
             { id: 'optimiste',  nom: 'Optimiste',  variables: { vacance: 2, regime: state.ownedRegime || 'micro-foncier' } }
         ],
-        lastDiagnostic: null
+        diagnosticHistory: []
     };
     const all = loadOwnedAssets();
     all[id] = asset;
@@ -1592,6 +1592,17 @@ function initOwnedPortfolioEvents() {
             if (id) callOwnedDiagnosticIA(id);
         });
     }
+    if (nodes.ownedDiagnosticHistoryBtn) {
+        nodes.ownedDiagnosticHistoryBtn.addEventListener('click', () => {
+            const asset = getOwnedAsset(state.activeOwnedAssetId);
+            const history = asset?.diagnosticHistory || [];
+            if (!history.length || !nodes.ownedAiDrawer || !nodes.ownedAiOverlay) return;
+            void nodes.ownedAiDrawer.offsetWidth;
+            nodes.ownedAiDrawer.classList.add('is-open');
+            nodes.ownedAiOverlay.classList.add('is-open');
+            renderOwnedDiagnosticDrawer(history, 0);
+        });
+    }
     if (nodes.ownedBankDossierBtn) {
         nodes.ownedBankDossierBtn.addEventListener('click', () => {
             const id = state.activeOwnedAssetId;
@@ -1778,6 +1789,53 @@ function getOrderedAssetList() {
         const ib = orderMap[b.id] ?? Infinity;
         return ia - ib;
     });
+}
+
+// Résumé JSON du portefeuille entier pour l'Assistant IA (assistant-chat.js) — mêmes primitives
+// que renderOwnedDashboard (calculs.js), mais sous forme de données plutôt que de rendu DOM.
+// Volontairement compact (pas de justificatifs/documents) : un bien sans données saisies (prix=0)
+// est inclus quand même, l'IA doit pouvoir signaler qu'il manque d'infos.
+export function buildPortfolioSummaryForAI() {
+    const list = getOrderedAssetList();
+    const regime = getOwnedRegime();
+    const profileData = state.profileData || {};
+    const tmi = getOwnedTmi();
+    const revenusMens = resolveRevenuFoyer(profileData, new Date().getFullYear()) / 12;
+
+    const biens = list.map(asset => {
+        const sc = getOwnedDefaultScenario(asset);
+        const cf = computeOwnedAssetCF(asset, { ...sc.variables, regime }, tmi);
+        const pn = computePatrimoineNet(asset);
+        return {
+            nom: asset.nom,
+            ville: asset.ville,
+            dateAchat: asset.dateAchat,
+            prixAchat: asset.acquisition?.prix || 0,
+            loyerMensuel: asset.acquisition?.loyerInitial || 0,
+            credit: asset.acquisition?.credit,
+            cfNetNetMensuel: Math.round(cf.cfNetNet),
+            patrimoineNet: Math.round(pn.patrimoineNet || 0),
+            crd: Math.round(pn.crd || 0)
+        };
+    });
+
+    const endettement = computeEndettementGlobal(list, revenusMens, profileData.autresCredits || []);
+    const alerts = computePortfolioAlerts(list, profileData, regime, revenusMens);
+    const totalCF = biens.reduce((s, b) => s + b.cfNetNetMensuel, 0);
+    const totalPatNet = biens.reduce((s, b) => s + b.patrimoineNet, 0);
+
+    return {
+        regimeFiscal: regime,
+        tmiFoyer: tmi,
+        nombreBiens: biens.length,
+        biens,
+        totaux: { cfNetNetMensuel: Math.round(totalCF), patrimoineNet: Math.round(totalPatNet) },
+        endettement: {
+            tauxEndettement: Math.round(endettement.tauxEndettement * 10) / 10,
+            capaciteResiduelleMensuelle: Math.round(endettement.capaciteResiduelle)
+        },
+        alertes: alerts.map(a => a.msg)
+    };
 }
 
 // ─── Carte du portefeuille (Leaflet) ─────────────────────────────────────────
@@ -2767,6 +2825,11 @@ function renderOwnedDetail() {
         const hasData = (asset.acquisition?.prix || 0) > 0;
         nodes.ownedDiagnosticBtn.hidden = IS_MOBILE_PAGE || !hasData;
         nodes.ownedDiagnosticBtn.disabled = !hasData;
+    }
+    if (nodes.ownedDiagnosticHistoryBtn) {
+        const hasHistory = (asset.diagnosticHistory || []).length > 0;
+        nodes.ownedDiagnosticHistoryBtn.hidden = IS_MOBILE_PAGE || !hasHistory;
+        nodes.ownedDiagnosticHistoryBtn.disabled = !hasHistory;
     }
     if (nodes.ownedBankDossierBtn) {
         nodes.ownedBankDossierBtn.hidden = IS_MOBILE_PAGE;
@@ -5042,6 +5105,45 @@ function renderAccordionSimulateur(asset) {
     });
 }
 
+const OWNED_DIAGNOSTIC_HISTORY_MAX = 10;
+
+function formatOwnedDiagnosticDate(iso) {
+    return new Date(iso).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+// Rendu du drawer Diagnostic IA : sélecteur de dates (historique, le plus récent en premier)
+// au-dessus des recommandations de l'entrée sélectionnée. history est trié anté-chronologique.
+function renderOwnedDiagnosticDrawer(history, selectedIndex) {
+    if (!history.length) {
+        nodes.ownedAiDrawerContent.innerHTML = `<p style="color:var(--text-secondary);text-align:center;padding:24px">Aucun diagnostic pour le moment.</p>`;
+        return;
+    }
+    const entry = history[selectedIndex] || history[0];
+    const tabs = history.length > 1 ? `
+        <div class="portfolio-ai-drawer__history" role="tablist" aria-label="Historique des diagnostics">
+            ${history.map((h, i) => `
+                <button type="button" class="portfolio-ai-drawer__history-tab${i === selectedIndex ? ' is-active' : ''}" data-diag-index="${i}" role="tab" aria-selected="${i === selectedIndex}">${formatOwnedDiagnosticDate(h.date)}</button>
+            `).join('')}
+        </div>
+    ` : '';
+
+    nodes.ownedAiDrawerContent.innerHTML = `
+        ${tabs}
+        <p style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:16px">Analyse du ${formatOwnedDiagnosticDate(entry.date)}</p>
+        ${(entry.recommendations || []).map((r, i) => `
+            <div style="border:1px solid var(--border-subtle);border-radius:8px;padding:14px;margin-bottom:10px">
+                <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:6px">${i + 1}. ${escapeHtml(r.title)}</div>
+                <p style="font-size:.83rem;color:var(--text-secondary);line-height:1.5;margin:0 0 8px">${escapeHtml(r.explanation)}</p>
+                <div style="font-size:.78rem;color:var(--accent-gold,#C5A059)">→ ${escapeHtml(r.action)}</div>
+            </div>
+        `).join('')}
+    `;
+
+    nodes.ownedAiDrawerContent.querySelectorAll('[data-diag-index]').forEach(btn => {
+        btn.addEventListener('click', () => renderOwnedDiagnosticDrawer(history, Number(btn.dataset.diagIndex)));
+    });
+}
+
 async function callOwnedDiagnosticIA(assetId) {
     const asset = getOwnedAsset(assetId);
     if (!asset) return;
@@ -5092,20 +5194,11 @@ async function callOwnedDiagnosticIA(assetId) {
         }
 
         const recs = data.recommendations || [];
-        const now = new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        const newEntry = { date: new Date().toISOString(), recommendations: recs };
+        const history = [newEntry, ...(asset.diagnosticHistory || [])].slice(0, OWNED_DIAGNOSTIC_HISTORY_MAX);
 
-        nodes.ownedAiDrawerContent.innerHTML = `
-            <p style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:16px">Analyse du ${now}</p>
-            ${recs.map((r, i) => `
-                <div style="border:1px solid var(--border-subtle);border-radius:8px;padding:14px;margin-bottom:10px">
-                    <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:6px">${i + 1}. ${escapeHtml(r.title)}</div>
-                    <p style="font-size:.83rem;color:var(--text-secondary);line-height:1.5;margin:0 0 8px">${escapeHtml(r.explanation)}</p>
-                    <div style="font-size:.78rem;color:var(--accent-gold,#C5A059)">→ ${escapeHtml(r.action)}</div>
-                </div>
-            `).join('')}
-        `;
-
-        updateOwnedAsset(assetId, { lastDiagnostic: { date: new Date().toISOString(), recommendations: recs } });
+        updateOwnedAsset(assetId, { diagnosticHistory: history });
+        renderOwnedDiagnosticDrawer(history, 0);
 
     } catch (err) {
         nodes.ownedAiDrawerContent.innerHTML = `<p style="color:#F85149;padding:16px">Erreur réseau : ${escapeHtml(err.message)}</p>`;

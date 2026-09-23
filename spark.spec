@@ -18,9 +18,6 @@ a = Analysis(
         'flask', 'jinja2', 'jinja2.ext', 'markupsafe', 'werkzeug',
         'werkzeug.routing', 'werkzeug.serving', 'werkzeug.middleware',
         'werkzeug.middleware.proxy_fix',
-        # Anthropic SDK (diagnostic IA du Portefeuille)
-        'anthropic', 'httpx', 'httpcore', 'anyio', 'sniffio',
-        'certifi', 'charset_normalizer', 'distro',
         # Pystray
         'pystray', 'pystray._win32',
         # PIL

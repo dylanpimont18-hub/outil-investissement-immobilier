@@ -19,7 +19,7 @@ def test_api_version_reads_version_file():
 
 
 def test_portfolio_diagnostic_missing_config(monkeypatch):
-    """Sans config.py (ANTHROPIC_API_KEY manquant), retourne 503."""
+    """Sans config.py (MAMMOUTH_API_KEY manquant), retourne 503."""
     import builtins
     real_import = builtins.__import__
 
@@ -41,7 +41,7 @@ def test_portfolio_diagnostic_missing_config(monkeypatch):
 def test_portfolio_diagnostic_empty_payload(monkeypatch):
     """Payload vide retourne 400."""
     fake_config = types.ModuleType('config')
-    fake_config.ANTHROPIC_API_KEY = 'test-key'
+    fake_config.MAMMOUTH_API_KEY = 'test-key'
     monkeypatch.setitem(sys.modules, 'config', fake_config)
 
     client = server.app.test_client()
@@ -58,19 +58,15 @@ def test_portfolio_diagnostic_success(monkeypatch):
     from unittest.mock import MagicMock
 
     fake_config = types.ModuleType('config')
-    fake_config.ANTHROPIC_API_KEY = 'test-key'
+    fake_config.MAMMOUTH_API_KEY = 'test-key'
     monkeypatch.setitem(sys.modules, 'config', fake_config)
 
-    fake_content = MagicMock()
-    fake_content.text = '{"recommendations": [{"title": "Test", "explanation": "Explication.", "action": "Action."}]}'
-    fake_message = MagicMock()
-    fake_message.content = [fake_content]
-    fake_client_instance = MagicMock()
-    fake_client_instance.messages.create.return_value = fake_message
-
-    fake_anthropic = types.ModuleType('anthropic')
-    fake_anthropic.Anthropic = MagicMock(return_value=fake_client_instance)
-    monkeypatch.setitem(sys.modules, 'anthropic', fake_anthropic)
+    fake_response = MagicMock()
+    fake_response.ok = True
+    fake_response.json.return_value = {
+        'choices': [{'message': {'content': '{"recommendations": [{"title": "Test", "explanation": "Explication.", "action": "Action."}]}'}}]
+    }
+    monkeypatch.setattr('requests.post', MagicMock(return_value=fake_response))
 
     client = server.app.test_client()
     resp = client.post(

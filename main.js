@@ -3,6 +3,7 @@ import { buildDecisionPrintDocument } from './pdf.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
 import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel, openPrintDocument } from './utils.js';
 import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections, syncProfileToCloud, invalidateOwnedMap } from './owned-portfolio.js';
+import { initAssistantChat } from './assistant-chat.js';
 
 const _counterState = new WeakMap();
 
@@ -304,6 +305,7 @@ const nodes = {
     ownedBackBtn: document.getElementById('owned-back-btn'),
     ownedDetailTitle: document.getElementById('owned-detail-title'),
     ownedDiagnosticBtn: document.getElementById('owned-diagnostic-btn'),
+    ownedDiagnosticHistoryBtn: document.getElementById('owned-diagnostic-history-btn'),
     ownedBankDossierBtn: document.getElementById('owned-bank-dossier-btn'),
     accAcquisitionBody: document.getElementById('acc-acquisition-body'),
     accAcquisitionContent: document.getElementById('acc-acquisition-content'),
@@ -2695,25 +2697,33 @@ function _initAnalysisViewToggle() {
 
 function initWorkspaceTabs() {
     const tabs = document.querySelectorAll('.workspace-tab');
-    const workspacePanel = document.querySelector('.workspace-panel');
-    const collectionPanel = document.getElementById('collection-panel');
-    collectionPanel.style.display = 'none';
+    const panels = {
+        'workspace-panel': document.getElementById('workspace-panel'),
+        'collection-panel': document.getElementById('collection-panel'),
+        'assistant-panel': document.getElementById('assistant-panel')
+    };
+    Object.entries(panels).forEach(([target, panel]) => {
+        if (panel) panel.style.display = target === 'workspace-panel' ? '' : 'none';
+    });
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('is-active'));
             tab.classList.add('is-active');
             const target = tab.dataset.target;
-            workspacePanel.style.display = 'none';
-            collectionPanel.style.display = 'none';
+
+            Object.entries(panels).forEach(([key, panel]) => {
+                if (!panel) return;
+                if (key === target) {
+                    panel.style.display = '';
+                    panel.style.animation = 'tabFadeIn 200ms ease-out';
+                } else {
+                    panel.style.display = 'none';
+                }
+            });
 
             if (target === 'collection-panel') {
-                collectionPanel.style.display = '';
-                collectionPanel.style.animation = 'tabFadeIn 200ms ease-out';
                 window.requestAnimationFrame(() => invalidateOwnedMap());
-            } else {
-                workspacePanel.style.display = '';
-                workspacePanel.style.animation = 'tabFadeIn 200ms ease-out';
             }
         });
     });
@@ -2848,6 +2858,7 @@ applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 _initAnalysisViewToggle();
 initOwnedPortfolioEvents();
+if (!IS_ANALYSIS_WINDOW) initAssistantChat({ state, nodes });
 if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
     setTimeout(() => openProfileModal(), 400);
 }

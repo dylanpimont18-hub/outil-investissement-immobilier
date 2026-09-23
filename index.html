@@ -53,6 +53,10 @@
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="8" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
                         <span>Portefeuille</span>
                     </button>
+                    <button class="workspace-tab" data-target="assistant-panel">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H6.5L3.5 12.5V10.5H2a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                        <span>Assistant</span>
+                    </button>
                     <button id="glossaire-btn" class="glossaire-trigger topbar-btn" type="button" title="Glossaire des termes financiers" aria-label="Glossaire des termes financiers">?</button>
                 </nav>
                 <div class="sidebar-mode">
@@ -76,7 +80,7 @@
                 </div>
             </aside>
             <div class="app-main">
-            <section class="workspace-panel" aria-label="Espace de travail">
+            <section id="workspace-panel" class="workspace-panel" aria-label="Espace de travail">
                 <div class="panel-head">
                     <h2 id="workspace-title"></h2>
                     <p id="workspace-subtitle" class="panel-subtitle"></p>
@@ -760,6 +764,7 @@
             <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button">← Retour</button>
             <div id="owned-detail-title" class="owned-detail-title"></div>
             <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>✦ Diagnostic IA</button>
+            <button id="owned-diagnostic-history-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled hidden title="Voir les diagnostics précédents">Historique</button>
             <button id="owned-bank-dossier-btn" class="btn btn--ghost" type="button">Dossier bancaire</button>
         </div>
 
@@ -818,6 +823,24 @@
     </div>
     </div>
     </div>
+    </section>
+
+    <!-- Panneau Assistant : chat IA dédié à l'investissement immobilier (contexte = résumé du
+         portefeuille détenu, envoyé à chaque message ; historique de conversation non persisté,
+         perdu à la fermeture/rechargement — voir assistant-chat.js) -->
+    <section id="assistant-panel" class="workspace-panel" aria-label="Assistant IA">
+        <div class="panel-head">
+            <h2>Assistant IA</h2>
+            <p class="panel-subtitle">Posez vos questions sur votre portefeuille, la fiscalité, le financement — ou demandez un email prêt à envoyer à votre banquier.</p>
+        </div>
+        <div id="assistant-chat" class="assistant-chat">
+            <div id="assistant-chat-messages" class="assistant-chat__messages"></div>
+            <form id="assistant-chat-form" class="assistant-chat__form">
+                <textarea id="assistant-chat-input" class="assistant-chat__input" rows="2" placeholder="Ex : Rédige un email à mon banquier pour expliquer un cash-flow négatif temporaire sur mon bien à Lyon…" required></textarea>
+                <button type="submit" class="btn btn--primary assistant-chat__send">Envoyer</button>
+            </form>
+        </div>
+    </section>
 
     <!-- Modale suppression sécurisée -->
     <div id="owned-delete-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
@@ -847,7 +870,6 @@
         </div>
     </div>
 
-            </section>
             </div>
         </main>
 
