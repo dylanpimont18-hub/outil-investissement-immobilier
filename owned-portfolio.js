@@ -178,7 +178,7 @@ function createOwnedAsset(nom, ville) {
     return asset;
 }
 
-function getOwnedAsset(id) {
+export function getOwnedAsset(id) {
     return loadOwnedAssets()[id] || null;
 }
 
@@ -246,6 +246,40 @@ function deleteOwnedLot(assetId, lotId) {
     if (!all[assetId]) return;
     all[assetId].lots = (all[assetId].lots || []).filter(l => l.id !== lotId);
     saveOwnedAssets(all);
+}
+
+const TRAVAIL_DUPLICATE_MONTANT_TOLERANCE = 2; // €, arrondis de saisie (ex. 149,99 vs 150)
+const TRAVAIL_DUPLICATE_JOURS_TOLERANCE = 5; // jours, date de facture vs date de paiement/saisie
+
+// Détection de doublon probable AVANT ajout — critère volontairement simple et non-bloquant (montant
+// quasi identique + date proche) : la description peut légitimement différer pour la même dépense
+// (ex. « Facture plombier » saisie manuellement vs « Réparation fuite salle de bain » extraite d'une
+// facture), donc elle n'entre pas dans le calcul. Retourne l'entrée existante la plus proche (ou null),
+// jamais une liste — un seul avertissement suffit, charge à l'appelant de laisser l'utilisateur décider
+// (jamais un blocage dur : un vrai doublon existe parfois, ex. deux factures distinctes du même
+// montant le même mois). Utilisée par les 5 points d'ajout d'un frais (formulaires, import groupé,
+// import dossier, Assistant IA) — centralisée ici pour ne pas dupliquer le critère 5 fois.
+export function findSimilarTravail(asset, { montant, date }) {
+    const m = Number(montant) || 0;
+    if (m <= 0 || !date) return null;
+    const target = new Date(date).getTime();
+    if (Number.isNaN(target)) return null;
+
+    const travaux = asset?.postAchat?.travaux || [];
+    let best = null;
+    let bestDeltaJours = Infinity;
+    for (const t of travaux) {
+        if (Math.abs((t.montant || 0) - m) > TRAVAIL_DUPLICATE_MONTANT_TOLERANCE) continue;
+        if (!t.date) continue;
+        const tTime = new Date(t.date).getTime();
+        if (Number.isNaN(tTime)) continue;
+        const deltaJours = Math.abs(tTime - target) / 86400000;
+        if (deltaJours <= TRAVAIL_DUPLICATE_JOURS_TOLERANCE && deltaJours < bestDeltaJours) {
+            best = t;
+            bestDeltaJours = deltaJours;
+        }
+    }
+    return best;
 }
 
 export function addOwnedTravail(assetId, travail) {
@@ -2578,6 +2612,11 @@ function _wireQuickFactureForm(root, onSubmitted) {
         const description = fieldDesc?.value.trim();
         const montant = Number(fieldMontant?.value);
         if (!date || !description || !montant) { showToast('Date, description et montant sont requis', 'negative'); return; }
+        const assetForDup = getOwnedAsset(assetId);
+        const doublon = assetForDup ? findSimilarTravail(assetForDup, { montant, date }) : null;
+        if (doublon && !window.confirm(`Une dépense très proche existe déjà : « ${doublon.description || 'sans description'} » du ${doublon.date} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €).\n\nAjouter quand même ce frais ?`)) {
+            return;
+        }
         let pdfFilename = null;
         if (quickPendingFile) {
             try {
@@ -3599,6 +3638,10 @@ function renderOwnedTravauxTab(asset) {
             showToast('Date, description et montant sont requis', 'negative');
             return;
         }
+        const doublon = findSimilarTravail(getOwnedAsset(id), { montant, date });
+        if (doublon && !window.confirm(`Une dépense très proche existe déjà : « ${doublon.description || 'sans description'} » du ${doublon.date} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €).\n\nAjouter quand même ce frais ?`)) {
+            return;
+        }
         let pdfFilename = null;
         if (pendingFile) {
             try {
@@ -3649,6 +3692,7 @@ async function openTravauxBatchModal(files) {
             <td class="owned-batch-filename">
                 📄 ${escapeHtml(row.file.name)}
                 <div class="owned-batch-status" data-batch-status="${row.idx}">lecture…</div>
+                <div class="owned-batch-duplicate" data-batch-duplicate="${row.idx}" hidden></div>
             </td>
             <td><input type="date" class="variables-input" data-batch-field="date" data-idx="${row.idx}"></td>
             <td><input type="text" class="variables-input" data-batch-field="description" data-idx="${row.idx}" placeholder="Description"></td>
@@ -3689,6 +3733,22 @@ async function openTravauxBatchModal(files) {
     };
     modal.querySelectorAll('[data-batch-check]').forEach(cb => cb.addEventListener('change', updateSubmitLabel));
 
+    // Ré-évaluée à chaque extraction terminée ET à chaque édition manuelle d'un champ date/montant
+    // (l'utilisateur peut corriger un montant mal extrait, ce qui doit re-déclencher/lever l'alerte) —
+    // contre l'état RÉEL du bien (getOwnedAsset), pas contre les autres lignes de ce même batch : deux
+    // factures distinctes du même montant le même jour restent un cas légitime, seul un rapprochement
+    // avec une dépense DÉJÀ enregistrée avant l'ouverture de cette modale doit être signalé.
+    const checkRowDuplicate = idx => {
+        const dupEl = modal.querySelector(`[data-batch-duplicate="${idx}"]`);
+        if (!dupEl) return;
+        const dateEl = modal.querySelector(`[data-batch-field="date"][data-idx="${idx}"]`);
+        const montantEl = modal.querySelector(`[data-batch-field="montant"][data-idx="${idx}"]`);
+        const asset = getOwnedAsset(id);
+        const doublon = asset ? findSimilarTravail(asset, { montant: Number(montantEl?.value), date: dateEl?.value }) : null;
+        dupEl.hidden = !doublon;
+        if (doublon) dupEl.textContent = `⚠ Possible doublon : « ${doublon.description || 'sans description'} » du ${doublon.date}`;
+    };
+
     const applyRow = row => {
         const statusEl = modal.querySelector(`[data-batch-status="${row.idx}"]`);
         if (statusEl) {
@@ -3703,7 +3763,14 @@ async function openTravauxBatchModal(files) {
         if (descEl) descEl.value = row.description;
         if (montantEl) montantEl.value = row.montant > 0 ? row.montant : '';
         if (tagEl) tagEl.value = row.tag;
+        checkRowDuplicate(row.idx);
     };
+    rows.forEach(row => {
+        ['date', 'montant'].forEach(field => {
+            modal.querySelector(`[data-batch-field="${field}"][data-idx="${row.idx}"]`)
+                ?.addEventListener('change', () => checkRowDuplicate(row.idx));
+        });
+    });
 
     let doneCount = 0;
     await _runWithConcurrencyLimit(rows, 3, async row => {
@@ -3869,10 +3936,18 @@ async function openImportDossierModal(existingAssetId) {
         </tr>`;
     }).join('');
 
-    const travauxRowsHtml = travauxRows.map((t, idx) => `
+    // Un doublon ne peut se comparer qu'à des travaux DÉJÀ enregistrés sur un bien EXISTANT — un
+    // nouveau bien (existingAsset null, import qui crée le bien) n'a par définition aucun travail
+    // préexistant à rapprocher.
+    const travauxRowsHtml = travauxRows.map((t, idx) => {
+        const doublon = existingAsset ? findSimilarTravail(existingAsset, { montant: t.montant, date: t.date }) : null;
+        return `
         <tr>
             <td><input type="checkbox" data-dossier-travail-check="${idx}" checked></td>
-            <td class="owned-batch-filename">📄 ${escapeHtml(t.file.name)}</td>
+            <td class="owned-batch-filename">
+                📄 ${escapeHtml(t.file.name)}
+                ${doublon ? `<div class="owned-batch-duplicate">⚠ Possible doublon : « ${escapeHtml(doublon.description || 'sans description')} » du ${escapeHtml(doublon.date)}</div>` : ''}
+            </td>
             <td><input type="date" class="variables-input" data-dossier-travail-field="date" data-idx="${idx}" value="${escapeHtml(t.date)}"></td>
             <td><input type="text" class="variables-input" data-dossier-travail-field="description" data-idx="${idx}" value="${escapeHtml(t.description)}"></td>
             <td><input type="number" class="variables-input" data-dossier-travail-field="montant" data-idx="${idx}" min="0" value="${t.montant || ''}"></td>
@@ -3883,7 +3958,8 @@ async function openImportDossierModal(existingAssetId) {
                     <option value="non-deductible" ${t.tag === 'non-deductible' ? 'selected' : ''}>Non déductible</option>
                 </select>
             </td>
-        </tr>`).join('');
+        </tr>`;
+    }).join('');
 
     const failedHtml = failedRows.map(r => `
         <div class="owned-batch-filename">📄 ${escapeHtml(r.file.name)} — <span class="owned-caveat" style="color:#ef4444">${escapeHtml(r.errorReason || 'échec')}</span></div>

@@ -18,7 +18,7 @@
 // multi-tours function-calling côté serveur.
 
 import { escapeHtml, showToast } from './utils.js';
-import { buildPortfolioSummaryForAI, addOwnedNote, addOwnedTravail, addOwnedAutreCredit, patchProfileData, renderCollections } from './owned-portfolio.js';
+import { buildPortfolioSummaryForAI, addOwnedNote, addOwnedTravail, addOwnedAutreCredit, patchProfileData, renderCollections, getOwnedAsset, findSimilarTravail } from './owned-portfolio.js';
 
 let nodes;
 let _messages = []; // { role: 'user'|'assistant', content: string, toolCalls?: [...], toolCallsStatus?: 'pending'|'done'|'cancelled' }
@@ -57,6 +57,13 @@ const ACTION_HANDLERS = {
     },
     ajouter_frais_bien: {
         describe: (args, ctx) => `Ajouter une dépense sur « ${_nomBien(args.assetId, ctx)} » : ${args.description || ''} — ${_formatEuros(args.montant)}`,
+        warn: args => {
+            const asset = getOwnedAsset(args.assetId);
+            const doublon = asset ? findSimilarTravail(asset, { montant: args.montant, date: args.date }) : null;
+            return doublon
+                ? `Une dépense très proche existe déjà sur ce bien : « ${doublon.description || 'sans description'} » du ${doublon.date} (${_formatEuros(doublon.montant)}). Vérifiez qu'il ne s'agit pas d'un doublon avant de confirmer.`
+                : null;
+        },
         validate: _validateAssetId,
         run: args => {
             addOwnedTravail(args.assetId, {
@@ -163,12 +170,14 @@ function _executeToolCall(message, callIdx) {
 function _renderActionCard(message, msgIndex, call, callIndex) {
     const handler = ACTION_HANDLERS[call.name];
     const description = handler ? handler.describe(call.args, call.contextSnapshot) : call.name;
+    const warningText = handler?.warn ? handler.warn(call.args, call.contextSnapshot) : null;
     const status = call.status || 'pending';
 
     if (status === 'pending') {
         return `
         <div class="assistant-chat__action-card">
             <p class="assistant-chat__action-desc">${escapeHtml(description)}</p>
+            ${warningText ? `<p class="assistant-chat__action-warning">⚠ ${escapeHtml(warningText)}</p>` : ''}
             <div class="assistant-chat__action-buttons">
                 <button type="button" class="btn btn--ghost btn--sm" data-action-cancel data-msg-index="${msgIndex}" data-call-index="${callIndex}">Annuler</button>
                 <button type="button" class="btn btn--primary btn--sm" data-action-confirm data-msg-index="${msgIndex}" data-call-index="${callIndex}">Confirmer</button>

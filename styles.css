@@ -6065,6 +6065,16 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     line-height: 1.5;
 }
 
+.assistant-chat__action-warning {
+    margin: -4px 0 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--watch-soft, rgba(217, 119, 6, 0.1));
+    color: var(--watch, #d97706);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
 .assistant-chat__action-buttons {
     display: flex;
     justify-content: flex-end;
@@ -7519,6 +7529,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .owned-batch-status { font-size: 0.72rem; color: var(--text-tertiary); margin-top: 2px; }
 .owned-batch-status--ok { color: #22c55e; }
 .owned-batch-status--error { color: #ef4444; }
+.owned-batch-duplicate { font-size: 0.72rem; color: var(--watch, #d97706); margin-top: 2px; }
 
 /* Ecran etroit : 6 colonnes ne tiennent pas (illisible/peu manipulable au doigt meme avec scroll
    horizontal) — chaque ligne devient une carte empilee, meme principe que la variante mobile de
