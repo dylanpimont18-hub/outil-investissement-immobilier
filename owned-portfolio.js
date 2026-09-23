@@ -248,7 +248,7 @@ function deleteOwnedLot(assetId, lotId) {
     saveOwnedAssets(all);
 }
 
-function addOwnedTravail(assetId, travail) {
+export function addOwnedTravail(assetId, travail) {
     const all = loadOwnedAssets();
     if (!all[assetId]) return;
     const entry = {
@@ -310,7 +310,7 @@ async function uploadOwnedDocument(assetId, file) {
     return cloudUploadDocument(assetId, file);
 }
 
-function addOwnedNote(assetId, text) {
+export function addOwnedNote(assetId, text) {
     if (!String(text || '').trim()) return;
     const all = loadOwnedAssets();
     if (!all[assetId]) return;
@@ -709,7 +709,7 @@ function openObjectifsModal() {
 const BANK_DOSSIER_SECTION_DEFS = [
     { key: 'donnees', label: 'Données du bien', detail: 'Adresse, prix, surface, date d\'achat, valeur estimée' },
     { key: 'indicateurs', label: 'Indicateurs clés', detail: 'Mensualité, investissement total, CF, rendement, DSCR, patrimoine net' },
-    { key: 'credit', label: 'Crédit & fiscalité', detail: 'Comparatif des 3 régimes + tableau des flux de trésorerie (5 ans)' },
+    { key: 'credit', label: 'Crédit & fiscalité', detail: 'Comparatif des 3 régimes + projection graphique et tableau des flux de trésorerie (10 ans)' },
 ];
 
 // Même liste que BANK_DOSSIER_METRIC_DEFS dans pdf.js (dupliquée volontairement : ce module ne doit
@@ -831,6 +831,7 @@ async function _generateBankDossierPdf(selectedAssetIds, sections, highlights) {
     if (!assets.length) { showToast('Aucun bien sélectionné', 'negative'); return; }
     const { documentHTML, filename } = buildBankDossierPrintDocument({
         assets,
+        allAssets: getOrderedAssetList(),
         sections,
         highlights,
         profileData: state.profileData,
@@ -1198,10 +1199,24 @@ function deleteOwnedRevenuHistorique(annee) {
     saveOwnedProfileData();
 }
 
-function addOwnedAutreCredit(entry) {
+export function addOwnedAutreCredit(entry) {
     const credits = [...(state.profileData.autresCredits || [])];
     credits.push({ id: `credit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, libelle: entry.libelle, mensualite: Math.max(0, Number(entry.mensualite) || 0) });
     state.profileData = { ...state.profileData, autresCredits: credits };
+    saveOwnedProfileData();
+}
+
+// Patch générique de champs simples de profileData (income, objectifCF...) — pour l'Assistant IA
+// (assistant-chat.js), qui ne connaît que ces deux champs pour l'instant. Ne remplace pas la modale
+// Profil complète (revenuHistorique/adults/children/autresCredits ont leurs propres CRUD dédiés
+// ci-dessus) : seulement les champs scalaires qu'un message en langage naturel peut porter sans
+// ambiguïté. Number(...) || 0 rejette silencieusement une valeur non numérique plutôt que de stocker
+// NaN — l'appelant est responsable d'avoir déjà validé la valeur avant d'arriver ici.
+export function patchProfileData(patch) {
+    const next = { ...state.profileData };
+    if (patch.income !== undefined) next.income = Math.max(0, Number(patch.income) || 0);
+    if (patch.objectifCF !== undefined) next.objectifCF = Math.max(0, Number(patch.objectifCF) || 0);
+    state.profileData = next;
     saveOwnedProfileData();
 }
 
@@ -1807,6 +1822,7 @@ export function buildPortfolioSummaryForAI() {
         const cf = computeOwnedAssetCF(asset, { ...sc.variables, regime }, tmi);
         const pn = computePatrimoineNet(asset);
         return {
+            id: asset.id,
             nom: asset.nom,
             ville: asset.ville,
             dateAchat: asset.dateAchat,

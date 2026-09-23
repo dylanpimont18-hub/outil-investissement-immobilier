@@ -2082,6 +2082,33 @@ html[data-theme='light'] select {
     display: none;
 }
 
+#assistant-panel > .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+#assistant-panel > .panel-head h2 {
+    font-family: var(--font-heading);
+    font-size: 1.26rem;
+    line-height: 1.2;
+    font-weight: 700;
+    margin: 0 0 4px;
+}
+
+#assistant-panel > .panel-head .panel-subtitle {
+    max-width: 56ch;
+    text-align: left;
+    line-height: 1.6;
+    margin: 0;
+}
+
+#assistant-chat-new { flex-shrink: 0; }
+
 /* ── Context strip ── */
 .context-strip {
     padding: 8px 12px;
@@ -6021,6 +6048,53 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 }
 
 .assistant-chat__send { flex-shrink: 0; }
+
+.assistant-chat__action-card {
+    align-self: flex-start;
+    max-width: 78%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--accent-gold, #C5A059);
+    background: var(--surface);
+    font-size: 0.85rem;
+}
+
+.assistant-chat__action-desc {
+    margin: 0 0 10px;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.assistant-chat__action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.assistant-chat__action-card--done {
+    border-left: 3px solid var(--positive, #2d6a4f);
+    border-top-color: var(--border-subtle);
+    border-right-color: var(--border-subtle);
+    border-bottom-color: var(--border-subtle);
+    color: var(--text-secondary);
+}
+
+.assistant-chat__action-card--error {
+    border-left: 3px solid var(--negative, #b42318);
+    border-top-color: var(--border-subtle);
+    border-right-color: var(--border-subtle);
+    border-bottom-color: var(--border-subtle);
+    color: var(--text-secondary);
+}
+
+.assistant-chat__action-card--cancelled {
+    border-left: 3px solid var(--text-tertiary);
+    border-top-color: var(--border-subtle);
+    border-right-color: var(--border-subtle);
+    border-bottom-color: var(--border-subtle);
+    color: var(--text-tertiary);
+    font-style: italic;
+}
 
 /* ─── Compare bar ─────────────────────────────────────────── */
 

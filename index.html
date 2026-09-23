@@ -830,8 +830,11 @@
          perdu à la fermeture/rechargement — voir assistant-chat.js) -->
     <section id="assistant-panel" class="workspace-panel" aria-label="Assistant IA">
         <div class="panel-head">
-            <h2>Assistant IA</h2>
-            <p class="panel-subtitle">Posez vos questions sur votre portefeuille, la fiscalité, le financement — ou demandez un email prêt à envoyer à votre banquier.</p>
+            <div>
+                <h2>Assistant IA</h2>
+                <p class="panel-subtitle">Posez vos questions sur votre portefeuille, la fiscalité, le financement — ou demandez un email prêt à envoyer à votre banquier.</p>
+            </div>
+            <button type="button" id="assistant-chat-new" class="btn btn--ghost btn--sm" title="Effacer la conversation en cours" disabled>Nouvelle conversation</button>
         </div>
         <div id="assistant-chat" class="assistant-chat">
             <div id="assistant-chat-messages" class="assistant-chat__messages"></div>

@@ -106,9 +106,83 @@ ASSISTANT_SYSTEM_PROMPT = (
     "Si une question sort de ce cadre, décline poliment et recentre sur l'investissement immobilier. "
     "Réponds en français naturel, de façon concise et actionnable, en t'appuyant sur les chiffres précis du "
     "contexte fourni ci-dessous quand c'est pertinent. Pas de markdown superflu, du texte simple adapté à un "
-    "email ou une explication directe selon la demande."
+    "email ou une explication directe selon la demande. "
+    "Quand l'utilisateur mentionne une information qui correspond à une modification concrète de son "
+    "portefeuille (un crédit, une note sur un bien, un changement de revenu/objectif, une dépense/des "
+    "travaux), propose l'action correspondante via les outils disponibles plutôt que de simplement en "
+    "prendre note dans ta réponse texte — l'utilisateur confirmera ou annulera avant toute écriture. "
+    "N'appelle un outil que si l'utilisateur a donné une information suffisamment précise et actionnable ; "
+    "sinon pose la question manquante en texte normal."
 )
 ASSISTANT_MAX_MESSAGES = 40
+
+# Function calling (OpenAI-compatible "tools") : chaque outil correspond à une action que l'utilisateur
+# devra confirmer côté client avant écriture — voir assistant-chat.js. Le serveur ne fait qu'exposer le
+# schéma à Mammouth AI et relayer les tool_calls bruts renvoyés, il n'exécute jamais rien lui-même.
+ASSISTANT_TOOLS = [
+    {
+        'type': 'function',
+        'function': {
+            'name': 'ajouter_credit_hors_immo',
+            'description': "Ajoute une ligne de crédit hors immobilier (auto, conso, personnel...) au profil du foyer.",
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'libelle': {'type': 'string', 'description': "Nom du crédit, ex. 'Crédit auto'"},
+                    'mensualite': {'type': 'number', 'description': 'Mensualité en euros'},
+                },
+                'required': ['libelle', 'mensualite'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'ajouter_note_bien',
+            'description': "Ajoute une note texte sur un bien détenu précis du portefeuille.",
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'assetId': {'type': 'string', 'description': "Identifiant du bien (champ 'id' dans le contexte portefeuille fourni)"},
+                    'text': {'type': 'string', 'description': 'Contenu de la note'},
+                },
+                'required': ['assetId', 'text'],
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'modifier_profil_foyer',
+            'description': "Modifie un champ du profil du foyer (revenu annuel, objectif de cash-flow mensuel).",
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'income': {'type': 'number', 'description': 'Revenu annuel du foyer en euros'},
+                    'objectifCF': {'type': 'number', 'description': 'Objectif de cash-flow net-net mensuel en euros'},
+                },
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'ajouter_frais_bien',
+            'description': "Ajoute une dépense/des travaux sur un bien détenu précis du portefeuille.",
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'assetId': {'type': 'string', 'description': "Identifiant du bien (champ 'id' dans le contexte portefeuille fourni)"},
+                    'description': {'type': 'string', 'description': 'Description de la dépense'},
+                    'montant': {'type': 'number', 'description': 'Montant en euros'},
+                    'date': {'type': 'string', 'description': "Date au format YYYY-MM-DD, aujourd'hui si non précisée"},
+                    'tag': {'type': 'string', 'enum': ['deductible', 'non-deductible', 'a-classifier'], 'description': 'Statut fiscal si connu, sinon a-classifier'},
+                },
+                'required': ['assetId', 'description', 'montant'],
+            },
+        },
+    },
+]
 
 
 @app.route('/api/portfolio-chat', methods=['POST'])
@@ -151,13 +225,20 @@ def api_portfolio_chat():
             json={
                 'model': 'gpt-4o',
                 'messages': [{'role': 'system', 'content': system_content}] + messages,
+                'tools': ASSISTANT_TOOLS,
             },
             timeout=60,
         )
         if not resp.ok:
             return jsonify({'error': f'Erreur IA ({resp.status_code})'}), 502
-        reply = resp.json()['choices'][0]['message']['content'].strip()
-        return jsonify({'reply': reply})
+        message = resp.json()['choices'][0]['message']
+        reply = (message.get('content') or '').strip()
+        tool_calls = message.get('tool_calls') or []
+        # Chaque tool_call renvoyé tel quel (id, function.name, function.arguments en JSON string) —
+        # c'est assistant-chat.js qui parse les arguments et affiche la carte de confirmation ; le
+        # serveur ne valide/n'exécute jamais une action lui-même, il ne fait que relayer la proposition
+        # du modèle.
+        return jsonify({'reply': reply, 'toolCalls': tool_calls})
     except Exception as e:
         return jsonify({'error': str(e)}), 502
 

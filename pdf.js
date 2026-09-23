@@ -1,4 +1,4 @@
-import { computeOwnedAssetCF, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer } from './calculs.js';
+import { computeOwnedAssetCF, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer, computeAmortizationSchedule, computeEndettementGlobal, resolveRevenuFoyer } from './calculs.js';
 
 function buildPDFParts(uploadedPhotos) {
     const projectName = document.getElementById('project-name').value.trim() || 'Investissement';
@@ -2348,14 +2348,55 @@ function buildBankDossierAssetSection(asset, { sections, highlights, profileData
         }).join('');
 
         const timeline = computeOwnedAssetTimeline(asset, profileData, regime);
-        const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
-        const tableRowsHTML = timeline.years.slice(0, 5).map(y => `
+        const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+        // Démarre à la première année PLEINE (N+1 si achat après janvier) plutôt qu'à l'année
+        // d'achat elle-même : celle-ci n'a souvent que quelques mois de loyer/charges (proratisés),
+        // ce qui la rend non comparable aux années suivantes et fausse la lecture du graphique/
+        // tableau pour un tiers externe — l'apport initial de cette année-là reste visible dans les
+        // indicateurs clés (Investissement total) plus haut, ce n'est pas sa seule trace dans le
+        // dossier. L'année d'achat est PLEINE si le crédit a démarré en janvier (rien à exclure).
+        const firstFullYear = moisAchat > 1 ? anneeAchat + 1 : anneeAchat;
+        const projectionYears = timeline.years.filter(y => y.year >= firstFullYear).slice(0, 10);
+
+        const credit = asset.acquisition?.credit || {};
+        const { schedule: amortSchedule } = computeAmortizationSchedule(
+            credit.montant || 0, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode
+        );
+        const crdByYear = Object.fromEntries(amortSchedule.map(r => [r.annee, r.crdFin]));
+        const montantCredit = credit.montant || 0;
+
+        // computeOwnedAssetTimeline ne prend pas de scénario en paramètre — elle lit toujours la
+        // vacance réelle du bien (resolveLoyerVacance → asset.postAchat.vacance, 5% par défaut),
+        // jamais scenario.variables.vacance. Pour projeter le scénario pessimiste sur 10 ans, il faut
+        // donc lui fournir un asset cloné avec cette vacance forcée dans postAchat (seul canal que la
+        // fonction lit réellement), pas juste lui passer scenarios: [pessimisteScenario] qui n'aurait
+        // aucun effet et afficherait silencieusement deux colonnes identiques (bug constaté et corrigé
+        // avant mise en prod — voir capture de test).
+        const pessimisteScenario = getPessimisteScenarioForPdf(asset);
+        const pessimisteTimeline = pessimisteScenario
+            ? computeOwnedAssetTimeline(
+                { ...asset, postAchat: { ...asset.postAchat, vacance: pessimisteScenario.variables?.vacance ?? asset.postAchat?.vacance ?? 5 } },
+                profileData,
+                pessimisteScenario.variables?.regime || regime
+            )
+            : null;
+        const pessimisteByYear = pessimisteTimeline
+            ? Object.fromEntries(pessimisteTimeline.years.map(y => [y.year, y.cfAnnuel]))
+            : null;
+
+        const tableRowsHTML = projectionYears.map(y => {
+            const crdFin = crdByYear[y.year] ?? (y.year > (amortSchedule[amortSchedule.length - 1]?.annee ?? 0) ? 0 : montantCredit);
+            const cfPessimiste = pessimisteByYear ? pessimisteByYear[y.year] : null;
+            return `
             <tr>
                 <td>${y.year}</td>
                 <td>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(y.recettesAnnee))}</td>
                 <td>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(y.depensesAnnee))}</td>
                 <td>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(y.cfAnnuel))}</td>
-            </tr>`).join('');
+                ${pessimisteByYear ? `<td>${cfPessimiste === null || cfPessimiste === undefined ? '—' : escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(cfPessimiste))}</td>` : ''}
+                <td>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(Math.max(0, crdFin)))}</td>
+            </tr>`;
+        }).join('');
 
         creditHTML = `
         <article class="panel">
@@ -2366,10 +2407,20 @@ function buildBankDossierAssetSection(asset, { sections, highlights, profileData
                 </div>
             </div>
             <div class="metric-grid metric-grid--3col">${regimeCardsHTML}</div>
+        </article>
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Projection</p>
+                    <h2>Cash-flow net-net sur ${projectionYears.length} ans</h2>
+                </div>
+            </div>
+            ${buildBankDossierCfChartSVG(projectionYears)}
             <table class="bank-table">
-                <thead><tr><th>Année</th><th>Recettes</th><th>Dépenses</th><th>CF net</th></tr></thead>
+                <thead><tr><th>Année</th><th>Recettes</th><th>Dépenses</th><th>CF net (réaliste)</th>${pessimisteByYear ? '<th>CF net (pessimiste)</th>' : ''}<th>Capital restant dû</th></tr></thead>
                 <tbody>${tableRowsHTML}</tbody>
             </table>
+            ${pessimisteByYear ? `<p class="metric-note" style="margin-top:10px">Scénario pessimiste : vacance locative de ${escapeDecisionPdfHtml(String(pessimisteScenario.variables?.vacance ?? '—'))} % (vs scénario réaliste ci-contre) — démontre la marge de sécurité du dossier en cas de vacance locative dégradée.</p>` : ''}
         </article>`;
     }
 
@@ -2387,6 +2438,46 @@ function buildBankDossierAssetSection(asset, { sections, highlights, profileData
     </section>`;
 }
 
+// Graphique CF annuel sur 10 ans (barres) pour le dossier bancaire — SVG inline, pas de lib externe
+// (le document imprimé n'a accès à aucun script après capture Edge headless, voir buildPrintDocument).
+// Une barre par année : verte au-dessus de l'axe si CF ≥ 0, rouge en dessous sinon — un banquier doit
+// voir immédiatement dans quelles années le bien s'autofinance.
+function buildBankDossierCfChartSVG(years) {
+    if (!years.length) return '';
+    // padT/padB larges : le label de valeur peut se retrouver au-dessus ET en dessous de la zone de
+    // tracé selon le signe du CF (voir labelY plus bas), il faut de la marge des deux côtés — pas
+    // seulement en bas pour l'axe des années — sinon le texte déborde du viewBox sur un dossier où
+    // toutes les années sont négatives (cas fréquent en début de crédit).
+    const W = 900, H = 260, padL = 56, padR = 16, padT = 34, padB = 46;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+    const values = years.map(y => y.cfAnnuel);
+    const maxAbs = Math.max(1, ...values.map(v => Math.abs(v)));
+    const zeroY = padT + plotH / 2;
+    const scale = (plotH / 2) / maxAbs;
+    const barW = (plotW / years.length) * 0.62;
+    const step = plotW / years.length;
+    const axisY = H - 12;
+
+    const barsHTML = years.map((y, i) => {
+        const cx = padL + step * i + step / 2;
+        const barH = Math.abs(y.cfAnnuel) * scale;
+        const barY = y.cfAnnuel >= 0 ? zeroY - barH : zeroY;
+        const fill = y.cfAnnuel >= 0 ? 'var(--success)' : 'var(--danger)';
+        const labelY = y.cfAnnuel >= 0 ? barY - 8 : barY + barH + 16;
+        return `
+            <rect x="${(cx - barW / 2).toFixed(1)}" y="${barY.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, barH).toFixed(1)}" rx="3" fill="${fill}" />
+            <text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" class="bank-chart-value">${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(y.cfAnnuel))}</text>
+            <text x="${cx.toFixed(1)}" y="${axisY.toFixed(1)}" text-anchor="middle" class="bank-chart-axis">${y.year}</text>`;
+    }).join('');
+
+    return `
+    <svg class="bank-chart" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cash-flow net-net annuel sur ${years.length} ans">
+        <line x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" class="bank-chart-zero" />
+        ${barsHTML}
+    </svg>`;
+}
+
 function getTypeBienLabelForPdf(type) {
     if (type === 'maison') return 'Maison';
     if (type === 'immeuble') return 'Immeuble de rapport';
@@ -2398,10 +2489,113 @@ function getOwnedDefaultScenarioForPdf(asset) {
     return scenarios.find(s => s.id === 'realiste') || scenarios[0] || { variables: {} };
 }
 
-export function buildBankDossierPrintDocument({ assets, sections, highlights, profileData, regime }) {
+function getPessimisteScenarioForPdf(asset) {
+    const scenarios = asset.scenarios || [];
+    return scenarios.find(s => s.id === 'pessimiste') || null;
+}
+
+// Section "Profil emprunteur" : engagement de crédit total du foyer, TOUS biens du portefeuille
+// confondus (allAssets) — pas seulement ceux inclus dans ce dossier — plus les crédits hors immo.
+// Un banquier évalue la capacité de remboursement de l'emprunteur, pas seulement la rentabilité du
+// ou des biens présentés ; limiter ce calcul aux seuls biens sélectionnés sous-estimerait le risque
+// réel et nuirait à la crédibilité du dossier s'il est recoupé avec d'autres pièces (avis d'imposition).
+function buildBankDossierBorrowerSection(allAssets, profileData) {
+    const currentYear = new Date().getFullYear();
+    const revenuAnnuel = resolveRevenuFoyer(profileData, currentYear);
+    const revenusMensuels = revenuAnnuel / 12;
+    const endettement = computeEndettementGlobal(allAssets, revenusMensuels, profileData?.autresCredits || []);
+    const tauxTone = endettement.tauxEndettement > 35 ? 'tone-negative' : endettement.tauxEndettement > 30 ? '' : 'tone-positive';
+
+    const autresCreditsHTML = (profileData?.autresCredits || []).length
+        ? `<p class="metric-note" style="margin-top:16px;margin-bottom:0">Crédits hors immobilier inclus dans le total ci-dessus</p>
+        <ul class="mini-list">
+            ${profileData.autresCredits.map(c => `<li><span>${escapeDecisionPdfHtml(c.libelle || 'Crédit')}</span><strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(c.mensualite || 0))}/mois</strong></li>`).join('')}
+        </ul>`
+        : '';
+
+    return `
+    <article class="panel">
+        <div class="panel-head">
+            <div>
+                <p class="panel-kicker">Profil emprunteur</p>
+                <h2>Engagement de crédit du foyer</h2>
+            </div>
+        </div>
+        <p class="metric-note" style="margin-top:0">Calculé sur l'ensemble du portefeuille détenu (${allAssets.length} bien${allAssets.length > 1 ? 's' : ''}) et les crédits hors immobilier déclarés, indépendamment des biens présentés dans ce dossier.</p>
+        <div class="metric-grid metric-grid--3col">
+            <article class="metric-card metric-card--accent">
+                <span class="label">Revenus du foyer</span>
+                <strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(revenuAnnuel))}/an</strong>
+            </article>
+            <article class="metric-card metric-card--accent">
+                <span class="label">Mensualités totales</span>
+                <strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(endettement.totalMensualites))}/mois</strong>
+            </article>
+            <article class="metric-card metric-card--accent ${tauxTone}">
+                <span class="label">Taux d'endettement</span>
+                <strong>${endettement.tauxEndettement.toFixed(1)} %</strong>
+                <span class="metric-note">Seuil HCSF : 35 %</span>
+            </article>
+        </div>
+        ${autresCreditsHTML}
+    </article>`;
+}
+
+// Page de synthèse exécutive : les chiffres qu'un banquier cherche en premier avant de lire le
+// détail bien par bien — total CF/mois, patrimoine net actuel du dossier, taux d'endettement.
+function buildBankDossierExecutiveSummary(assets, allAssets, { profileData, regime, tmi }) {
+    let totalCfNetNet = 0;
+    let totalPatrimoineNet = 0;
+    for (const asset of assets) {
+        const scenario = getOwnedDefaultScenarioForPdf(asset);
+        const cf = computeOwnedAssetCF(asset, scenario.variables || {}, tmi, regime);
+        totalCfNetNet += cf.cfNetNet;
+        totalPatrimoineNet += computePatrimoineNet(asset).patrimoineNet || 0;
+    }
+    const revenusMensuels = resolveRevenuFoyer(profileData, new Date().getFullYear()) / 12;
+    const endettement = computeEndettementGlobal(allAssets, revenusMensuels, profileData?.autresCredits || []);
+    const cfTone = totalCfNetNet >= 0 ? 'tone-positive' : 'tone-negative';
+    const tauxTone = endettement.tauxEndettement > 35 ? 'tone-negative' : endettement.tauxEndettement > 30 ? '' : 'tone-positive';
+
+    return `
+    <article class="panel">
+        <div class="panel-head">
+            <div>
+                <p class="panel-kicker">Synthèse</p>
+                <h2>Vue d'ensemble du dossier</h2>
+            </div>
+        </div>
+        <div class="metric-grid metric-grid--3col">
+            <article class="metric-card metric-card--accent ${cfTone}">
+                <span class="label">Cash-flow net-net cumulé</span>
+                <strong>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(totalCfNetNet))}/mois</strong>
+                <span class="metric-note">${assets.length} bien${assets.length > 1 ? 's' : ''} présenté${assets.length > 1 ? 's' : ''}</span>
+            </article>
+            <article class="metric-card metric-card--accent">
+                <span class="label">Patrimoine net cumulé</span>
+                <strong>${escapeDecisionPdfHtml(formatDecisionPdfCurrency(totalPatrimoineNet))}</strong>
+                <span class="metric-note">Valeur estimée − capital restant dû</span>
+            </article>
+            <article class="metric-card metric-card--accent ${tauxTone}">
+                <span class="label">Taux d'endettement du foyer</span>
+                <strong>${endettement.tauxEndettement.toFixed(1)} %</strong>
+                <span class="metric-note">Tout le portefeuille (${allAssets.length} bien${allAssets.length > 1 ? 's' : ''})</span>
+            </article>
+        </div>
+    </article>`;
+}
+
+export function buildBankDossierPrintDocument({ assets, sections, highlights, profileData, regime, allAssets }) {
     const generatedOn = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
     const tmi = resolveTmiFoyer(profileData, new Date().getFullYear());
     const assetBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    // allAssets (tout le portefeuille) sert au taux d'endettement réel de l'emprunteur — distinct de
+    // assets (les seuls biens présentés dans ce dossier). Repli sur assets si non fourni (appel direct
+    // hors modale, ex. tests) pour ne jamais planter sur un taux d'endettement sous-évalué mais faux.
+    const endettementAssets = allAssets && allAssets.length ? allAssets : assets;
+
+    const summaryHTML = buildBankDossierExecutiveSummary(assets, endettementAssets, { profileData, regime, tmi });
+    const borrowerHTML = buildBankDossierBorrowerSection(endettementAssets, profileData);
 
     const assetsHTML = assets.map((asset, idx) => buildBankDossierAssetSection(asset, {
         sections, highlights, profileData, regime, tmi, isFirst: idx === 0
@@ -2670,6 +2864,25 @@ export function buildBankDossierPrintDocument({ assets, sections, highlights, pr
       .mini-list span { color: var(--muted); }
       .mini-list strong { font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right; }
 
+      .bank-chart {
+        width: 100%;
+        height: auto;
+        margin-top: 14px;
+        display: block;
+      }
+      .bank-chart-zero { stroke: var(--border); stroke-width: 1.5; }
+      .bank-chart-value {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        fill: var(--text);
+        font-weight: 600;
+      }
+      .bank-chart-axis {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        fill: var(--muted);
+      }
+
       .bank-table {
         width: 100%;
         border-collapse: collapse;
@@ -2732,6 +2945,8 @@ export function buildBankDossierPrintDocument({ assets, sections, highlights, pr
         <h1>Dossier bancaire — ${assets.length} bien${assets.length > 1 ? 's' : ''}</h1>
         <span class="meta-chip">Généré le ${escapeDecisionPdfHtml(generatedOn)}</span>
       </header>
+      ${summaryHTML}
+      ${borrowerHTML}
       ${assetsHTML}
       <p class="footer-note">Document généré depuis Spark Investissement. Simulation indicative — ne remplace pas un conseil bancaire, fiscal ou juridique personnalisé.</p>
     </main>
