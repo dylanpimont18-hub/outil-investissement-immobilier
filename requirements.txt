@@ -6,6 +6,6 @@ flask==3.1.2
 pywebview==6.2.1
 pystray==0.19.5
 pillow==10.4.0
-anthropic==0.46.0
+requests>=2.31.0
 playwright>=1.44.0
 playwright-stealth>=1.0.6

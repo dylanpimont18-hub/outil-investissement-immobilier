@@ -41,7 +41,7 @@ def after_request(response):
 @app.route('/api/portfolio-diagnostic', methods=['POST'])
 def api_portfolio_diagnostic():
     try:
-        from config import ANTHROPIC_API_KEY
+        from config import MAMMOUTH_API_KEY
     except (ImportError, AttributeError):
         return jsonify({'error': 'Clé API non configurée dans config.py'}), 503
 
@@ -62,18 +62,33 @@ def api_portfolio_diagnostic():
     )
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model='claude-sonnet-4-6',
-            max_tokens=1024,
-            system=(
-                "Tu es un conseiller en investissement immobilier locatif français expert en fiscalité foncière. "
-                "Tu réponds uniquement en JSON valide, sans markdown ni texte hors JSON."
-            ),
-            messages=[{'role': 'user', 'content': prompt_user}]
+        import requests
+        resp = requests.post(
+            'https://api.mammouth.ai/v1/chat/completions',
+            headers={
+                'content-type': 'application/json',
+                'authorization': f'Bearer {MAMMOUTH_API_KEY}',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+            },
+            json={
+                'model': 'gpt-4o',
+                'response_format': {'type': 'json_object'},
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': (
+                            "Tu es un conseiller en investissement immobilier locatif français expert en fiscalité foncière. "
+                            "Tu réponds uniquement en JSON valide, sans markdown ni texte hors JSON."
+                        ),
+                    },
+                    {'role': 'user', 'content': prompt_user},
+                ],
+            },
+            timeout=60,
         )
-        raw = message.content[0].text.strip()
+        if not resp.ok:
+            return jsonify({'error': f'Erreur IA ({resp.status_code})'}), 502
+        raw = resp.json()['choices'][0]['message']['content'].strip()
         result = json.loads(raw)
         return jsonify(result)
     except json.JSONDecodeError as e:
