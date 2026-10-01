@@ -1753,7 +1753,11 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
     };
 }
 
-export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = null) {
+// options.horizonYear (facultatif) : prolonge la timeline au moins jusqu'à cette année civile —
+// utilisé par le rapport d'un bien (rapport-bien.js) pour projeter les 10 prochaines années même
+// quand le crédit se termine avant. Ne raccourcit jamais la borne naturelle ; sans option, le
+// comportement est strictement inchangé.
+export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = null, options = {}) {
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
@@ -1772,7 +1776,7 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
     // Borne haute sûre pour l'année de fin de prêt (voir preuve dans computeAmortizationSchedule :
     // même démarré en décembre, un crédit de N ans ne peut jamais dépasser anneeAchat+N). Le vrai
     // gate mensuel (loanMonthsElapsedTotal < nMois) est calculé dans la boucle ci-dessous.
-    const endYear = Math.max(currentYear + 2, anneeAchat + dureeCredit);
+    const endYear = Math.max(currentYear + 2, anneeAchat + dureeCredit, Number(options.horizonYear) || 0);
 
     // Le loyer est résolu année par année dans la boucle ci-dessous : l'historique de loyer
     // (postAchat.loyerHistorique) peut faire varier le montant d'une année sur l'autre.

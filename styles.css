@@ -6170,6 +6170,73 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 body.owned-chat-open { overflow: hidden; }
 body.owned-chat-open .owned-quickfab { display: none; }
 
+/* ─── Rapport d'un bien : aperçu plein écran (owned-portfolio.js, openAssetReportPreview) ───── */
+.asset-report-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg, #0d1117);
+    padding-top: env(safe-area-inset-top);
+}
+.asset-report-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface);
+    flex-shrink: 0;
+}
+.asset-report-toolbar__title {
+    flex: 1 1 200px;
+    min-width: 0;
+    font-weight: 700;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.asset-report-toolbar__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.asset-report-toolbar__close {
+    min-width: 44px;
+    min-height: 44px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.asset-report-frame {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #fff;
+}
+body.asset-report-open { overflow: hidden; }
+body.asset-report-open .owned-quickfab { display: none; }
+@media (max-width: 640px) {
+    /* Titre sur sa ligne, puis les 3 actions en pleine largeur à côté du ✕ */
+    .asset-report-toolbar { padding: 8px 12px; }
+    .asset-report-toolbar__title { flex-basis: calc(100% - 60px); order: 0; }
+    .asset-report-toolbar__close { order: 1; }
+    .asset-report-toolbar__actions { order: 2; width: 100%; }
+    .asset-report-toolbar__actions .btn { flex: 1; min-height: 44px; padding-left: 8px; padding-right: 8px; }
+}
+
+/* Impression du rapport dans la page (version web/iPhone) : seul l'hôte Shadow DOM du rapport est
+   imprimé, tout le reste de l'app est masqué le temps de la boîte d'impression. */
+#asset-report-print-root { display: none; }
+@media print {
+    body.asset-report-printing { background: #fff !important; padding: 0 !important; margin: 0 !important; }
+    body.asset-report-printing > *:not(#asset-report-print-root) { display: none !important; }
+    body.asset-report-printing #asset-report-print-root { display: block; }
+    @page { size: A4; margin: 14mm 12mm; }
+}
+
 /* Diagnostic IA : bouton "Nouveau diagnostic" + confirmation avant l'appel IA */
 .ai-diag-new { align-self: flex-start; }
 .ai-diag-confirm {

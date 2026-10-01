@@ -21,6 +21,7 @@ import {
 } from './calculs.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
+import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
 import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
@@ -874,6 +875,150 @@ async function _generateBankDossierPdf(selectedAssetIds, sections, highlights) {
     await openPrintDocument(documentHTML, filename, 'owned-bank-dossier-btn');
 }
 
+// ─── RAPPORT D'UN BIEN (aperçu → PDF / .md) ──────────────────────────────────
+// Contenu construit par rapport-bien.js (module pur). Aperçu plein écran dans une iframe, puis :
+//  - PDF : logiciel PC (serveur local) → /api/generate-pdf (enregistré dans Téléchargements) ;
+//          version web/iPhone → impression de la page avec le seul rapport visible (feuille iOS :
+//          Partager → Enregistrer dans Fichiers ; PC : « Enregistrer en PDF »).
+//  - .md : logiciel PC → /api/save-markdown ; écran tactile → feuille de partage iOS (un lien de
+//          téléchargement blob ne marche pas en mode « écran d'accueil ») ; sinon téléchargement.
+//  - Copier : presse-papiers, pour coller directement dans une IA.
+const IS_LOCAL_APP = ['127.0.0.1', 'localhost'].includes(location.hostname);
+
+function openAssetReportPreview(assetId) {
+    const asset = getOwnedAsset(assetId);
+    if (!asset) return;
+    const data = buildAssetReportData(asset, { profileData: state.profileData, regime: getOwnedRegime() });
+    const report = buildAssetReportHTML(data);
+    const markdown = buildAssetReportMarkdown(data);
+    const mdFilename = assetReportMarkdownFilename(data);
+
+    document.getElementById('asset-report-overlay')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'asset-report-overlay';
+    overlay.className = 'asset-report-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', `Rapport — ${data.bien.nom}`);
+    overlay.innerHTML = `
+        <div class="asset-report-toolbar">
+            <span class="asset-report-toolbar__title">Rapport — ${escapeHtml(data.bien.nom)}</span>
+            <div class="asset-report-toolbar__actions">
+                <button type="button" class="btn btn--primary btn--sm" id="asset-report-pdf">Télécharger le PDF</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="asset-report-md">Exporter .md</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="asset-report-copy">Copier</button>
+            </div>
+            <button type="button" class="asset-report-toolbar__close" id="asset-report-close" aria-label="Fermer l'aperçu">✕</button>
+        </div>
+        <iframe class="asset-report-frame" title="Aperçu du rapport"></iframe>`;
+    document.body.appendChild(overlay);
+    document.body.classList.add('asset-report-open');
+    overlay.querySelector('iframe').srcdoc = report.documentHTML;
+
+    const close = () => {
+        overlay.remove();
+        _cleanupAssetReportPrint?.();
+        document.body.classList.remove('asset-report-open');
+        document.removeEventListener('keydown', onKey);
+    };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    overlay.querySelector('#asset-report-close').addEventListener('click', close);
+
+    overlay.querySelector('#asset-report-pdf').addEventListener('click', () => {
+        if (IS_LOCAL_APP) openPrintDocument(report.documentHTML, report.filename, 'asset-report-pdf');
+        else printAssetReportInPage(report);
+    });
+    overlay.querySelector('#asset-report-md').addEventListener('click', () => exportAssetReportMarkdown(markdown, mdFilename, data.bien.nom));
+    overlay.querySelector('#asset-report-copy').addEventListener('click', async () => {
+        const ok = await _copyText(markdown);
+        showToast(ok ? 'Rapport copié — collez-le dans votre IA' : 'Copie impossible, utilisez Exporter .md', ok ? 'positive' : 'negative');
+    });
+}
+
+// Impression de la page elle-même, rapport seul visible (Shadow DOM : son CSS reste isolé de
+// styles.css). Évite iframe.print(), qui sur Safari iOS imprime la page parente.
+function printAssetReportInPage(report) {
+    _cleanupAssetReportPrint?.();
+    const host = document.createElement('div');
+    host.id = 'asset-report-print-root';
+    host.attachShadow({ mode: 'open' }).innerHTML = `<style>${report.css}</style><div class="report-root">${report.bodyHTML}</div>`;
+    document.body.appendChild(host);
+    document.body.classList.add('asset-report-printing');
+    const previousTitle = document.title;
+    document.title = report.filename.replace(/\.pdf$/, ''); // nom proposé pour « Enregistrer en PDF »
+    // Pas de nettoyage sur minuteur : selon les navigateurs mobiles, window.print() peut rendre la
+    // main avant que la feuille d'impression ait fini de lire la page — retirer le rapport trop tôt
+    // donnerait un PDF vide. L'hôte est invisible à l'écran (styles.css), on le retire donc sans
+    // risque à afterprint ou à la fermeture de l'aperçu (_cleanupAssetReportPrint).
+    _cleanupAssetReportPrint = () => {
+        document.body.classList.remove('asset-report-printing');
+        host.remove();
+        document.title = previousTitle;
+        window.removeEventListener('afterprint', _cleanupAssetReportPrint);
+        _cleanupAssetReportPrint = null;
+    };
+    window.addEventListener('afterprint', _cleanupAssetReportPrint);
+    // Laisse le navigateur peindre le contenu avant d'ouvrir la boîte d'impression
+    requestAnimationFrame(() => setTimeout(() => window.print(), 50));
+}
+let _cleanupAssetReportPrint = null;
+
+async function exportAssetReportMarkdown(markdown, filename, nomBien) {
+    if (IS_LOCAL_APP) {
+        try {
+            const resp = await fetch('/api/save-markdown', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: markdown, filename })
+            });
+            const json = await resp.json().catch(() => null);
+            if (!resp.ok) throw new Error(json?.error || resp.statusText);
+            showToast(`Enregistré dans Téléchargements : ${json.filename}`, 'positive');
+        } catch (err) {
+            showToast(`Export impossible : ${err.message}`, 'negative');
+        }
+        return;
+    }
+    const file = new File([markdown], filename, { type: 'text/markdown' });
+    if (window.matchMedia?.('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+        try {
+            await navigator.share({ files: [file], title: `Rapport — ${nomBien}` });
+        } catch (err) {
+            if (err?.name !== 'AbortError') showToast('Partage impossible, utilisez Copier', 'negative');
+        }
+        return;
+    }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function _copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        // Repli (contexte non sécurisé / WebView sans API Clipboard)
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch { ok = false; }
+        ta.remove();
+        return ok;
+    }
+}
+
 // ─── RAPPORT ANNUEL ────────────────────────────────────────────────────────────
 
 function openRapportAnnuelModal() {
@@ -1642,6 +1787,12 @@ function initOwnedPortfolioEvents() {
         nodes.ownedDiagnosticBtn.addEventListener('click', () => {
             const id = state.activeOwnedAssetId;
             if (id) openOwnedDiagnosticDrawer(id);
+        });
+    }
+    if (nodes.ownedReportBtn) {
+        nodes.ownedReportBtn.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (id) openAssetReportPreview(id);
         });
     }
     if (nodes.ownedBankDossierBtn) {
@@ -2873,6 +3024,9 @@ function renderOwnedDetail() {
         const hasData = (asset.acquisition?.prix || 0) > 0;
         nodes.ownedDiagnosticBtn.hidden = !hasData;
         nodes.ownedDiagnosticBtn.disabled = !hasData;
+    }
+    if (nodes.ownedReportBtn) {
+        nodes.ownedReportBtn.hidden = !((asset.acquisition?.prix || 0) > 0);
     }
     if (nodes.ownedBankDossierBtn) {
         nodes.ownedBankDossierBtn.hidden = IS_MOBILE_PAGE;

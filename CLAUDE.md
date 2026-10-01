@@ -29,6 +29,7 @@ To build the distributable: run `build.bat`.
 | `utils.js` | Shared formatting/escaping/toast helpers, no `state`/`nodes` dependency — imported by `main.js` and `owned-portfolio.js` |
 | `calculs.js` | Pure financial engine — all calculations, zero DOM access |
 | `pdf.js` | Generates the printable decision PDF as a standalone HTML string |
+| `rapport-bien.js` | Pure module: one owned-asset report model rendered as printable HTML (preview/PDF, SVG curves) and as Markdown (AI export) |
 | `styles.css` | Full design system (light/dark themes, all component classes) |
 | `ui.js` | Supplementary UI helpers (charts, table markup) |
 

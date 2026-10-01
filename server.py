@@ -219,6 +219,35 @@ def api_generate_pdf():
     return jsonify({"saved_to": str(dest), "filename": dest.name})
 
 
+MARKDOWN_MAX_CHARS = 2_000_000
+
+
+@app.route("/api/save-markdown", methods=["POST"])
+def api_save_markdown():
+    """Export .md du rapport d'un bien (rapport-bien.js) depuis le logiciel PC : la fenêtre
+    PyWebView n'autorise pas les téléchargements de fichiers, on écrit donc directement dans
+    ~/Downloads, comme /api/generate-pdf. Sur la version web, le navigateur télécharge lui-même."""
+    data = request.get_json(force=True, silent=True) or {}
+    content = data.get("content")
+    if not isinstance(content, str) or not content:
+        return jsonify({"error": "contenu manquant"}), 400
+    if len(content) > MARKDOWN_MAX_CHARS:
+        return jsonify({"error": "contenu trop volumineux"}), 400
+    filename = secure_filename(data.get("filename") or "rapport.md") or "rapport.md"
+    if not filename.lower().endswith(".md"):
+        filename += ".md"
+
+    downloads_dir = Path(os.path.expanduser("~")) / "Downloads"
+    downloads_dir.mkdir(exist_ok=True)
+    dest = downloads_dir / filename
+    counter = 1
+    while dest.exists():
+        dest = downloads_dir / f"{Path(filename).stem} ({counter}).md"
+        counter += 1
+    dest.write_text(content, encoding="utf-8")
+    return jsonify({"saved_to": str(dest), "filename": dest.name})
+
+
 @app.route("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
