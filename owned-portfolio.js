@@ -25,7 +25,7 @@ import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
     cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
-    cloudExtraireDossierBien
+    cloudExtraireDossierBien, cloudDiagnosticPortefeuille
 } from './owned-cloud.js';
 
 let state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
@@ -1635,21 +1635,13 @@ function initOwnedPortfolioEvents() {
     if (nodes.ownedBackBtn) {
         nodes.ownedBackBtn.addEventListener('click', closeOwnedDetail);
     }
+    // Diagnostic IA : le bouton ouvre d'abord l'historique du bien ; un nouveau diagnostic (appel
+    // IA payant) n'est lancé qu'après confirmation explicite dans le drawer (demande utilisateur
+    // 2026-10-01 — avant, le clic lançait directement l'analyse).
     if (nodes.ownedDiagnosticBtn) {
         nodes.ownedDiagnosticBtn.addEventListener('click', () => {
             const id = state.activeOwnedAssetId;
-            if (id) callOwnedDiagnosticIA(id);
-        });
-    }
-    if (nodes.ownedDiagnosticHistoryBtn) {
-        nodes.ownedDiagnosticHistoryBtn.addEventListener('click', () => {
-            const asset = getOwnedAsset(state.activeOwnedAssetId);
-            const history = asset?.diagnosticHistory || [];
-            if (!history.length || !nodes.ownedAiDrawer || !nodes.ownedAiOverlay) return;
-            void nodes.ownedAiDrawer.offsetWidth;
-            nodes.ownedAiDrawer.classList.add('is-open');
-            nodes.ownedAiOverlay.classList.add('is-open');
-            renderOwnedDiagnosticDrawer(history, 0);
+            if (id) openOwnedDiagnosticDrawer(id);
         });
     }
     if (nodes.ownedBankDossierBtn) {
@@ -1767,7 +1759,8 @@ function setOwnedRegime(regime) {
 }
 
 function getOwnedDefaultScenario(asset) {
-    return asset.scenarios.find(s => s.id === 'realiste') || asset.scenarios[0] || { variables: {} };
+    const scenarios = asset.scenarios || [];
+    return scenarios.find(s => s.id === 'realiste') || scenarios[0] || { variables: {} };
 }
 
 function renderOwnedRegimeSelector() {
@@ -2878,13 +2871,8 @@ function renderOwnedDetail() {
 
     if (nodes.ownedDiagnosticBtn) {
         const hasData = (asset.acquisition?.prix || 0) > 0;
-        nodes.ownedDiagnosticBtn.hidden = IS_MOBILE_PAGE || !hasData;
+        nodes.ownedDiagnosticBtn.hidden = !hasData;
         nodes.ownedDiagnosticBtn.disabled = !hasData;
-    }
-    if (nodes.ownedDiagnosticHistoryBtn) {
-        const hasHistory = (asset.diagnosticHistory || []).length > 0;
-        nodes.ownedDiagnosticHistoryBtn.hidden = IS_MOBILE_PAGE || !hasHistory;
-        nodes.ownedDiagnosticHistoryBtn.disabled = !hasHistory;
     }
     if (nodes.ownedBankDossierBtn) {
         nodes.ownedBankDossierBtn.hidden = IS_MOBILE_PAGE;
@@ -3052,6 +3040,20 @@ function renderOwnedCfTable(asset) {
 const _isImageFilename = filename => /\.(jpe?g|png)$/i.test(filename || '');
 
 async function openDocumentPreview(assetId, filename) {
+    // Écran tactile + PDF : Safari iOS n'affiche que la 1re page d'un <embed> PDF, sans défilement
+    // ni zoom. On ouvre plutôt le lecteur PDF natif dans un nouvel onglet. La fenêtre est ouverte
+    // AVANT l'await (dans le geste utilisateur) sinon iOS bloque le popup, puis redirigée vers l'URL.
+    if (!_isImageFilename(filename) && window.matchMedia?.('(pointer: coarse)').matches) {
+        const win = window.open('', '_blank');
+        try {
+            const url = await cloudDocumentUrl(assetId, filename);
+            if (win) win.location.href = url; else window.location.href = url;
+        } catch {
+            win?.close();
+            showToast('Document indisponible — vérifiez votre connexion internet', 'negative');
+        }
+        return;
+    }
     let overlay = document.getElementById('document-preview-overlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -5203,11 +5205,61 @@ function formatOwnedDiagnosticDate(iso) {
     return new Date(iso).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
-// Rendu du drawer Diagnostic IA : sélecteur de dates (historique, le plus récent en premier)
-// au-dessus des recommandations de l'entrée sélectionnée. history est trié anté-chronologique.
-function renderOwnedDiagnosticDrawer(history, selectedIndex) {
+// Ouvre le drawer Diagnostic IA sur l'historique du bien (sans lancer d'analyse).
+function openOwnedDiagnosticDrawer(assetId) {
+    if (!nodes.ownedAiDrawer || !nodes.ownedAiOverlay || !nodes.ownedAiDrawerContent) return;
+    const asset = getOwnedAsset(assetId);
+    if (!asset) return;
+    void nodes.ownedAiDrawer.offsetWidth;
+    nodes.ownedAiDrawer.classList.add('is-open');
+    nodes.ownedAiOverlay.classList.add('is-open');
+    renderOwnedDiagnosticDrawer(asset.diagnosticHistory || [], 0);
+}
+
+// Barre d'action en tête du drawer : bouton "Nouveau diagnostic", puis confirmation inline
+// (Annuler / Lancer) avant tout appel IA. `errorHtml` : message d'erreur du dernier essai.
+function _diagnosticActionBar(hasHistory, confirming, errorHtml = '') {
+    const asset = getOwnedAsset(state.activeOwnedAssetId);
+    if (confirming) {
+        return `
+        <div class="ai-diag-confirm" role="alertdialog" aria-label="Confirmer le diagnostic">
+            <p class="ai-diag-confirm__text">Lancer une nouvelle analyse IA de « ${escapeHtml(asset?.nom || 'ce bien')} » ? Elle prend environ 20 secondes${hasHistory ? ' et s\'ajoute à l\'historique' : ''}.</p>
+            <div class="ai-diag-confirm__buttons">
+                <button type="button" class="btn btn--ghost btn--sm" data-diag-cancel>Annuler</button>
+                <button type="button" class="btn btn--primary btn--sm" data-diag-confirm>Lancer l'analyse</button>
+            </div>
+        </div>`;
+    }
+    return `
+        ${errorHtml}
+        <button type="button" class="btn btn--primary ai-diag-new" data-diag-new>✦ ${hasHistory ? 'Nouveau diagnostic' : 'Lancer le diagnostic'}</button>`;
+}
+
+// Rendu du drawer Diagnostic IA : barre d'action (nouveau diagnostic + confirmation), puis
+// sélecteur de dates (historique, le plus récent en premier) au-dessus des recommandations de
+// l'entrée sélectionnée. history est trié anté-chronologique.
+function renderOwnedDiagnosticDrawer(history, selectedIndex, { confirming = false, errorMessage = '' } = {}) {
+    const errorHtml = errorMessage
+        ? `<p class="ai-diag-error">${escapeHtml(errorMessage)}</p>`
+        : '';
+    const actionBar = _diagnosticActionBar(history.length > 0, confirming, errorHtml);
+    const wireActions = () => {
+        const content = nodes.ownedAiDrawerContent;
+        content.querySelector('[data-diag-new]')?.addEventListener('click', () =>
+            renderOwnedDiagnosticDrawer(history, selectedIndex, { confirming: true }));
+        content.querySelector('[data-diag-cancel]')?.addEventListener('click', () =>
+            renderOwnedDiagnosticDrawer(history, selectedIndex));
+        content.querySelector('[data-diag-confirm]')?.addEventListener('click', () => {
+            const id = state.activeOwnedAssetId;
+            if (id) callOwnedDiagnosticIA(id);
+        });
+    };
+
     if (!history.length) {
-        nodes.ownedAiDrawerContent.innerHTML = `<p style="color:var(--text-secondary);text-align:center;padding:24px">Aucun diagnostic pour le moment.</p>`;
+        nodes.ownedAiDrawerContent.innerHTML = `
+            ${actionBar}
+            <p style="color:var(--text-secondary);text-align:center;padding:24px">Aucun diagnostic pour ce bien pour le moment.</p>`;
+        wireActions();
         return;
     }
     const entry = history[selectedIndex] || history[0];
@@ -5220,6 +5272,7 @@ function renderOwnedDiagnosticDrawer(history, selectedIndex) {
     ` : '';
 
     nodes.ownedAiDrawerContent.innerHTML = `
+        ${actionBar}
         ${tabs}
         <p style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:16px">Analyse du ${formatOwnedDiagnosticDate(entry.date)}</p>
         ${(entry.recommendations || []).map((r, i) => `
@@ -5234,6 +5287,7 @@ function renderOwnedDiagnosticDrawer(history, selectedIndex) {
     nodes.ownedAiDrawerContent.querySelectorAll('[data-diag-index]').forEach(btn => {
         btn.addEventListener('click', () => renderOwnedDiagnosticDrawer(history, Number(btn.dataset.diagIndex)));
     });
+    wireActions();
 }
 
 async function callOwnedDiagnosticIA(assetId) {
@@ -5241,7 +5295,7 @@ async function callOwnedDiagnosticIA(assetId) {
     if (!asset) return;
     const tmi = getOwnedTmi();
 
-    const scenarios = asset.scenarios.map(sc => {
+    const scenarios = (asset.scenarios || []).map(sc => {
         const r = computeOwnedAssetCF(asset, sc.variables, tmi);
         return { nom: sc.nom, cfNetNet: Math.round(r.cfNetNet) };
     });
@@ -5273,19 +5327,14 @@ async function callOwnedDiagnosticIA(assetId) {
     nodes.ownedAiOverlay.classList.add('is-open');
 
     try {
-        const resp = await fetch('/api/portfolio-diagnostic', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-
-        if (!resp.ok || data.error) {
-            nodes.ownedAiDrawerContent.innerHTML = `<p style="color:#F85149;padding:16px">${escapeHtml(data.error || 'Erreur inconnue')}</p>`;
+        // Cloud Function (functions/index.js) : même appel depuis le logiciel PC, index.html en
+        // ligne et owned.html — plus de dépendance au serveur Flask local.
+        const data = await cloudDiagnosticPortefeuille(payload);
+        const recs = data?.recommendations || [];
+        if (!recs.length) {
+            renderOwnedDiagnosticDrawer(asset.diagnosticHistory || [], 0, { errorMessage: "L'IA n'a renvoyé aucune recommandation — réessayez." });
             return;
         }
-
-        const recs = data.recommendations || [];
         const newEntry = { date: new Date().toISOString(), recommendations: recs };
         const history = [newEntry, ...(asset.diagnosticHistory || [])].slice(0, OWNED_DIAGNOSTIC_HISTORY_MAX);
 
@@ -5293,7 +5342,8 @@ async function callOwnedDiagnosticIA(assetId) {
         renderOwnedDiagnosticDrawer(history, 0);
 
     } catch (err) {
-        nodes.ownedAiDrawerContent.innerHTML = `<p style="color:#F85149;padding:16px">Erreur réseau : ${escapeHtml(err.message)}</p>`;
+        // Retour à l'historique (rien n'est perdu) avec le message d'erreur au-dessus du bouton
+        renderOwnedDiagnosticDrawer(asset.diagnosticHistory || [], 0, { errorMessage: err?.message || 'Erreur inconnue' });
     }
 }
 

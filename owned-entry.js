@@ -3,6 +3,7 @@
 // locaux a cet appareil (ownedCompact/ownedSort/ownedYearFilters) : les donnees du portefeuille
 // elles-memes viennent de Firestore via owned-cloud.js (voir initOwnedPortfolio dans owned-portfolio.js).
 import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections } from './owned-portfolio.js';
+import { initAssistantChat } from './assistant-chat.js';
 
 const STORAGE_KEYS = {
     ownedOrder: 'investissementWebOwnedOrder',
@@ -63,7 +64,50 @@ const nodes = {
 
 initOwnedPortfolio({ state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW: false, IS_MOBILE_PAGE: true });
 initOwnedPortfolioEvents();
+initAssistantChat({ state, nodes });
 renderCollections();
+initChatSheet();
+
+// Assistant IA plein écran, ouvert par le bouton flottant ✦ (#owned-chatfab). La conversation
+// (assistant-chat.js) survit à la fermeture : rouvrir reprend là où on en était.
+function initChatSheet() {
+    const fab = document.getElementById('owned-chatfab');
+    const sheet = document.getElementById('owned-chat-sheet');
+    const input = document.getElementById('assistant-chat-input');
+    if (!fab || !sheet) return;
+
+    // Clavier iOS : un élément position:fixed plein écran reste dimensionné sur le viewport
+    // complet et le clavier recouvre la zone de saisie. On cale la feuille sur le viewport
+    // visuel (ce qui reste au-dessus du clavier).
+    const vv = window.visualViewport;
+    const fitToVisualViewport = () => {
+        if (!vv || sheet.hidden) return;
+        sheet.style.height = `${vv.height}px`;
+        sheet.style.top = `${vv.offsetTop}px`;
+    };
+    vv?.addEventListener('resize', fitToVisualViewport);
+    vv?.addEventListener('scroll', fitToVisualViewport);
+
+    const open = () => {
+        sheet.hidden = false;
+        document.body.classList.add('owned-chat-open');
+        fitToVisualViewport();
+        const messages = document.getElementById('assistant-chat-messages');
+        if (messages) messages.scrollTop = messages.scrollHeight;
+    };
+    const close = () => {
+        sheet.hidden = true;
+        document.body.classList.remove('owned-chat-open');
+        input?.blur();
+        sheet.style.height = '';
+        sheet.style.top = '';
+        fab.focus({ preventScroll: true });
+    };
+
+    fab.addEventListener('click', open);
+    document.getElementById('owned-chat-close')?.addEventListener('click', close);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) close(); });
+}
 
 // Bouton "Recharger l'application" (topbar) : une fois ajoutée à l'écran d'accueil (mode
 // standalone), iOS reprend souvent la page depuis la mémoire au lieu de la recharger — la seule

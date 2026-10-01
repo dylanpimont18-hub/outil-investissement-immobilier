@@ -6106,6 +6106,120 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     font-style: italic;
 }
 
+/* ─── Assistant IA + Diagnostic IA sur téléphone (2026-10-01) ──────────────
+   owned.html : chat en feuille plein écran (#owned-chat-sheet) ouverte par le bouton flottant ✦.
+   Hauteur recalée en JS sur le viewport visuel quand le clavier iOS est ouvert (owned-entry.js). */
+.owned-chat-sheet {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100dvh;
+    z-index: 210;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg, var(--surface));
+    padding: max(8px, env(safe-area-inset-top)) 16px 0;
+}
+.owned-chat-sheet[hidden] { display: none; }
+.owned-chat-sheet__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+.owned-chat-sheet__title { flex: 1; font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+.owned-chat-sheet .btn { min-height: 44px; }
+.owned-chat-sheet__close {
+    min-width: 44px;
+    min-height: 44px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.owned-chat-sheet .assistant-chat {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-width: none;
+}
+.owned-chat-sheet .assistant-chat__messages {
+    min-height: 0; /* sinon l'enfant flex grandit avec son contenu au lieu de défiler */
+    padding: 12px 0;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+.owned-chat-sheet .assistant-chat__bubble,
+.owned-chat-sheet .assistant-chat__action-card { max-width: 88%; }
+.owned-chat-sheet .assistant-chat__form {
+    padding: 10px 0 max(10px, env(safe-area-inset-bottom));
+}
+/* 16px minimum : en dessous, Safari iOS zoome toute la page au focus du champ */
+.owned-chat-sheet .assistant-chat__input {
+    font-size: 16px;
+    resize: none;
+}
+.owned-chat-sheet .assistant-chat__action-buttons .btn { min-width: 96px; }
+
+/* Page figée derrière la feuille, boutons flottants masqués (ils recouvriraient "Envoyer") */
+body.owned-chat-open { overflow: hidden; }
+body.owned-chat-open .owned-quickfab { display: none; }
+
+/* Diagnostic IA : bouton "Nouveau diagnostic" + confirmation avant l'appel IA */
+.ai-diag-new { align-self: flex-start; }
+.ai-diag-confirm {
+    padding: 14px;
+    border: 1px solid var(--accent-gold, #C5A059);
+    border-radius: 10px;
+    background: var(--surface);
+}
+.ai-diag-confirm__text { margin: 0 0 12px; font-size: .88rem; line-height: 1.5; color: var(--text-primary); }
+.ai-diag-confirm__buttons { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.ai-diag-error {
+    margin: 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--negative, #b42318);
+    border-radius: 6px;
+    background: rgba(248, 81, 73, 0.08);
+    color: var(--text-primary);
+    font-size: .85rem;
+    line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+    .portfolio-ai-drawer {
+        width: 100vw;
+        height: 100dvh;
+        border-left: none;
+    }
+    .portfolio-ai-drawer__header { padding: max(12px, env(safe-area-inset-top)) 16px 12px; }
+    .portfolio-ai-drawer__close {
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 1.1rem;
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        color: var(--text-secondary);
+    }
+    .portfolio-ai-drawer__content { padding: 16px 16px max(24px, env(safe-area-inset-bottom)); }
+    .portfolio-ai-drawer__history-tab { min-height: 36px; padding: 6px 12px; }
+
+    /* Aperçu image d'un justificatif : plein écran, fermeture atteignable au pouce */
+    .document-preview-dialog { width: 100vw; height: 100dvh; border-radius: 0; }
+    .document-preview-close {
+        top: max(8px, env(safe-area-inset-top));
+        width: 44px;
+        height: 44px;
+        font-size: 1.1rem;
+    }
+}
+
 /* ─── Compare bar ─────────────────────────────────────────── */
 
 /* ─── Compare overlay ────────────────────────────────────── */
@@ -6349,6 +6463,10 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     scrollbar-width: none;
 }
 .shell--owned .owned-tabs::-webkit-scrollbar { display: none; }
+/* Onglets collants : le top: 122px de base vise le topbar du bureau. Sur owned.html le topbar est
+   fixe à max(12px, zone sûre) et haut de 70px — sans ce recalage, une bande de ~40px laissait voir
+   le contenu défiler entre le topbar et les onglets (visible surtout dans l'onglet Assistant). */
+.shell--owned .owned-tabs { top: calc(max(12px, env(safe-area-inset-top)) + 70px); }
 .shell--owned .owned-tab {
     flex-shrink: 0;
     white-space: nowrap;
@@ -6927,6 +7045,12 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     line-height: 1;
 }
 #owned-quickfab-modal .owned-add-modal__box { width: 340px; max-height: 88vh; overflow-y: auto; }
+/* Bouton flottant Assistant IA : même gabarit, posé à gauche du bouton facture (52px + 12px) */
+.owned-chatfab {
+    right: 82px;
+    font-size: 1.35rem;
+    font-weight: 700;
+}
 
 .owned-travaux-form { flex: 1 1 320px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; align-content: flex-start; margin-top: 0; }
 .owned-travaux-form input, .owned-travaux-form select { flex: 1; min-width: 100px; }

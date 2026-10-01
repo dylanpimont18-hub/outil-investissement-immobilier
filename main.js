@@ -305,7 +305,6 @@ const nodes = {
     ownedBackBtn: document.getElementById('owned-back-btn'),
     ownedDetailTitle: document.getElementById('owned-detail-title'),
     ownedDiagnosticBtn: document.getElementById('owned-diagnostic-btn'),
-    ownedDiagnosticHistoryBtn: document.getElementById('owned-diagnostic-history-btn'),
     ownedBankDossierBtn: document.getElementById('owned-bank-dossier-btn'),
     accAcquisitionBody: document.getElementById('acc-acquisition-body'),
     accAcquisitionContent: document.getElementById('acc-acquisition-content'),

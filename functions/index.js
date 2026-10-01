@@ -23,21 +23,26 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 heure
 const MAX_BASE64_LENGTH = 7_000_000; // ~5 Mo de fichier source (base64 gonfle de ~33%)
 const _callTimestampsByUid = new Map();
 
-function _checkRateLimit(uid) {
+// Diagnostic IA + Assistant chat : plafond séparé (Map distincte) pour qu'une conversation de chat
+// ne consomme pas le quota d'extraction de factures, et inversement.
+const TEXT_RATE_LIMIT_MAX_CALLS = 60;
+const _textCallTimestampsByUid = new Map();
+
+function _checkRateLimit(uid, store = _callTimestampsByUid, max = RATE_LIMIT_MAX_CALLS) {
     const now = Date.now();
-    const timestamps = (_callTimestampsByUid.get(uid) || []).filter(
+    const timestamps = (store.get(uid) || []).filter(
         (t) => now - t < RATE_LIMIT_WINDOW_MS
     );
-    if (timestamps.length >= RATE_LIMIT_MAX_CALLS) {
+    if (timestamps.length >= max) {
         throw new HttpsError('resource-exhausted', 'Trop de requêtes, réessayez plus tard');
     }
     timestamps.push(now);
-    _callTimestampsByUid.set(uid, timestamps);
+    store.set(uid, timestamps);
 }
 
-// Appel Mammouth AI partagé (chat/completions, image unique + prompt système) : factorise le
-// fetch/User-Agent/gestion d'erreur communs à extraireFraisFacture et extraireDossierBien.
-async function _callMammouthVision({ systemPrompt, userText, base64, mimeType, logLabel }) {
+// Appel Mammouth AI partagé (chat/completions) : factorise le fetch/User-Agent/gestion d'erreur
+// communs à toutes les fonctions. Renvoie le `message` brut du premier choix.
+async function _callMammouth({ messages, tools, jsonMode, logLabel }) {
     let response;
     try {
         response = await fetch('https://api.mammouth.ai/v1/chat/completions', {
@@ -49,17 +54,9 @@ async function _callMammouthVision({ systemPrompt, userText, base64, mimeType, l
             },
             body: JSON.stringify({
                 model: 'gpt-4o',
-                response_format: { type: 'json_object' },
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    {
-                        role: 'user',
-                        content: [
-                            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-                            { type: 'text', text: userText }
-                        ]
-                    }
-                ]
+                ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+                ...(tools ? { tools } : {}),
+                messages
             })
         });
     } catch (err) {
@@ -69,18 +66,41 @@ async function _callMammouthVision({ systemPrompt, userText, base64, mimeType, l
 
     if (!response.ok) {
         const errorBody = await response.text().catch(() => '<unreadable>');
-        logger.error(`${logLabel}: Mammouth API error`, { status: response.status, body: errorBody, mimeType });
+        logger.error(`${logLabel}: Mammouth API error`, { status: response.status, body: errorBody });
         throw new HttpsError('internal', `Erreur IA (${response.status})`);
     }
 
     const data = await response.json();
-    const raw = data?.choices?.[0]?.message?.content?.trim();
+    return data?.choices?.[0]?.message || {};
+}
+
+function _parseJsonMessage(message, logLabel) {
+    const raw = (message.content || '').trim();
     try {
         return JSON.parse(raw);
     } catch (err) {
         logger.error(`${logLabel}: unparseable response`, { raw, message: err?.message });
         throw new HttpsError('internal', 'Réponse IA non exploitable');
     }
+}
+
+// Image unique + prompt système (extraireFraisFacture, extraireDossierBien).
+async function _callMammouthVision({ systemPrompt, userText, base64, mimeType, logLabel }) {
+    const message = await _callMammouth({
+        jsonMode: true,
+        logLabel,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            {
+                role: 'user',
+                content: [
+                    { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+                    { type: 'text', text: userText }
+                ]
+            }
+        ]
+    });
+    return _parseJsonMessage(message, logLabel);
 }
 
 function _validateImageInput(request) {
@@ -275,4 +295,190 @@ exports.extraireDossierBien = onCall({ secrets: [mammouthApiKey], region: 'europ
     });
 
     return _sanitizeDossierResult(parsed);
+});
+
+// --- IA texte : Diagnostic d'un bien + Assistant chat ---------------------------------------
+// Déplacés depuis server.py (routes Flask /api/portfolio-diagnostic et /api/portfolio-chat) le
+// 2026-10-01 pour fonctionner aussi sur la version web (Firebase Hosting, sans serveur local).
+// Appelées à l'identique depuis le logiciel PC, index.html en ligne et owned.html (iPhone).
+const MAX_CONTEXT_JSON_LENGTH = 200_000; // garde-fou contre un payload démesuré (crédit Mammouth)
+
+function _requireTextCaller(request) {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Connectez-vous au portefeuille pour utiliser l\'IA');
+    }
+    _checkRateLimit(request.auth.uid, _textCallTimestampsByUid, TEXT_RATE_LIMIT_MAX_CALLS);
+}
+
+function _jsonWithinLimit(value) {
+    const json = JSON.stringify(value ?? null, null, 2);
+    if (json.length > MAX_CONTEXT_JSON_LENGTH) {
+        throw new HttpsError('invalid-argument', 'Données trop volumineuses');
+    }
+    return json;
+}
+
+const DIAGNOSTIC_SYSTEM_PROMPT = "Tu es un conseiller en investissement immobilier locatif français expert en fiscalité foncière. "
+    + "Tu réponds uniquement en JSON valide, sans markdown ni texte hors JSON.";
+
+exports.diagnosticPortefeuille = onCall({ secrets: [mammouthApiKey], region: 'europe-west1', timeoutSeconds: 90 }, async (request) => {
+    _requireTextCaller(request);
+    const payload = request.data;
+    if (!payload || typeof payload !== 'object') {
+        throw new HttpsError('invalid-argument', 'Données du bien manquantes');
+    }
+
+    const userPrompt = "Voici les données d'un bien immobilier locatif détenu :\n\n"
+        + _jsonWithinLimit(payload)
+        + "\n\nProduis entre 3 et 5 recommandations priorisées, actionnables, en français naturel. "
+        + "Chaque recommandation doit avoir : un titre court, une explication de 2 à 4 phrases qui justifie "
+        + "le conseil avec des chiffres précis issus des données, et une action concrète à mener. "
+        + "Priorise les sujets fiscaux (régime, travaux déductibles), les risques de cash-flow (CF négatif, DSCR bas), "
+        + "et les optimisations. "
+        + "Réponds uniquement avec du JSON valide, sans texte avant ou après, au format : "
+        + '{"recommendations": [{"title": "...", "explanation": "...", "action": "..."}]}';
+
+    const message = await _callMammouth({
+        jsonMode: true,
+        logLabel: 'diagnosticPortefeuille',
+        messages: [
+            { role: 'system', content: DIAGNOSTIC_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt }
+        ]
+    });
+    const parsed = _parseJsonMessage(message, 'diagnosticPortefeuille');
+    const recommendations = (Array.isArray(parsed?.recommendations) ? parsed.recommendations : [])
+        .filter((r) => r && typeof r === 'object')
+        .map((r) => ({
+            title: String(r.title || ''),
+            explanation: String(r.explanation || ''),
+            action: String(r.action || '')
+        }));
+    return { recommendations };
+});
+
+const ASSISTANT_SYSTEM_PROMPT = "Tu es l'assistant investissement immobilier locatif de Spark Investissement, un conseiller français "
+    + "expert en fiscalité foncière, financement bancaire et gestion locative. "
+    + "Tu réponds UNIQUEMENT à des questions liées à l'investissement immobilier locatif de l'utilisateur : "
+    + "analyse de son portefeuille, fiscalité, financement, négociation bancaire, rédaction de courriers ou "
+    + "emails (ex. à un banquier, un notaire, un locataire), stratégie patrimoniale. "
+    + "Si une question sort de ce cadre, décline poliment et recentre sur l'investissement immobilier. "
+    + "Réponds en français naturel, de façon concise et actionnable, en t'appuyant sur les chiffres précis du "
+    + "contexte fourni ci-dessous quand c'est pertinent. Pas de markdown superflu, du texte simple adapté à un "
+    + "email ou une explication directe selon la demande. "
+    + "Quand l'utilisateur mentionne une information qui correspond à une modification concrète de son "
+    + "portefeuille (un crédit, une note sur un bien, un changement de revenu/objectif, une dépense/des "
+    + "travaux), propose l'action correspondante via les outils disponibles plutôt que de simplement en "
+    + "prendre note dans ta réponse texte — l'utilisateur confirmera ou annulera avant toute écriture. "
+    + "N'appelle un outil que si l'utilisateur a donné une information suffisamment précise et actionnable ; "
+    + "sinon pose la question manquante en texte normal.";
+const ASSISTANT_MAX_MESSAGES = 40;
+const ASSISTANT_MAX_MESSAGE_LENGTH = 8000;
+
+// Function calling (OpenAI-compatible "tools") : chaque outil correspond à une action que
+// l'utilisateur devra confirmer côté client avant écriture — voir assistant-chat.js. Cette fonction
+// ne fait qu'exposer le schéma à Mammouth AI et relayer les tool_calls bruts, elle n'exécute rien.
+const ASSISTANT_TOOLS = [
+    {
+        type: 'function',
+        function: {
+            name: 'ajouter_credit_hors_immo',
+            description: 'Ajoute une ligne de crédit hors immobilier (auto, conso, personnel...) au profil du foyer.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    libelle: { type: 'string', description: "Nom du crédit, ex. 'Crédit auto'" },
+                    mensualite: { type: 'number', description: 'Mensualité en euros' }
+                },
+                required: ['libelle', 'mensualite']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'ajouter_note_bien',
+            description: 'Ajoute une note texte sur un bien détenu précis du portefeuille.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    assetId: { type: 'string', description: "Identifiant du bien (champ 'id' dans le contexte portefeuille fourni)" },
+                    text: { type: 'string', description: 'Contenu de la note' }
+                },
+                required: ['assetId', 'text']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'modifier_profil_foyer',
+            description: 'Modifie un champ du profil du foyer (revenu annuel, objectif de cash-flow mensuel).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    income: { type: 'number', description: 'Revenu annuel du foyer en euros' },
+                    objectifCF: { type: 'number', description: 'Objectif de cash-flow net-net mensuel en euros' }
+                }
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'ajouter_frais_bien',
+            description: 'Ajoute une dépense/des travaux sur un bien détenu précis du portefeuille.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    assetId: { type: 'string', description: "Identifiant du bien (champ 'id' dans le contexte portefeuille fourni)" },
+                    description: { type: 'string', description: 'Description de la dépense' },
+                    montant: { type: 'number', description: 'Montant en euros' },
+                    date: { type: 'string', description: "Date au format YYYY-MM-DD, aujourd'hui si non précisée" },
+                    tag: { type: 'string', enum: ALLOWED_TAGS, description: 'Statut fiscal si connu, sinon a-classifier' }
+                },
+                required: ['assetId', 'description', 'montant']
+            }
+        }
+    }
+];
+
+exports.chatPortefeuille = onCall({ secrets: [mammouthApiKey], region: 'europe-west1', timeoutSeconds: 90 }, async (request) => {
+    _requireTextCaller(request);
+    const { messages, contextePortefeuille } = request.data || {};
+
+    if (!Array.isArray(messages) || !messages.length) {
+        throw new HttpsError('invalid-argument', 'Historique de conversation manquant');
+    }
+    if (messages.length > ASSISTANT_MAX_MESSAGES) {
+        throw new HttpsError('invalid-argument', 'Conversation trop longue — démarrez une nouvelle conversation');
+    }
+    for (const m of messages) {
+        if (!m || !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string'
+            || m.content.length > ASSISTANT_MAX_MESSAGE_LENGTH) {
+            throw new HttpsError('invalid-argument', 'Message invalide');
+        }
+    }
+
+    let systemContent = ASSISTANT_SYSTEM_PROMPT;
+    if (contextePortefeuille) {
+        systemContent += "\n\nContexte actuel du portefeuille de l'utilisateur (données à jour, utilise-les pour "
+            + "personnaliser tes réponses) :\n" + _jsonWithinLimit(contextePortefeuille);
+    }
+
+    const message = await _callMammouth({
+        logLabel: 'chatPortefeuille',
+        tools: ASSISTANT_TOOLS,
+        messages: [
+            { role: 'system', content: systemContent },
+            ...messages.map((m) => ({ role: m.role, content: m.content }))
+        ]
+    });
+
+    // tool_calls relayés tels quels (id, function.name, function.arguments en JSON string) :
+    // assistant-chat.js parse les arguments et affiche la carte de confirmation.
+    return {
+        reply: (message.content || '').trim(),
+        toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : []
+    };
 });

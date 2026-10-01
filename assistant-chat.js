@@ -8,7 +8,11 @@
 // est sauvegardé par bien. Interface : initAssistantChat(deps) avec { state, nodes }, appelée une
 // fois depuis main.js avant le premier accès à l'onglet Assistant.
 //
-// Actions (function calling) : le serveur (server.py, ASSISTANT_TOOLS) expose à l'IA un schéma de
+// Appel IA : Cloud Function chatPortefeuille (functions/index.js) via owned-cloud.js — identique
+// sur le logiciel PC, index.html en ligne et owned.html (feuille plein écran #owned-chat-sheet,
+// ouverte par le bouton flottant ✦ — voir owned-entry.js).
+//
+// Actions (function calling) : la Cloud Function (ASSISTANT_TOOLS) expose à l'IA un schéma de
 // 4 outils correspondant à des mutations du portefeuille/profil. Quand l'IA choisit d'en appeler
 // un, le serveur relaie le tool_call brut (jamais exécuté côté serveur) ; ce module l'affiche comme
 // une carte de confirmation inline dans le fil de chat et n'exécute la mutation réelle qu'au clic
@@ -19,6 +23,9 @@
 
 import { escapeHtml, showToast } from './utils.js';
 import { buildPortfolioSummaryForAI, addOwnedNote, addOwnedTravail, addOwnedAutreCredit, patchProfileData, renderCollections, getOwnedAsset, findSimilarTravail } from './owned-portfolio.js';
+import { cloudChatPortefeuille } from './owned-cloud.js';
+
+const INPUT_MAX_HEIGHT = 160; // px, identique au max-height CSS de .assistant-chat__input
 
 let nodes;
 let _messages = []; // { role: 'user'|'assistant', content: string, toolCalls?: [...], toolCallsStatus?: 'pending'|'done'|'cancelled' }
@@ -109,15 +116,18 @@ export function initAssistantChat(deps) {
         const text = input.value.trim();
         if (!text || _pending) return;
         input.value = '';
+        _autoGrow(input);
         _sendMessage(text);
     });
 
     input.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        // isComposing : ne pas envoyer pendant une saisie prédictive/IME (clavier iOS)
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();
             form.requestSubmit();
         }
     });
+    input.addEventListener('input', () => _autoGrow(input));
 
     document.getElementById('assistant-chat-messages')?.addEventListener('click', e => {
         const btn = e.target.closest('[data-action-confirm], [data-action-cancel]');
@@ -139,6 +149,15 @@ export function initAssistantChat(deps) {
         _messages = [];
         _renderMessages();
     });
+
+    _renderMessages();
+}
+
+// La zone de saisie grandit avec le texte (jusqu'à INPUT_MAX_HEIGHT puis défile) — sur téléphone
+// une poignée de redimensionnement manuelle est inutilisable au doigt.
+function _autoGrow(input) {
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, INPUT_MAX_HEIGHT)}px`;
 }
 
 function _executeToolCall(message, callIdx) {
@@ -219,31 +238,23 @@ async function _sendMessage(text) {
 
     try {
         const contexte = buildPortfolioSummaryForAI();
-        const resp = await fetch('/api/portfolio-chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messages: _messages.map(m => ({ role: m.role, content: m.content })),
-                contextePortefeuille: contexte
+        // Messages d'erreur locaux (préfixés "Erreur") exclus de l'historique envoyé à l'IA.
+        const history = _messages
+            .filter(m => !m.isError)
+            .map(m => ({ role: m.role, content: m.content }));
+        const data = await cloudChatPortefeuille(history, contexte);
+        const toolCalls = (data?.toolCalls || [])
+            .map(tc => {
+                let args = {};
+                try { args = JSON.parse(tc.function?.arguments || '{}'); } catch { args = {}; }
+                return ACTION_HANDLERS[tc.function?.name]
+                    ? { name: tc.function.name, args, status: 'pending', contextSnapshot: contexte }
+                    : null;
             })
-        });
-        const data = await resp.json();
-        if (!resp.ok || data.error) {
-            _messages.push({ role: 'assistant', content: `Erreur : ${data.error || 'réponse invalide'}` });
-        } else {
-            const toolCalls = (data.toolCalls || [])
-                .map(tc => {
-                    let args = {};
-                    try { args = JSON.parse(tc.function?.arguments || '{}'); } catch { args = {}; }
-                    return ACTION_HANDLERS[tc.function?.name]
-                        ? { name: tc.function.name, args, status: 'pending', contextSnapshot: contexte }
-                        : null;
-                })
-                .filter(Boolean);
-            _messages.push({ role: 'assistant', content: data.reply || '', toolCalls: toolCalls.length ? toolCalls : undefined });
-        }
+            .filter(Boolean);
+        _messages.push({ role: 'assistant', content: data?.reply || '', toolCalls: toolCalls.length ? toolCalls : undefined });
     } catch (err) {
-        _messages.push({ role: 'assistant', content: `Erreur réseau : ${err.message}` });
+        _messages.push({ role: 'assistant', content: `Erreur : ${err?.message || 'réponse invalide'}`, isError: true });
     } finally {
         _pending = false;
         _renderMessages();

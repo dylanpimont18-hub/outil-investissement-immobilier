@@ -55,8 +55,7 @@
         <!-- Navigation onglets portefeuille (Impôt reste PC uniquement, cf. simplification mobile) -->
         <div class="owned-tabs owned-list-tabs" role="tablist">
             <button class="owned-tab owned-tab--active" data-tab="overview" role="tab" aria-selected="true">Vue d'ensemble</button>
-            <button class="owned-tab" data-tab="profil" role="tab" aria-selected="false">Profil</button>
-        </div>
+            <button class="owned-tab" data-tab="profil" role="tab" aria-selected="false">Profil</button>        </div>
 
         <div id="owned-list-tab-overview" class="owned-tab-panel" role="tabpanel">
             <div id="owned-migration-banner" hidden></div>
@@ -111,6 +110,9 @@
          cette page (liste et fiche d'un bien), ouvre la modale ci-dessous sans quitter la vue courante.
          Équivalent mobile de l'action "Ajouter une facture" du rail Actions rapides PC. -->
     <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter une facture">📄<span class="owned-quickfab__plus">+</span></button>
+    <!-- Bouton flottant Assistant IA (2026-10-01) : à gauche du bouton facture, ouvre le chat en
+         plein écran par-dessus la vue courante (liste ou fiche d'un bien) — la fermeture y ramène. -->
+    <button type="button" id="owned-chatfab" class="owned-quickfab owned-chatfab" aria-label="Assistant IA" aria-haspopup="dialog">✦</button>
     <div id="owned-quickfab-modal" class="owned-add-modal" hidden aria-modal="true" role="dialog">
         <div class="owned-add-modal__box">
             <h3>Ajouter une facture</h3>
@@ -220,7 +222,7 @@
         <div id="acc-postachat-summary" hidden></div>
         <div id="acc-simulateur-content" hidden></div>
 
-        <!-- Drawer Diagnostic IA (indisponible depuis cette page — pas de serveur local sur iPhone) -->
+        <!-- Drawer Diagnostic IA (Cloud Function diagnosticPortefeuille, plein écran sur téléphone) -->
         <div id="owned-ai-drawer" class="portfolio-ai-drawer" role="dialog" aria-modal="true" aria-label="Diagnostic IA">
             <div class="portfolio-ai-drawer__header">
                 <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
@@ -233,6 +235,23 @@
 
             </section>
         </main>
+    </div>
+
+    <!-- Assistant IA plein écran (même module assistant-chat.js que le panneau Assistant d'index.html,
+         Cloud Function chatPortefeuille ; conversation non persistée). Ouvert par #owned-chatfab. -->
+    <div id="owned-chat-sheet" class="owned-chat-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="owned-chat-title">
+        <div class="owned-chat-sheet__header">
+            <span id="owned-chat-title" class="owned-chat-sheet__title">✦ Assistant IA</span>
+            <button type="button" id="assistant-chat-new" class="btn btn--ghost btn--sm" disabled>Nouvelle</button>
+            <button type="button" id="owned-chat-close" class="owned-chat-sheet__close" aria-label="Fermer l'assistant">✕</button>
+        </div>
+        <div id="assistant-chat" class="assistant-chat">
+            <div id="assistant-chat-messages" class="assistant-chat__messages"></div>
+            <form id="assistant-chat-form" class="assistant-chat__form">
+                <textarea id="assistant-chat-input" class="assistant-chat__input" rows="1" placeholder="Votre question…" enterkeyhint="send" required></textarea>
+                <button type="submit" class="btn btn--primary assistant-chat__send">Envoyer</button>
+            </form>
+        </div>
     </div>
 
     <script type="module" src="owned-entry.js"></script>

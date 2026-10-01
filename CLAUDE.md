@@ -90,4 +90,4 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
 - New form fields require entries in: `VARIABLE_DEFAULTS`, `VARIABLE_KEYS` (derived), `sanitizeVariablesData()`, and the corresponding `<fieldset>` in `index.html`.
 - `calculs.js` exports are pure functions — keep them free of DOM, `localStorage`, and `window` references.
 - `computeAnalysisViewModel` is called on every keystroke; keep it synchronous and fast.
-- `config.py` (root, gitignored) must never be committed — it contains the Anthropic API key used by the portfolio's AI diagnostic (`/api/portfolio-diagnostic`). Copy from `config.example.py`.
+- `config.py` (root, gitignored) must never be committed. The AI features (portfolio diagnostic, Assistant chat, invoice extraction) no longer use it: they run as Firebase Cloud Functions (`functions/index.js`) reading the `MAMMOUTH_API_KEY` Firebase secret, so they work identically in the desktop app, on the hosted web version and on iPhone.

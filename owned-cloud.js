@@ -122,6 +122,23 @@ export async function cloudExtraireDossierBien(base64, mimeType) {
     return data;
 }
 
+// ─── IA texte (Diagnostic d'un bien + Assistant chat) : Cloud Functions ─────
+// functions/index.js, diagnosticPortefeuille / chatPortefeuille — remplacent les routes Flask
+// /api/portfolio-diagnostic et /api/portfolio-chat (absentes de la version web Firebase Hosting).
+// Les erreurs HttpsError remontent avec leur message français (err.message).
+const _diagnosticPortefeuille = httpsCallable(functions, 'diagnosticPortefeuille', { timeout: 95_000 });
+const _chatPortefeuille = httpsCallable(functions, 'chatPortefeuille', { timeout: 95_000 });
+
+export async function cloudDiagnosticPortefeuille(payload) {
+    const { data } = await _diagnosticPortefeuille(payload);
+    return data;
+}
+
+export async function cloudChatPortefeuille(messages, contextePortefeuille) {
+    const { data } = await _chatPortefeuille({ messages, contextePortefeuille });
+    return data;
+}
+
 // ─── Geocodage : Nominatim + cache Firestore ─────────────────────────────────
 // Remplace le proxy server.py /api/geocode/address (indisponible sans serveur local sur iPhone).
 // Nominatim impose 1 req/s ; le cache Firestore evite de re-solliciter l'API a chaque saisie
