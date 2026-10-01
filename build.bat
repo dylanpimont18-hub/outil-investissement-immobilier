@@ -107,4 +107,4 @@ echo   - Archive    : Spark-%VERSION%.zip
 echo   - Raccourci cree sur le bureau
 echo ====================================================
 echo.
-pause
+if not defined CALLED_FROM_UPDATE_RUN pause
