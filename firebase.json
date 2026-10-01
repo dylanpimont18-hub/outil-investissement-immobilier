@@ -44,7 +44,8 @@
       "CHANGELOG.md",
       "CLAUDE.md",
       "CODEBASE_MAP.md",
-      "vendor/fonts/**"
+      "vendor/fonts/**",
+      "graphify-out/**"
     ],
     "rewrites": [
       { "source": "/portefeuille", "destination": "/owned.html" }
