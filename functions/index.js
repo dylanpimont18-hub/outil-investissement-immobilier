@@ -124,18 +124,26 @@ function _validateImageInput(request) {
 
 const SYSTEM_PROMPT = `Tu es un assistant qui extrait les informations d'une facture ou d'un devis de travaux immobiliers français.
 Tu réponds uniquement avec du JSON valide, sans markdown ni texte hors JSON, au format exact :
-{"date": "YYYY-MM-DD", "description": "...", "montant": 0, "tagSuggestion": "deductible|non-deductible|a-classifier", "confiance": "haute|moyenne|basse"}
+{"fournisseur": "...", "date": "YYYY-MM-DD", "description": "...", "montant": 0, "tagSuggestion": "deductible|non-deductible|a-classifier", "confiance": "haute|moyenne|basse"}
+
+Champs :
+- fournisseur : nom de l'entreprise ou de l'artisan qui ÉMET la facture (jamais le client ni le destinataire), "" si illisible.
+- date : date d'ÉMISSION de la facture (pas la date d'échéance, de paiement, de devis ni d'intervention).
+- description : résumé très court de la prestation, 3 à 8 mots (ex. "Peinture et enduits salon", "Remplacement chauffe-eau"), sans répéter le nom du fournisseur.
+- montant : total TTC en euros, nombre sans symbole ni espace.
 
 Règles fiscales françaises pour tagSuggestion (foncier réel) :
 - deductible : entretien, réparation, amélioration (peinture, toiture, chauffage, plomberie, électricité...)
 - non-deductible : agrandissement, construction, reconstruction (extension, surélévation, création de surface habitable...)
 - a-classifier : si le document ne permet pas de trancher avec certitude
 
-Si une information est illisible ou absente, laisse une chaîne vide ("") pour date/description, 0 pour montant, et mets confiance à "basse".`;
+Si une information est illisible ou absente, laisse une chaîne vide ("") pour fournisseur/date/description, 0 pour montant, et mets confiance à "basse".`;
 
-// Extraction IA d'une photo de facture/devis pour pré-remplir le formulaire d'ajout d'un frais
-// dans l'onglet Travaux (owned-portfolio.js, renderOwnedTravauxTab) et le rail/FAB Actions
-// rapides. Appelée à l'identique depuis index.html (PC) et owned.html (mobile). Passe par
+// Extraction IA d'une photo de facture/devis pour pré-remplir un frais : modale globale « Ajouter
+// des factures » (owned-portfolio.js, openAjoutFacturesModal — bouton flottant PC/mobile, rail,
+// dépôt groupé) et onglet Frais d'un bien (renderOwnedTravauxTab). Le client rasterise les PDF en
+// PNG avant l'appel. Depuis le 2026-10-02 renvoie aussi `fournisseur` (émetteur de la facture) ;
+// `date` est la date d'émission. Appelée à l'identique depuis index.html et owned.html. Passe par
 // Mammouth AI (proxy OpenAI-compatible, modèle gpt-4o) plutôt que l'API Anthropic directe depuis
 // le 2026-08-04. Le User-Agent explicite est nécessaire : Mammouth est derrière Cloudflare et
 // bloque (403 / "error code 1010") les requêtes sans en-tête User-Agent de navigateur.
@@ -151,6 +159,7 @@ exports.extraireFraisFacture = onCall({ secrets: [mammouthApiKey], region: 'euro
     });
 
     return {
+        fournisseur: typeof parsed.fournisseur === 'string' ? parsed.fournisseur.trim().slice(0, 120) : '',
         date: typeof parsed.date === 'string' ? parsed.date : '',
         description: typeof parsed.description === 'string' ? parsed.description : '',
         montant: Number(parsed.montant) || 0,

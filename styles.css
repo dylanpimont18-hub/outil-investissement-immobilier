@@ -6920,7 +6920,9 @@ body.asset-report-open .owned-quickfab { display: none; }
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    /* Au-dessus des modales (.owned-modal-overlay = 1200) : l'aperçu d'une facture s'ouvre depuis
+       la modale « Ajouter des factures » (2026-10-02) — à 1000 il s'affichait derrière elle. */
+    z-index: 1300;
 }
 .document-preview-overlay[hidden] { display: none; }
 .document-preview-dialog {
@@ -7111,7 +7113,8 @@ body.asset-report-open .owned-quickfab { display: none; }
     justify-content: center;
     line-height: 1;
 }
-#owned-quickfab-modal .owned-add-modal__box { width: 340px; max-height: 88vh; overflow-y: auto; }
+.owned-quickfab[hidden] { display: none; }
+@media print { .owned-quickfab { display: none !important; } }
 /* Bouton flottant Assistant IA : même gabarit, posé à gauche du bouton facture (52px + 12px) */
 .owned-chatfab {
     right: 82px;
@@ -7752,6 +7755,116 @@ body.asset-report-open .owned-quickfab { display: none; }
     .owned-batch-table td:nth-child(4) input,
     .owned-batch-table td:nth-child(5) input,
     .owned-batch-table td:nth-child(6) select { width: 100%; min-width: 0; }
+}
+
+/* ─── Modale globale « Ajouter des factures » (2026-10-02) — ouverte par le bouton flottant
+   #owned-quickfab (PC + mobile), le rail Actions rapides et le dépôt de 2+ fichiers dans l'onglet
+   Frais. Voir openAjoutFacturesModal (owned-portfolio.js) et la spec
+   docs/superpowers/specs/2026-10-02-ajout-factures-bouton-global.md. La modale est ajoutée à
+   document.body par _showOwnedModal : variantes mobile en @media, jamais via .shell--owned. */
+.owned-fm { max-width: 980px; }
+.owned-fm__asset { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.owned-fm__asset .variables-label { margin: 0; white-space: nowrap; }
+.owned-fm__asset select { flex: 1; min-width: 0; }
+.owned-fm__dropzone { flex: none; width: 100%; padding: 22px 16px; box-sizing: border-box; }
+.owned-fm__dropzone-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.owned-fm__section { margin-top: 18px; }
+.owned-fm__section-title,
+.owned-fm__existing summary {
+    display: flex; align-items: center; gap: 8px;
+    font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+.owned-fm__section-title { margin-bottom: 8px; }
+.owned-fm__count { font-family: 'IBM Plex Mono', monospace; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.owned-fm__rows { display: flex; flex-direction: column; gap: 8px; }
+
+.owned-fm-row {
+    display: grid;
+    grid-template-columns: auto 56px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+    padding: 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--surface-low);
+}
+.owned-fm-row--loading .owned-fm-row__main { opacity: .6; }
+.owned-fm-row__check { margin-top: 20px; width: 18px; height: 18px; }
+.owned-fm-row__thumb {
+    width: 56px; height: 56px; padding: 0; overflow: hidden;
+    border-radius: 8px; border: 1px solid var(--border-subtle);
+    background: var(--surface); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+}
+.owned-fm-row__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.owned-fm-row__main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.owned-fm-row__line { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.owned-fm-row__line .variables-input { flex: 1 1 150px; min-width: 0; }
+.owned-fm-row__line .owned-fm-row__montant { flex: 0 1 130px; font-family: 'IBM Plex Mono', monospace; }
+.owned-fm-row__date { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--text-secondary); white-space: nowrap; }
+.owned-fm-row__date .variables-input { flex: 0 0 150px; }
+.owned-fm-row__line select.variables-input { flex: 0 1 150px; }
+.owned-fm-row .ai-filled { border-color: var(--accent-color, #C5A059); }
+.owned-fm-row__meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: .74rem; color: var(--text-tertiary); }
+.owned-fm-row__file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.owned-fm-row__retry { background: none; border: none; color: var(--accent-color, #C5A059); text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+.owned-fm-row__tools { display: flex; flex-direction: column; gap: 6px; }
+.owned-fm-row__tools button {
+    width: 36px; height: 36px; border-radius: 8px;
+    border: 1px solid var(--border-subtle); background: var(--surface);
+    cursor: pointer; font-size: .95rem; display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary);
+}
+
+.owned-fm__existing { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 10px; }
+.owned-fm__existing summary { cursor: pointer; list-style: none; }
+.owned-fm__existing summary::-webkit-details-marker { display: none; }
+.owned-fm__existing summary::after { content: '▾'; margin-left: auto; transition: transform .15s; }
+.owned-fm__existing:not([open]) summary::after { transform: rotate(-90deg); }
+.owned-fm-existing__list { margin-top: 8px; display: flex; flex-direction: column; }
+.owned-fm-existing__row {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr) auto 36px;
+    gap: 10px; align-items: center;
+    padding: 7px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 6px;
+    font-size: .82rem;
+}
+.owned-fm-existing__row--dup { background: rgba(217, 119, 6, .12); box-shadow: inset 3px 0 0 var(--watch, #d97706); }
+.owned-fm-existing__date { font-family: 'IBM Plex Mono', monospace; font-size: .76rem; color: var(--text-secondary); }
+.owned-fm-existing__desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owned-fm-existing__montant { font-family: 'IBM Plex Mono', monospace; font-weight: 600; white-space: nowrap; }
+.owned-fm-existing__preview { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--surface); cursor: pointer; }
+.owned-fm-existing__nopreview { text-align: center; color: var(--text-tertiary); }
+.owned-fm-existing__more { margin-top: 8px; }
+.owned-fm__empty { font-size: .82rem; color: var(--text-tertiary); font-style: italic; padding: 8px 0; margin: 0; }
+.owned-fm__none { text-align: center; padding: 24px 8px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 14px; align-items: center; }
+
+/* Écran étroit : plein écran, une info par ligne, cibles tactiles ≥ 44 px. */
+@media (max-width: 480px) {
+    .owned-modal-overlay--fm { padding: 0; align-items: stretch; }
+    .owned-fm { max-height: 100dvh; border-radius: 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+    .owned-fm-row { grid-template-columns: auto 48px minmax(0, 1fr); }
+    .owned-fm-row__thumb { width: 48px; height: 48px; }
+    .owned-fm-row__tools { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; }
+    .owned-fm-row__tools button { width: 44px; height: 44px; }
+    .owned-fm-row__line .variables-input,
+    .owned-fm-row__line select.variables-input,
+    .owned-fm-row__line .owned-fm-row__montant { flex: 1 1 100%; width: 100%; }
+    .owned-fm-row__date { flex: 1 1 100%; white-space: normal; }
+    .owned-fm-row__date .variables-input { flex: 1 1 auto; }
+    .owned-fm-row__file { max-width: 100%; }
+    .owned-fm .owned-modal-actions .btn { min-height: 44px; flex: 1; }
+    .owned-fm__dropzone-actions .btn { min-height: 44px; }
+    .owned-fm-existing__row {
+        grid-template-columns: minmax(0, 1fr) auto 44px;
+        grid-template-areas: "date montant preview" "desc desc preview";
+        row-gap: 2px;
+    }
+    .owned-fm-existing__date { grid-area: date; }
+    .owned-fm-existing__desc { grid-area: desc; white-space: normal; }
+    .owned-fm-existing__montant { grid-area: montant; }
+    .owned-fm-existing__preview { grid-area: preview; width: 44px; height: 44px; }
 }
 
 /* Compte de résultat */

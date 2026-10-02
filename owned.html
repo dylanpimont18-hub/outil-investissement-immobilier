@@ -106,56 +106,14 @@
         </div>
     </div>
 
-    <!-- Bouton flottant "Ajouter une facture" (2026-08-04, mobile uniquement) : visible partout sur
-         cette page (liste et fiche d'un bien), ouvre la modale ci-dessous sans quitter la vue courante.
-         Équivalent mobile de l'action "Ajouter une facture" du rail Actions rapides PC. -->
-    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter une facture">📄<span class="owned-quickfab__plus">+</span></button>
+    <!-- Bouton flottant « Ajouter des factures » (2026-08-04, refondu le 2026-10-02) : visible partout sur
+         cette page (liste et fiche d'un bien) dès que le portefeuille cloud est chargé, ouvre la modale
+         globale openAjoutFacturesModal (owned-portfolio.js) — bien pré-sélectionné, photo/galerie/fichiers,
+         extraction IA par lot, aperçu des factures. Même modale que le bouton flottant PC d'index.html. -->
+    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter des factures" hidden>📄<span class="owned-quickfab__plus">+</span></button>
     <!-- Bouton flottant Assistant IA (2026-10-01) : à gauche du bouton facture, ouvre le chat en
          plein écran par-dessus la vue courante (liste ou fiche d'un bien) — la fermeture y ramène. -->
     <button type="button" id="owned-chatfab" class="owned-quickfab owned-chatfab" aria-label="Assistant IA" aria-haspopup="dialog">✦</button>
-    <div id="owned-quickfab-modal" class="owned-add-modal" hidden aria-modal="true" role="dialog">
-        <div class="owned-add-modal__box">
-            <h3>Ajouter une facture</h3>
-            <label class="variables-field">
-                <span class="variables-label">Bien concerné</span>
-                <select data-quick-asset-select class="variables-input"></select>
-            </label>
-            <div class="owned-travaux-dropzone" data-quick-dropzone tabindex="0" role="button" aria-label="Déposer une facture ou une photo">
-                <input type="file" accept="application/pdf,image/jpeg,image/png" data-quick-file-input hidden>
-                <div data-quick-dropzone-body>
-                    <div class="owned-travaux-dropzone__label">Prendre une photo ou choisir un fichier</div>
-                </div>
-                <div class="owned-travaux-dropzone__status" data-quick-status hidden></div>
-            </div>
-            <form data-quick-facture-form novalidate>
-                <label class="variables-field">
-                    <span class="variables-label">Date</span>
-                    <input type="date" name="date" class="variables-input" data-quick-field="date" required>
-                </label>
-                <label class="variables-field">
-                    <span class="variables-label">Description</span>
-                    <input type="text" name="description" class="variables-input" data-quick-field="description" required>
-                </label>
-                <label class="variables-field">
-                    <span class="variables-label">Montant (€)</span>
-                    <input type="number" name="montant" class="variables-input" data-quick-field="montant" min="0" step="1" required>
-                </label>
-                <label class="variables-field">
-                    <span class="variables-label">Nature</span>
-                    <select name="tag" class="variables-input" data-quick-field="tag">
-                        <option value="a-classifier">À classifier</option>
-                        <option value="deductible">Déductible</option>
-                        <option value="non-deductible">Non déductible</option>
-                    </select>
-                </label>
-                <div class="owned-add-modal__actions">
-                    <button type="button" data-quickcancel class="btn btn--ghost">Annuler</button>
-                    <button type="submit" class="btn btn--primary">Ajouter</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- Modale suppression sécurisée -->
     <div id="owned-delete-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
         <div class="owned-delete-modal__box">

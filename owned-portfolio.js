@@ -2638,25 +2638,11 @@ function closeOwnedAddModal() {
     nodes.ownedAddForm?.reset();
 }
 
-// ─── Capture rapide d'une facture — briques partagées entre le rail PC (#owned-quickrail) et le
-// bouton flottant mobile (#owned-quickfab), ajouté le 2026-08-04. Un "root" (le panneau du rail ou
-// la modale mobile) doit contenir : un sélecteur [data-quick-asset-select], une dropzone
-// [data-quick-dropzone]/[data-quick-dropzone-body]/[data-quick-file-input]/[data-quick-status], et un
-// formulaire [data-quick-facture-form] avec des champs [data-quick-field="date|description|montant|tag"].
-// Réutilise les mêmes briques que renderOwnedTravauxTab (TRAVAUX_ACCEPTED_MIME,
-// cloudExtraireFraisFacture, addOwnedTravail) — un seul flux d'extraction IA, PC et mobile.
-function _populateQuickAssetSelect(root) {
-    const select = root?.querySelector('[data-quick-asset-select]');
-    if (!select) return;
-    const list = getOrderedAssetList();
-    select.innerHTML = list.length
-        ? list.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.nom)}</option>`).join('')
-        : '<option value="" disabled selected>Aucun bien — ajoute-en un d\'abord</option>';
-}
-
-// Reste sur la vue courante après l'ajout (pas de navigation forcée) : si la fiche du bien concerné
-// est déjà ouverte on la rafraîchit, sinon on rafraîchit la liste/dashboard visible.
-function _refreshAfterQuickFacture(assetId) {
+// Après un ajout de frais depuis la modale globale (openAjoutFacturesModal) : reste sur la vue
+// courante (pas de navigation forcée). Si la fiche du bien concerné est ouverte on la rafraîchit,
+// sinon la liste/dashboard visible. Le snapshot Firestore re-rendra de toute façon, ceci rend le
+// retour visuel immédiat.
+function _refreshAfterFacturesAdd(assetId) {
     if (state.activeOwnedAssetId === assetId) {
         const fresh = getOwnedAsset(assetId);
         if (fresh) {
@@ -2671,121 +2657,6 @@ function _refreshAfterQuickFacture(assetId) {
     }
 }
 
-function _wireQuickFactureForm(root, onSubmitted) {
-    let quickPendingFile = null;
-    const dropzone = root.querySelector('[data-quick-dropzone]');
-    const dropzoneBody = root.querySelector('[data-quick-dropzone-body]');
-    const fileInput = root.querySelector('[data-quick-file-input]');
-    const statusEl = root.querySelector('[data-quick-status]');
-    const factureForm = root.querySelector('[data-quick-facture-form]');
-    const fieldDate = factureForm?.querySelector('[data-quick-field="date"]');
-    const fieldDesc = factureForm?.querySelector('[data-quick-field="description"]');
-    const fieldMontant = factureForm?.querySelector('[data-quick-field="montant"]');
-    const fieldTag = factureForm?.querySelector('[data-quick-field="tag"]');
-
-    const resetQuickDropzone = () => {
-        quickPendingFile = null;
-        if (fileInput) fileInput.value = '';
-        dropzone?.classList.remove('owned-travaux-dropzone--filled', 'owned-travaux-dropzone--dragover');
-        if (dropzoneBody) dropzoneBody.hidden = false;
-        if (statusEl) { statusEl.hidden = true; statusEl.className = 'owned-travaux-dropzone__status'; statusEl.textContent = ''; }
-        [fieldDate, fieldDesc, fieldMontant].forEach(f => f?.classList.remove('ai-filled'));
-    };
-
-    const handleQuickFile = async file => {
-        if (!TRAVAUX_ACCEPTED_MIME.includes(file.type)) {
-            showToast('Format non supporté (PDF, JPG ou PNG uniquement)', 'negative');
-            return;
-        }
-        quickPendingFile = file;
-        if (dropzoneBody) dropzoneBody.hidden = true;
-        dropzone?.classList.add('owned-travaux-dropzone--filled');
-        if (statusEl) {
-            statusEl.hidden = false;
-            statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--loading';
-            statusEl.textContent = `📄 ${file.name} — lecture de la facture…`;
-        }
-        if (file.size > TRAVAUX_MAX_FILE_SIZE) {
-            if (statusEl) {
-                statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
-                statusEl.textContent = `📄 ${file.name} — trop volumineux (max 8 Mo), remplis à la main`;
-            }
-            return;
-        }
-        try {
-            const base64 = await _fileToBase64(file);
-            const result = await cloudExtraireFraisFacture(base64, file.type);
-            if (result.date && fieldDate) { fieldDate.value = result.date; fieldDate.classList.add('ai-filled'); }
-            if (result.description && fieldDesc) { fieldDesc.value = result.description; fieldDesc.classList.add('ai-filled'); }
-            if (result.montant > 0 && fieldMontant) { fieldMontant.value = result.montant; fieldMontant.classList.add('ai-filled'); }
-            if (fieldTag) fieldTag.value = result.tagSuggestion || 'a-classifier';
-            if (statusEl) {
-                statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--ok';
-                statusEl.textContent = `📄 ${file.name} — ✓ pré-rempli`;
-            }
-        } catch {
-            if (statusEl) {
-                statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
-                statusEl.textContent = `📄 ${file.name} — extraction impossible, remplis à la main`;
-            }
-            showToast('Extraction impossible, remplis le formulaire à la main', 'negative');
-        }
-    };
-
-    dropzone?.addEventListener('click', () => fileInput?.click());
-    dropzone?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); } });
-    dropzone?.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('owned-travaux-dropzone--dragover'); });
-    dropzone?.addEventListener('dragleave', () => dropzone.classList.remove('owned-travaux-dropzone--dragover'));
-    dropzone?.addEventListener('drop', e => {
-        e.preventDefault();
-        dropzone.classList.remove('owned-travaux-dropzone--dragover');
-        const file = e.dataTransfer.files?.[0];
-        if (file) handleQuickFile(file);
-    });
-    fileInput?.addEventListener('change', () => {
-        const file = fileInput.files?.[0];
-        if (file) handleQuickFile(file);
-        fileInput.value = '';
-    });
-
-    factureForm?.addEventListener('submit', async e => {
-        e.preventDefault();
-        const assetId = root.querySelector('[data-quick-asset-select]')?.value;
-        if (!assetId) { showToast('Choisis un bien', 'negative'); return; }
-        const date = fieldDate?.value;
-        const description = fieldDesc?.value.trim();
-        const montant = Number(fieldMontant?.value);
-        if (!date || !description || !montant) { showToast('Date, description et montant sont requis', 'negative'); return; }
-        const assetForDup = getOwnedAsset(assetId);
-        const doublon = assetForDup ? findSimilarTravail(assetForDup, { montant, date }) : null;
-        if (doublon && !window.confirm(`Une dépense très proche existe déjà : « ${doublon.description || 'sans description'} » du ${doublon.date} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €).\n\nAjouter quand même ce frais ?`)) {
-            return;
-        }
-        let pdfFilename = null;
-        if (quickPendingFile) {
-            try {
-                pdfFilename = await uploadOwnedDocument(assetId, quickPendingFile);
-            } catch {
-                showToast('Échec de l\'import du fichier', 'negative');
-                return;
-            }
-        }
-        addOwnedTravail(assetId, {
-            date, description, montant,
-            tag: fieldTag?.value || 'a-classifier',
-            commentaire: '',
-            pdfFilename,
-            financeParCredit: false
-        });
-        factureForm.reset();
-        resetQuickDropzone();
-        showToast('Frais ajouté');
-        onSubmitted(assetId);
-    });
-
-    return { reset: resetQuickDropzone };
-}
-
 // ─── Rail Actions rapides (#owned-quickrail, PC uniquement — absent de owned.html) ──────────────
 // Ouvre/ferme sur place un mini-formulaire (Ajouter un bien / Ajouter une facture) juste sous le
 // bouton cliqué, sans quitter la vue courante (liste ou fiche d'un bien).
@@ -2796,8 +2667,6 @@ function openOwnedQuickPanel(action) {
     rail.querySelectorAll('[data-quickaction]').forEach(b => { b.classList.toggle('owned-quickrail__action--active', b.dataset.quickaction === action); });
     if (action === 'add-bien') {
         document.getElementById('owned-quick-add-bien-form')?.querySelector('[name="nom"]')?.focus();
-    } else if (action === 'add-facture') {
-        _populateQuickAssetSelect(rail);
     }
     return true;
 }
@@ -2816,6 +2685,13 @@ function initOwnedQuickRail() {
     rail.querySelectorAll('[data-quickaction]').forEach(btn => {
         btn.addEventListener('click', () => {
             const action = btn.dataset.quickaction;
+            // « Ajouter une facture » n'a plus de panneau inline (2026-10-02) : même modale globale
+            // que le bouton flottant, bien pré-sélectionné si une fiche est ouverte.
+            if (action === 'add-facture') {
+                closeOwnedQuickPanels();
+                openAjoutFacturesModal({ assetId: state.activeOwnedAssetId || null });
+                return;
+            }
             const panel = rail.querySelector(`[data-quickpanel="${action}"]`);
             const wasOpen = panel && !panel.hidden;
             closeOwnedQuickPanels();
@@ -2846,36 +2722,26 @@ function initOwnedQuickRail() {
         closeOwnedQuickPanels();
         openImportDossierModal(null);
     });
-
-    // ─── Ajouter une facture ──────────────────────────────────────────────────
-    _wireQuickFactureForm(rail, assetId => {
-        closeOwnedQuickPanels();
-        _refreshAfterQuickFacture(assetId);
-    });
 }
 
-// ─── Bouton flottant Actions rapides mobile (#owned-quickfab, absent d'index.html) ──────────────
-// Équivalent mobile de "Ajouter une facture" du rail PC : visible partout sur owned.html (liste et
-// fiche d'un bien), ouvre une modale plein écran plutôt qu'un panneau inline (écran trop étroit).
-// Pas d'action "Ajouter un bien" ici : déjà accessible via le bouton existant de la Vue d'ensemble.
+// ─── Bouton flottant « Ajouter des factures » (#owned-quickfab, index.html ET owned.html) ───────
+// Depuis le 2026-10-02 : présent sur toutes les pages (PC : tous les onglets ; mobile : liste et
+// fiche), ouvre la modale globale openAjoutFacturesModal avec le bien de la fiche ouverte
+// pré-sélectionné. Plus de modale-formulaire dédiée (#owned-quickfab-modal supprimée).
 function initOwnedQuickFab() {
     const fab = document.getElementById('owned-quickfab');
-    const modal = document.getElementById('owned-quickfab-modal');
-    if (!fab || !modal) return; // absent sur index.html (PC) : voir initOwnedQuickRail
+    if (!fab) return;
+    fab.addEventListener('click', () => openAjoutFacturesModal({ assetId: state.activeOwnedAssetId || null }));
+}
 
-    const closeModal = () => modal.hidden = true;
-
-    fab.addEventListener('click', () => {
-        modal.hidden = false;
-        _populateQuickAssetSelect(modal);
-    });
-    modal.querySelector('[data-quickcancel]')?.addEventListener('click', closeModal);
-    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-
-    _wireQuickFactureForm(modal, assetId => {
-        closeModal();
-        _refreshAfterQuickFacture(assetId);
-    });
+// Visible dès que le portefeuille cloud est chargé ; masqué hors connexion (rien à rattacher) et
+// dans la fenêtre d'analyse détachée. Appelé à chaque renderCollections() — seul point commun à
+// tous les changements d'état auth/cloud. `.owned-quickfab[hidden]` est explicitement display:none
+// en CSS, car la classe pose display:flex qui l'emporterait sinon sur l'attribut hidden.
+function _syncQuickFabVisibility() {
+    const fab = document.getElementById('owned-quickfab');
+    if (!fab) return;
+    fab.hidden = !!IS_ANALYSIS_WINDOW || !_authUser || !_cloudLoaded;
 }
 
 function openOwnedDeleteModal(assetId) {
@@ -3193,14 +3059,17 @@ function renderOwnedCfTable(asset) {
 
 const _isImageFilename = filename => /\.(jpe?g|png)$/i.test(filename || '');
 
-async function openDocumentPreview(assetId, filename) {
+// `local` ({ url }) : fichier encore en mémoire (modale « Ajouter des factures », URL blob), pas
+// encore stocké — même overlay et mêmes règles tactiles que pour un justificatif cloud.
+async function openDocumentPreview(assetId, filename, local = null) {
+    const resolveUrl = () => (local?.url ? Promise.resolve(local.url) : cloudDocumentUrl(assetId, filename));
     // Écran tactile + PDF : Safari iOS n'affiche que la 1re page d'un <embed> PDF, sans défilement
     // ni zoom. On ouvre plutôt le lecteur PDF natif dans un nouvel onglet. La fenêtre est ouverte
     // AVANT l'await (dans le geste utilisateur) sinon iOS bloque le popup, puis redirigée vers l'URL.
     if (!_isImageFilename(filename) && window.matchMedia?.('(pointer: coarse)').matches) {
         const win = window.open('', '_blank');
         try {
-            const url = await cloudDocumentUrl(assetId, filename);
+            const url = await resolveUrl();
             if (win) win.location.href = url; else window.location.href = url;
         } catch {
             win?.close();
@@ -3233,7 +3102,7 @@ async function openDocumentPreview(assetId, filename) {
     img.src = '';
     overlay.hidden = false;
     try {
-        const url = await cloudDocumentUrl(assetId, filename);
+        const url = await resolveUrl();
         if (isImage) img.src = url; else embed.src = url;
     } catch {
         overlay.hidden = true;
@@ -3741,10 +3610,11 @@ function renderOwnedTravauxTab(asset) {
         }
 
         try {
-            const base64 = await _fileToBase64(file);
-            const result = await cloudExtraireFraisFacture(base64, file.type);
+            const { base64, mimeType } = await _prepareFactureImage(file);
+            const result = await cloudExtraireFraisFacture(base64, mimeType);
+            const descriptionIA = _buildFactureDescription(result.fournisseur, result.description);
             if (result.date) { fieldDate.value = result.date; fieldDate.classList.add('ai-filled'); }
-            if (result.description) { fieldDesc.value = result.description; fieldDesc.classList.add('ai-filled'); }
+            if (descriptionIA) { fieldDesc.value = descriptionIA; fieldDesc.classList.add('ai-filled'); }
             if (result.montant > 0) { fieldMontant.value = result.montant; fieldMontant.classList.add('ai-filled'); }
             fieldTag.value = result.tagSuggestion || 'a-classifier';
             tagBadge.hidden = false;
@@ -3763,14 +3633,14 @@ function renderOwnedTravauxTab(asset) {
     dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
     dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('owned-travaux-dropzone--dragover'); });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('owned-travaux-dropzone--dragover'));
-    // Plusieurs fichiers a la fois -> modale de revue groupee (openTravauxBatchModal) ; un seul
-    // fichier -> flux inline existant (handleFile), inchange. Voir spec
-    // docs/superpowers/specs/2026-08-04-travaux-import-groupe.md.
+    // Plusieurs fichiers a la fois -> modale globale « Ajouter des factures » verrouillee sur ce
+    // bien (openAjoutFacturesModal, remplace l'import groupe du 2026-08-04) ; un seul fichier ->
+    // flux inline existant (handleFile), inchange.
     const handleFiles = fileList => {
         const files = Array.from(fileList || []);
         if (files.length === 0) return;
         if (files.length === 1) { handleFile(files[0]); return; }
-        openTravauxBatchModal(files);
+        openAjoutFacturesModal({ assetId: state.activeOwnedAssetId, files, lockAsset: true });
     };
     dropzone.addEventListener('drop', e => {
         e.preventDefault();
@@ -3828,158 +3698,450 @@ function renderOwnedTravauxTab(asset) {
     });
 }
 
-// Import groupe : plusieurs fichiers deposes d'un coup sur le dropzone (renderOwnedTravauxTab)
-// -> revue en tableau, extraction IA en concurrence limitee, validation en un clic. Voir spec
-// docs/superpowers/specs/2026-08-04-travaux-import-groupe.md. Le flux fichier unique
-// (handleFile, dans renderOwnedTravauxTab) reste inchange.
-async function openTravauxBatchModal(files) {
-    const id = state.activeOwnedAssetId;
-    if (!id) return;
+// ─── AJOUT DE FACTURES — modale globale ──────────────────────────────────────────────────────
+// Ouverte par le bouton flottant #owned-quickfab (PC et mobile), par « Ajouter une facture » du
+// rail Actions rapides (PC) et par le dépôt de 2+ fichiers dans l'onglet Frais d'un bien (bien
+// verrouillé). Voir spec docs/superpowers/specs/2026-10-02-ajout-factures-bouton-global.md. Remplace
+// l'import groupé (openTravauxBatchModal) et les deux formulaires rapides rail/FAB du 2026-08-04 :
+// une seule logique — choisir le bien, déposer fichiers/photos/dossier, l'IA lit fournisseur /
+// résumé / montant / date d'émission, revue en ligne, un clic pour tout enregistrer. Rien n'est
+// stocké tant que l'utilisateur n'a pas validé (pas de boîte de réception persistante, choix spec).
 
-    const rows = files.map((file, idx) => ({ idx, file, status: 'loading', date: '', description: '', montant: 0, tag: 'a-classifier' }));
+const FM_LAST_ASSET_KEY = 'spark:factures:lastAsset';
+const FM_MAX_FILES_PER_DROP = 50;
+const FM_EXISTING_VISIBLE = 10;
+const FM_FILE_EXT = /\.(pdf|jpe?g|png)$/i;
+
+// Prépare l'image envoyée à l'IA : un PDF est rasterisé (première page, _pdfFirstPageToPngFile),
+// une image passe telle quelle. Mammouth AI refuse application/pdf côté serveur — jusqu'au
+// 2026-10-02 les flux factures envoyaient file.type brut et toute facture PDF échouait en silence
+// (« extraction impossible, remplis à la main »). `imageFile` sert aussi de miniature.
+async function _prepareFactureImage(file) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    const imageFile = isPdf ? await _pdfFirstPageToPngFile(file) : file;
+    const base64 = await _fileToBase64(imageFile);
+    return { base64, mimeType: imageFile.type || 'image/png', imageFile };
+}
+
+// Fichiers déposés par glisser-déposer : fichiers isolés ET dossiers (webkitGetAsEntry récursif ;
+// readEntries rend par lots de 100, d'où la boucle jusqu'à un lot vide). Les entries sont prises
+// synchroniquement dans le handler drop — le DataTransfer est vidé juste après l'événement.
+async function _collectDroppedFiles(dataTransfer) {
+    const entries = Array.from(dataTransfer?.items || [])
+        .map(item => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+        .filter(Boolean);
+    if (!entries.length) return Array.from(dataTransfer?.files || []);
+    const readAll = reader => new Promise((resolve, reject) => {
+        const acc = [];
+        const step = () => reader.readEntries(batch => {
+            if (!batch.length) return resolve(acc);
+            acc.push(...batch);
+            step();
+        }, reject);
+        step();
+    });
+    const out = [];
+    const walk = async entry => {
+        if (entry.isFile) {
+            out.push(await new Promise((resolve, reject) => entry.file(resolve, reject)));
+        } else if (entry.isDirectory) {
+            for (const child of await readAll(entry.createReader())) await walk(child);
+        }
+    };
+    for (const entry of entries) await walk(entry);
+    return out;
+}
+
+// Tri des fichiers acceptés : extension OU type MIME (un dossier Windows donne parfois un type
+// vide), fichiers cachés (.DS_Store…) ignorés en silence, taille et nombre plafonnés.
+function _filterFactureFiles(files) {
+    const accepted = [], rejectedFormat = [], rejectedSize = [];
+    for (const file of files) {
+        if (!file || /^\./.test(file.name || '')) continue;
+        if (!FM_FILE_EXT.test(file.name || '') && !TRAVAUX_ACCEPTED_MIME.includes(file.type)) { rejectedFormat.push(file); continue; }
+        if (file.size > TRAVAUX_MAX_FILE_SIZE) { rejectedSize.push(file); continue; }
+        accepted.push(file);
+    }
+    const truncated = Math.max(0, accepted.length - FM_MAX_FILES_PER_DROP);
+    return { accepted: accepted.slice(0, FM_MAX_FILES_PER_DROP), rejectedFormat, rejectedSize, truncated };
+}
+
+function _formatDateFr(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || '—');
+}
+
+// Description du frais enregistré : « Fournisseur — résumé ». Pas de champ fournisseur dédié sur
+// le modèle travail (choix spec 2026-10-02 : visible et éditable partout sans toucher aux rendus
+// Travaux/PDF/rapport/Assistant) ; pas de tiret orphelin si l'un des deux manque.
+function _buildFactureDescription(fournisseur, resume) {
+    const f = String(fournisseur || '').trim(), r = String(resume || '').trim();
+    return f && r ? `${f} — ${r}` : (r || f);
+}
+
+// Erreur `resource-exhausted` de la Cloud Function (rate-limit 30 lectures/h, functions/index.js).
+function _isQuotaError(err) {
+    return /resource-exhausted/.test(String(err?.code || err?.message || ''));
+}
+
+async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = false } = {}) {
+    const assets = getOrderedAssetList();
+    if (!assets.length) {
+        const empty = _showOwnedModal(`
+            <div class="owned-modal owned-fm">
+                <div class="owned-modal-head">
+                    <h3 class="owned-modal-title">Ajouter des factures</h3>
+                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                </div>
+                <div class="owned-fm__none">
+                    <p>Crée d'abord un bien : les factures s'enregistrent sur un bien du portefeuille.</p>
+                    <button type="button" class="btn btn--primary" data-fm-add-bien>Ajouter un bien</button>
+                </div>
+            </div>`, 'owned-factures-modal');
+        empty.querySelector('[data-fm-add-bien]')?.addEventListener('click', () => { empty.hidden = true; openOwnedAddModal(); });
+        return;
+    }
+    let lastUsed = null;
+    try { lastUsed = localStorage.getItem(FM_LAST_ASSET_KEY); } catch { /* stockage indisponible */ }
+    const initialId = [assetId, lastUsed, assets[0].id].find(id => id && assets.some(a => a.id === id));
+    let currentAssetId = initialId;
+
     const TAG_OPTIONS = `
         <option value="a-classifier">À classifier</option>
         <option value="deductible">Déductible</option>
         <option value="non-deductible">Non déductible</option>`;
 
-    const rowHtml = row => `
-        <tr>
-            <td><input type="checkbox" data-batch-check="${row.idx}" checked aria-label="Inclure ${escapeHtml(row.file.name)}"></td>
-            <td class="owned-batch-filename">
-                📄 ${escapeHtml(row.file.name)}
-                <div class="owned-batch-status" data-batch-status="${row.idx}">lecture…</div>
-                <div class="owned-batch-duplicate" data-batch-duplicate="${row.idx}" hidden></div>
-            </td>
-            <td><input type="date" class="variables-input" data-batch-field="date" data-idx="${row.idx}"></td>
-            <td><input type="text" class="variables-input" data-batch-field="description" data-idx="${row.idx}" placeholder="Description"></td>
-            <td><input type="number" class="variables-input" data-batch-field="montant" data-idx="${row.idx}" placeholder="Montant €" min="0"></td>
-            <td><select class="variables-input" data-batch-field="tag" data-idx="${row.idx}">${TAG_OPTIONS}</select></td>
-        </tr>`;
-
     const modal = _showOwnedModal(`
-        <div class="owned-modal owned-modal--xwide">
+        <div class="owned-modal owned-modal--xwide owned-fm">
             <div class="owned-modal-head">
                 <div>
-                    <h3 class="owned-modal-title">Import groupé — ${files.length} factures</h3>
-                    <div class="owned-modal-sub" data-batch-progress>Analyse en cours… 0 / ${files.length}</div>
+                    <h3 class="owned-modal-title">Ajouter des factures</h3>
+                    <div class="owned-modal-sub">Dépose, vérifie, valide — l'IA lit fournisseur, résumé, montant et date d'émission.</div>
                 </div>
                 <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
             </div>
-            <div class="owned-batch-table-wrap">
-                <table class="owned-batch-table">
-                    <thead><tr><th></th><th>Fichier</th><th>Date</th><th>Description</th><th>Montant</th><th>Tag</th></tr></thead>
-                    <tbody>${rows.map(rowHtml).join('')}</tbody>
-                </table>
+            <label class="owned-fm__asset">
+                <span class="variables-label">Bien</span>
+                <select class="variables-input" data-fm-asset ${lockAsset ? 'disabled' : ''}>
+                    ${assets.map(a => `<option value="${escapeHtml(a.id)}" ${a.id === initialId ? 'selected' : ''}>${escapeHtml(a.nom || a.id)}${a.ville ? ` · ${escapeHtml(a.ville)}` : ''}</option>`).join('')}
+                </select>
+            </label>
+            <div class="owned-travaux-dropzone owned-fm__dropzone" data-fm-dropzone tabindex="0" role="button" aria-label="Déposer des factures">
+                <input type="file" data-fm-file-input multiple accept="application/pdf,image/*" hidden>
+                <input type="file" data-fm-folder-input webkitdirectory multiple hidden>
+                <div class="owned-travaux-dropzone__icon">⤓</div>
+                <div class="owned-travaux-dropzone__label">${IS_MOBILE_PAGE ? 'Prends une photo ou choisis des fichiers' : 'Glisse des fichiers ou un dossier entier'}</div>
+                <div class="owned-travaux-dropzone__hint">PDF, JPG ou PNG — 8 Mo max par fichier</div>
+                <div class="owned-fm__dropzone-actions">
+                    <button type="button" class="btn btn--ghost btn--sm" data-fm-files-btn>Choisir des fichiers</button>
+                    <button type="button" class="btn btn--ghost btn--sm" data-fm-folder-btn ${IS_MOBILE_PAGE ? 'hidden' : ''}>Choisir un dossier</button>
+                </div>
             </div>
-            <div class="owned-modal-actions">
-                <button type="button" class="btn btn--ghost" data-close-modal>Annuler</button>
-                <button type="button" class="btn btn--primary" data-batch-submit disabled>Ajouter les ${files.length} frais</button>
+            <section class="owned-fm__section" data-fm-pending-section hidden>
+                <div class="owned-fm__section-title">En cours d'ajout <span class="owned-fm__count" data-fm-pending-count></span></div>
+                <div class="owned-fm__rows" data-fm-rows></div>
+                <div class="owned-modal-actions">
+                    <button type="button" class="btn btn--primary" data-fm-submit disabled>Ajouter</button>
+                </div>
+            </section>
+            <details class="owned-fm__existing" data-fm-existing-details ${IS_MOBILE_PAGE ? '' : 'open'}>
+                <summary>Déjà enregistrées sur ce bien <span class="owned-fm__count" data-fm-existing-count></span></summary>
+                <div data-fm-existing></div>
+            </details>
+        </div>`, 'owned-factures-modal');
+    modal.classList.add('owned-modal-overlay--fm');
+
+    const q = sel => modal.querySelector(sel);
+    const assetSelect = q('[data-fm-asset]');
+    const dropzone = q('[data-fm-dropzone]');
+    const fileInput = q('[data-fm-file-input]');
+    const folderInput = q('[data-fm-folder-input]');
+    const rowsEl = q('[data-fm-rows]');
+    const pendingSection = q('[data-fm-pending-section]');
+    const pendingCount = q('[data-fm-pending-count]');
+    const submitBtn = q('[data-fm-submit]');
+    const existingEl = q('[data-fm-existing]');
+    const existingCount = q('[data-fm-existing-count]');
+
+    const rows = [];           // { rid, file, imageFile, base64, mimeType, previewUrl, status, el, dupSeen }
+    let ridSeq = 0;
+    let existingExpanded = false;
+    const objectUrls = new Set();
+    const makeUrl = blob => { const u = URL.createObjectURL(blob); objectUrls.add(u); return u; };
+    const releaseUrls = () => { objectUrls.forEach(u => URL.revokeObjectURL(u)); objectUrls.clear(); };
+
+    // ─── Liste du bas : frais déjà enregistrés sur le bien sélectionné (tri date d'émission ↓) ───
+    const renderExisting = () => {
+        const asset = getOwnedAsset(currentAssetId);
+        const travaux = [...(asset?.postAchat?.travaux || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        if (existingCount) existingCount.textContent = travaux.length ? `(${travaux.length})` : '';
+        if (!travaux.length) { existingEl.innerHTML = '<p class="owned-fm__empty">Aucun frais enregistré sur ce bien.</p>'; return; }
+        const visible = existingExpanded ? travaux : travaux.slice(0, FM_EXISTING_VISIBLE);
+        const hiddenCount = travaux.length - visible.length;
+        existingEl.innerHTML = `
+            <div class="owned-fm-existing__list">
+                ${visible.map(t => `
+                    <div class="owned-fm-existing__row" data-travail-id="${escapeHtml(t.id)}">
+                        <span class="owned-fm-existing__date" data-fm-existing-date>${escapeHtml(_formatDateFr(t.date))}</span>
+                        <span class="owned-fm-existing__desc" data-fm-existing-desc title="${escapeHtml(t.description || '')}">${escapeHtml(t.description || '—')}</span>
+                        <span class="owned-fm-existing__montant" data-fm-existing-montant>${Math.round(t.montant || 0).toLocaleString('fr-FR')} €</span>
+                        ${t.pdfFilename
+                            ? `<button type="button" class="owned-fm-existing__preview" data-fm-existing-preview="${escapeHtml(t.pdfFilename)}" title="Voir la facture" aria-label="Voir la facture de ${escapeHtml(t.description || 'ce frais')}">📄</button>`
+                            : '<span class="owned-fm-existing__nopreview" aria-hidden="true">—</span>'}
+                    </div>`).join('')}
             </div>
-        </div>
-    `, 'owned-travaux-batch-modal');
-
-    const progressEl = modal.querySelector('[data-batch-progress]');
-    const submitBtn = modal.querySelector('[data-batch-submit]');
-
-    const updateSubmitLabel = () => {
-        if (!submitBtn) return;
-        const checkedCount = modal.querySelectorAll('[data-batch-check]:checked').length;
-        submitBtn.textContent = checkedCount > 0 ? `Ajouter les ${checkedCount} frais` : 'Aucun frais sélectionné';
-        submitBtn.disabled = doneCount < files.length || checkedCount === 0;
-    };
-    modal.querySelectorAll('[data-batch-check]').forEach(cb => cb.addEventListener('change', updateSubmitLabel));
-
-    // Ré-évaluée à chaque extraction terminée ET à chaque édition manuelle d'un champ date/montant
-    // (l'utilisateur peut corriger un montant mal extrait, ce qui doit re-déclencher/lever l'alerte) —
-    // contre l'état RÉEL du bien (getOwnedAsset), pas contre les autres lignes de ce même batch : deux
-    // factures distinctes du même montant le même jour restent un cas légitime, seul un rapprochement
-    // avec une dépense DÉJÀ enregistrée avant l'ouverture de cette modale doit être signalé.
-    const checkRowDuplicate = idx => {
-        const dupEl = modal.querySelector(`[data-batch-duplicate="${idx}"]`);
-        if (!dupEl) return;
-        const dateEl = modal.querySelector(`[data-batch-field="date"][data-idx="${idx}"]`);
-        const montantEl = modal.querySelector(`[data-batch-field="montant"][data-idx="${idx}"]`);
-        const asset = getOwnedAsset(id);
-        const doublon = asset ? findSimilarTravail(asset, { montant: Number(montantEl?.value), date: dateEl?.value }) : null;
-        dupEl.hidden = !doublon;
-        if (doublon) dupEl.textContent = `⚠ Possible doublon : « ${doublon.description || 'sans description'} » du ${doublon.date}`;
-    };
-
-    const applyRow = row => {
-        const statusEl = modal.querySelector(`[data-batch-status="${row.idx}"]`);
-        if (statusEl) {
-            statusEl.textContent = row.status === 'ok' ? '✓ pré-rempli' : row.status === 'error' ? 'extraction impossible' : 'lecture…';
-            statusEl.className = `owned-batch-status ${row.status === 'ok' ? 'owned-batch-status--ok' : row.status === 'error' ? 'owned-batch-status--error' : ''}`;
-        }
-        const dateEl = modal.querySelector(`[data-batch-field="date"][data-idx="${row.idx}"]`);
-        const descEl = modal.querySelector(`[data-batch-field="description"][data-idx="${row.idx}"]`);
-        const montantEl = modal.querySelector(`[data-batch-field="montant"][data-idx="${row.idx}"]`);
-        const tagEl = modal.querySelector(`[data-batch-field="tag"][data-idx="${row.idx}"]`);
-        if (dateEl) dateEl.value = row.date;
-        if (descEl) descEl.value = row.description;
-        if (montantEl) montantEl.value = row.montant > 0 ? row.montant : '';
-        if (tagEl) tagEl.value = row.tag;
-        checkRowDuplicate(row.idx);
-    };
-    rows.forEach(row => {
-        ['date', 'montant'].forEach(field => {
-            modal.querySelector(`[data-batch-field="${field}"][data-idx="${row.idx}"]`)
-                ?.addEventListener('change', () => checkRowDuplicate(row.idx));
+            ${hiddenCount > 0 ? `<button type="button" class="btn btn--ghost btn--sm owned-fm-existing__more" data-fm-existing-more>Voir les ${hiddenCount} autres</button>` : ''}`;
+        existingEl.querySelector('[data-fm-existing-more]')?.addEventListener('click', () => { existingExpanded = true; renderExisting(); refreshDuplicates(); });
+        existingEl.querySelectorAll('[data-fm-existing-preview]').forEach(btn => {
+            btn.addEventListener('click', () => openDocumentPreview(currentAssetId, btn.dataset.fmExistingPreview));
         });
-    });
+    };
 
-    let doneCount = 0;
-    await _runWithConcurrencyLimit(rows, 3, async row => {
-        try {
-            const base64 = await _fileToBase64(row.file);
-            const result = await cloudExtraireFraisFacture(base64, row.file.type);
-            row.status = 'ok';
-            row.date = result.date || '';
-            row.description = result.description || '';
-            row.montant = result.montant > 0 ? result.montant : 0;
-            row.tag = result.tagSuggestion || 'a-classifier';
-        } catch {
-            row.status = 'error';
+    // ─── Lignes en cours : le DOM est la source de vérité des valeurs (éditables) ───
+    const rowValues = row => ({
+        fournisseur: row.el.querySelector('[data-fm-field="fournisseur"]').value.trim(),
+        description: row.el.querySelector('[data-fm-field="description"]').value.trim(),
+        montant: Number(row.el.querySelector('[data-fm-field="montant"]').value) || 0,
+        date: row.el.querySelector('[data-fm-field="date"]').value,
+        tag: row.el.querySelector('[data-fm-field="tag"]').value
+    });
+    const isComplete = v => !!(v.date && v.description && v.montant > 0);
+    const rowCheck = row => row.el.querySelector('[data-fm-check]');
+    const setStatus = (row, text, tone = '') => {
+        const el = row.el.querySelector('[data-fm-status]');
+        el.textContent = text;
+        el.className = `owned-batch-status${tone ? ` owned-batch-status--${tone}` : ''}`;
+    };
+
+    const updateSubmit = () => {
+        const eligible = rows.filter(r => r.status !== 'loading' && rowCheck(r).checked && isComplete(rowValues(r))).length;
+        submitBtn.disabled = eligible === 0;
+        submitBtn.textContent = eligible === 0 ? 'Ajouter' : eligible === 1 ? 'Ajouter 1 frais' : `Ajouter les ${eligible} frais`;
+        pendingSection.hidden = rows.length === 0;
+        pendingCount.textContent = rows.length ? `(${rows.length})` : '';
+    };
+
+    // Doublon : contre les frais DÉJÀ enregistrés sur le bien (findSimilarTravail, ±2 € / ±5 j),
+    // jamais entre deux lignes en cours (deux factures du même montant le même jour restent un cas
+    // légitime). Ligne décochée une seule fois par précaution (dupSeen) — l'utilisateur peut la
+    // recocher sans qu'on la décoche à nouveau ; la ligne existante correspondante est surlignée.
+    const refreshDuplicates = () => {
+        existingEl.querySelectorAll('.owned-fm-existing__row--dup').forEach(el => el.classList.remove('owned-fm-existing__row--dup'));
+        const asset = getOwnedAsset(currentAssetId);
+        for (const row of rows) {
+            const dupEl = row.el.querySelector('[data-fm-dup]');
+            const v = rowValues(row);
+            const doublon = asset && v.montant > 0 && v.date ? findSimilarTravail(asset, { montant: v.montant, date: v.date }) : null;
+            dupEl.hidden = !doublon;
+            if (doublon) {
+                dupEl.textContent = `⚠ Doublon probable : « ${doublon.description || 'sans description'} » du ${_formatDateFr(doublon.date)} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €) — décoché par précaution`;
+                existingEl.querySelector(`[data-travail-id="${CSS.escape(doublon.id)}"]`)?.classList.add('owned-fm-existing__row--dup');
+                if (!row.dupSeen) { row.dupSeen = true; rowCheck(row).checked = false; }
+            }
         }
-        applyRow(row);
-        doneCount++;
-        progressEl.textContent = doneCount < files.length
-            ? `Analyse en cours… ${doneCount} / ${files.length}`
-            : `Analyse terminée — vérifie les champs avant de valider`;
-        if (doneCount === files.length) updateSubmitLabel();
-    });
+        updateSubmit();
+    };
 
-    submitBtn?.addEventListener('click', async () => {
+    const fillRow = (row, result) => {
+        const set = (field, value) => {
+            const input = row.el.querySelector(`[data-fm-field="${field}"]`);
+            input.value = value;
+            input.classList.toggle('ai-filled', value !== '' && value !== 0);
+        };
+        set('fournisseur', result.fournisseur || '');
+        set('description', result.description || '');
+        set('montant', result.montant > 0 ? result.montant : '');
+        set('date', result.date || '');
+        row.el.querySelector('[data-fm-field="tag"]').value = result.tagSuggestion || 'a-classifier';
+    };
+
+    const extractRow = async row => {
+        row.status = 'loading';
+        row.el.classList.add('owned-fm-row--loading');
+        row.el.querySelector('[data-fm-retry]').hidden = true;
+        setStatus(row, 'Lecture…');
+        updateSubmit();
+        try {
+            if (!row.base64) {
+                const prepared = await _prepareFactureImage(row.file);
+                row.imageFile = prepared.imageFile;
+                row.base64 = prepared.base64;
+                row.mimeType = prepared.mimeType;
+                const thumb = row.el.querySelector('[data-fm-thumb]');
+                if (thumb.hidden) {
+                    thumb.src = makeUrl(row.imageFile);
+                    thumb.hidden = false;
+                    row.el.querySelector('[data-fm-thumb-icon]').hidden = true;
+                }
+            }
+            const result = await cloudExtraireFraisFacture(row.base64, row.mimeType);
+            fillRow(row, result);
+            row.status = 'ok';
+            const complete = isComplete(rowValues(row));
+            setStatus(row, complete ? '✓ lu par l\'IA — vérifie avant d\'ajouter' : 'À compléter (date, résumé, montant)', complete ? 'ok' : '');
+            rowCheck(row).checked = complete;
+        } catch (err) {
+            row.status = 'error';
+            rowCheck(row).checked = false;
+            row.el.querySelector('[data-fm-retry]').hidden = false;
+            setStatus(row, _isQuotaError(err)
+                ? 'Quota IA atteint — réessaie dans une heure, ou complète à la main'
+                : 'Lecture impossible — complète à la main', 'error');
+        }
+        row.el.classList.remove('owned-fm-row--loading');
+        refreshDuplicates();
+    };
+
+    const removeRow = row => {
+        const i = rows.indexOf(row);
+        if (i >= 0) rows.splice(i, 1);
+        row.el.remove();
+        refreshDuplicates();
+    };
+
+    const addRow = file => {
+        const rid = `fm-${++ridSeq}`;
+        const el = document.createElement('div');
+        el.className = 'owned-fm-row';
+        el.dataset.fmRow = rid;
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+        el.innerHTML = `
+            <input type="checkbox" class="owned-fm-row__check" data-fm-check aria-label="Inclure ${escapeHtml(file.name)}">
+            <button type="button" class="owned-fm-row__thumb" data-fm-preview title="Aperçu de la facture" aria-label="Aperçu de ${escapeHtml(file.name)}">
+                <img data-fm-thumb alt="" hidden>
+                <span data-fm-thumb-icon aria-hidden="true">${isPdf ? '📄' : '🖼'}</span>
+            </button>
+            <div class="owned-fm-row__main">
+                <div class="owned-fm-row__line">
+                    <input type="text" class="variables-input" data-fm-field="fournisseur" placeholder="Fournisseur" aria-label="Fournisseur">
+                    <input type="number" class="variables-input owned-fm-row__montant" data-fm-field="montant" placeholder="Montant €" min="0" step="0.01" aria-label="Montant">
+                </div>
+                <div class="owned-fm-row__line">
+                    <input type="text" class="variables-input" data-fm-field="description" placeholder="Résumé (ex : peinture salon)" aria-label="Résumé">
+                    <label class="owned-fm-row__date">émise le <input type="date" class="variables-input" data-fm-field="date" aria-label="Date d'émission"></label>
+                    <select class="variables-input" data-fm-field="tag" aria-label="Nature fiscale">${TAG_OPTIONS}</select>
+                </div>
+                <div class="owned-fm-row__meta">
+                    <span class="owned-fm-row__file" data-fm-filename title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                    <span class="owned-batch-status" data-fm-status>Lecture…</span>
+                    <button type="button" class="owned-fm-row__retry" data-fm-retry hidden>Relire</button>
+                </div>
+                <div class="owned-batch-duplicate" data-fm-dup hidden></div>
+            </div>
+            <div class="owned-fm-row__tools">
+                <button type="button" data-fm-remove title="Retirer de la liste" aria-label="Retirer ${escapeHtml(file.name)}">✕</button>
+            </div>`;
+        rowsEl.appendChild(el);
+        const row = { rid, file, imageFile: null, base64: null, mimeType: null, previewUrl: null, status: 'loading', el, dupSeen: false };
+        rows.push(row);
+        if (!isPdf) {
+            const thumb = el.querySelector('[data-fm-thumb]');
+            thumb.src = makeUrl(file);
+            thumb.hidden = false;
+            el.querySelector('[data-fm-thumb-icon]').hidden = true;
+        }
+        el.querySelector('[data-fm-check]').addEventListener('change', updateSubmit);
+        ['montant', 'date'].forEach(f => el.querySelector(`[data-fm-field="${f}"]`).addEventListener('change', refreshDuplicates));
+        el.querySelector('[data-fm-field="description"]').addEventListener('change', updateSubmit);
+        el.querySelector('[data-fm-retry]').addEventListener('click', () => extractRow(row));
+        el.querySelector('[data-fm-remove]').addEventListener('click', () => removeRow(row));
+        el.querySelector('[data-fm-preview]').addEventListener('click', () => {
+            if (!row.previewUrl) row.previewUrl = makeUrl(row.file);
+            openDocumentPreview(null, row.file.name, { url: row.previewUrl });
+        });
+        return row;
+    };
+
+    const addFiles = async incoming => {
+        const { accepted, rejectedFormat, rejectedSize, truncated } = _filterFactureFiles(incoming);
+        const notes = [];
+        if (rejectedFormat.length) notes.push(`${rejectedFormat.length} fichier${rejectedFormat.length > 1 ? 's' : ''} ignoré${rejectedFormat.length > 1 ? 's' : ''} (format non supporté)`);
+        if (rejectedSize.length) notes.push(`${rejectedSize.length} fichier${rejectedSize.length > 1 ? 's' : ''} ignoré${rejectedSize.length > 1 ? 's' : ''} (plus de 8 Mo)`);
+        if (truncated) notes.push(`seuls les ${FM_MAX_FILES_PER_DROP} premiers fichiers ont été pris`);
+        if (notes.length) showToast(notes.join(' · '), 'negative');
+        if (!accepted.length) return;
+        const newRows = accepted.map(addRow);
+        updateSubmit();
+        await _runWithConcurrencyLimit(newRows, 3, extractRow);
+    };
+
+    // ─── Validation : upload de l'original + addOwnedTravail par ligne cochée et complète ───
+    submitBtn.addEventListener('click', async () => {
+        const asset = getOwnedAsset(currentAssetId);
+        if (!asset) { showToast('Ce bien n\'existe plus', 'negative'); return; }
+        const toAdd = rows.filter(r => r.status !== 'loading' && rowCheck(r).checked && isComplete(rowValues(r)));
+        if (!toAdd.length) return;
         submitBtn.disabled = true;
         submitBtn.textContent = 'Ajout en cours…';
-        let added = 0, skipped = 0;
-        for (const row of rows) {
-            const checked = modal.querySelector(`[data-batch-check="${row.idx}"]`)?.checked;
-            if (!checked) continue;
-            const date = modal.querySelector(`[data-batch-field="date"][data-idx="${row.idx}"]`)?.value;
-            const description = modal.querySelector(`[data-batch-field="description"][data-idx="${row.idx}"]`)?.value.trim();
-            const montant = Number(modal.querySelector(`[data-batch-field="montant"][data-idx="${row.idx}"]`)?.value);
-            const tag = modal.querySelector(`[data-batch-field="tag"][data-idx="${row.idx}"]`)?.value;
-            if (!date || !description || !montant) { skipped++; continue; }
-            let pdfFilename;
+        let added = 0, failed = 0;
+        for (const row of toAdd) {
+            const v = rowValues(row);
+            let pdfFilename = null;
             try {
-                pdfFilename = await uploadOwnedDocument(id, row.file);
+                pdfFilename = await uploadOwnedDocument(currentAssetId, row.file);
             } catch {
-                skipped++;
+                failed++;
+                setStatus(row, 'Échec de l\'envoi du fichier — réessaie', 'error');
                 continue;
             }
-            addOwnedTravail(id, { date, description, montant, tag, commentaire: '', pdfFilename, financeParCredit: false });
+            addOwnedTravail(currentAssetId, {
+                date: v.date,
+                description: _buildFactureDescription(v.fournisseur, v.description),
+                montant: v.montant,
+                tag: v.tag,
+                commentaire: '',
+                pdfFilename,
+                financeParCredit: false
+            });
             added++;
+            const i = rows.indexOf(row);
+            if (i >= 0) rows.splice(i, 1);
+            row.el.remove();
         }
-        modal.hidden = true;
-        showToast(skipped > 0 ? `${added} frais ajoutés, ${skipped} ignoré${skipped > 1 ? 's' : ''}` : `${added} frais ajoutés`);
-        const fresh = getOwnedAsset(id);
-        renderOwnedTravauxTab(fresh);
-        renderAccordionPostAchat(fresh);
-        renderOwnedSynthese(fresh);
-        renderOwnedCalculTab(fresh);
-        renderAccordionSimulateur(fresh);
+        try { localStorage.setItem(FM_LAST_ASSET_KEY, currentAssetId); } catch { /* ignore */ }
+        if (added) showToast(`${added} frais ajouté${added > 1 ? 's' : ''} à ${asset.nom || 'ce bien'}${failed ? ` — ${failed} en échec` : ''}`, failed ? 'negative' : 'positive');
+        else if (failed) showToast('Aucun frais ajouté — échec de l\'envoi des fichiers', 'negative');
+        renderExisting();
+        refreshDuplicates();
+        _refreshAfterFacturesAdd(currentAssetId);
     });
+
+    // ─── Dépôt ───
+    const openFilePicker = () => fileInput.click();
+    dropzone.addEventListener('click', openFilePicker);
+    dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFilePicker(); } });
+    q('[data-fm-files-btn]').addEventListener('click', e => { e.stopPropagation(); openFilePicker(); });
+    q('[data-fm-folder-btn]').addEventListener('click', e => { e.stopPropagation(); folderInput.click(); });
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('owned-travaux-dropzone--dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('owned-travaux-dropzone--dragover'));
+    dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('owned-travaux-dropzone--dragover');
+        _collectDroppedFiles(e.dataTransfer).then(addFiles).catch(() => showToast('Lecture du dossier impossible', 'negative'));
+    });
+    fileInput.addEventListener('change', () => { addFiles(Array.from(fileInput.files || [])); fileInput.value = ''; });
+    folderInput.addEventListener('change', () => { addFiles(Array.from(folderInput.files || [])); folderInput.value = ''; });
+
+    assetSelect.addEventListener('change', () => {
+        currentAssetId = assetSelect.value;
+        try { localStorage.setItem(FM_LAST_ASSET_KEY, currentAssetId); } catch { /* ignore */ }
+        rows.forEach(r => { r.dupSeen = false; });
+        existingExpanded = false;
+        renderExisting();
+        refreshDuplicates();
+    });
+
+    // Libère les URL blob à la fermeture (✕, clic hors modale, Échap). L'overlay est réutilisé
+    // par _showOwnedModal d'une ouverture à l'autre : on observe l'attribut hidden plutôt qu'un
+    // événement dédié, et l'observateur se détache dès la première fermeture.
+    const observer = new MutationObserver(() => {
+        if (modal.hidden) { releaseUrls(); observer.disconnect(); }
+    });
+    observer.observe(modal, { attributes: true, attributeFilter: ['hidden'] });
+
+    renderExisting();
+    updateSubmit();
+    if (files.length) addFiles(Array.from(files));
 }
 
 // ─── IMPORT DE DOSSIER BIEN ────────────────────────────────────────────────────────────────
@@ -5595,6 +5757,7 @@ function _renderMigrationBanner() {
 }
 
 function renderCollections() {
+    _syncQuickFabVisibility();
     if (IS_ANALYSIS_WINDOW) {
         nodes.collectionPanel.hidden = true;
         return;
