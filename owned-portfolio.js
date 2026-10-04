@@ -27,7 +27,7 @@ import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
     cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
-    cloudExtraireDossierBien, cloudDiagnosticPortefeuille
+    cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword
 } from './owned-cloud.js';
 
 let state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
@@ -1641,6 +1641,8 @@ function renderOwnedProfilTab() {
             <input type="number" name="mensualite" class="variables-input" placeholder="Mensualité €/mois" min="0" step="10" required style="min-width:140px">
             <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
         </form>
+
+        ${_renderAccountSection()}
     `;
 
     el.querySelector('[data-form="profil-simple"]')?.addEventListener('submit', e => {
@@ -1693,6 +1695,76 @@ function renderOwnedProfilTab() {
         addOwnedAutreCredit({ libelle, mensualite: Number(fd.get('mensualite')) || 0 });
         showToast('Crédit enregistré');
         renderCollections();
+    });
+
+    _wireAccountSection(el);
+}
+
+// ─── COMPTE : changement de mot de passe (onglet Profil, PC + web + iPhone) ──
+// Sans ressaisie de l'ancien mot de passe (choix utilisateur 2026-10-04) — voir
+// cloudChangePassword (owned-cloud.js) et la Cloud Function changerMotDePasse.
+const PASSWORD_MIN_LENGTH = 8; // doit rester aligné sur functions/index.js
+
+function _renderAccountSection() {
+    if (!_authUser) return '';
+    return `
+        <div class="owned-section-title" style="margin-top:20px">Compte</div>
+        <p class="owned-caveat">Connecté en tant que <strong>${escapeHtml(_authUser.email || '')}</strong>. Le nouveau mot de passe s'applique au PC, à la version web et à l'iPhone ; les autres appareils devront se reconnecter avec lui.</p>
+        <form class="owned-form-grid owned-password-form" data-form="change-password" novalidate style="margin-top:12px">
+            <input type="email" name="username" value="${escapeHtml(_authUser.email || '')}" autocomplete="username" hidden>
+            <label class="variables-field">
+                <span class="variables-label">Nouveau mot de passe</span>
+                <input name="password" class="variables-input" type="password" minlength="${PASSWORD_MIN_LENGTH}" maxlength="128" required autocomplete="new-password">
+            </label>
+            <label class="variables-field">
+                <span class="variables-label">Confirmer le mot de passe</span>
+                <input name="confirm" class="variables-input" type="password" minlength="${PASSWORD_MIN_LENGTH}" maxlength="128" required autocomplete="new-password">
+            </label>
+            <button type="submit" class="btn btn--primary btn--sm" style="align-self:end">Changer le mot de passe</button>
+            <div class="owned-auth-gate__error owned-password-form__error" data-password-error role="alert" hidden></div>
+        </form>`;
+}
+
+function _passwordErrorMessage(err) {
+    const code = String(err?.code || '');
+    if (code === 'functions/invalid-argument' || code === 'functions/resource-exhausted') return err.message;
+    if (code === 'functions/not-found') return 'Fonction de changement de mot de passe non déployée sur le serveur.';
+    if (code === 'functions/unauthenticated') return 'Session expirée — reconnectez-vous puis réessayez.';
+    if (code === 'functions/unavailable' || code.includes('network')) return 'Pas de connexion internet — réessayez.';
+    return 'Impossible de changer le mot de passe, réessayez.';
+}
+
+function _wireAccountSection(root) {
+    const form = root.querySelector('[data-form="change-password"]');
+    if (!form) return;
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const password = String(fd.get('password') || '');
+        const confirm = String(fd.get('confirm') || '');
+        const errEl = form.querySelector('[data-password-error]');
+        const btn = form.querySelector('button[type="submit"]');
+        const showError = msg => { errEl.textContent = msg; errEl.hidden = false; };
+        errEl.hidden = true;
+
+        if (password.length < PASSWORD_MIN_LENGTH) return showError(`Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères.`);
+        if (password.length > 128) return showError('Le mot de passe ne peut pas dépasser 128 caractères.');
+        if (password !== confirm) return showError('Les deux mots de passe ne correspondent pas.');
+
+        btn.disabled = true;
+        btn.textContent = 'Changement…';
+        try {
+            const { relogged } = await cloudChangePassword(password);
+            form.reset();
+            showToast(relogged
+                ? 'Mot de passe changé'
+                : 'Mot de passe changé — reconnectez-vous avec le nouveau si la session expire', 'success');
+        } catch (err) {
+            showError(_passwordErrorMessage(err));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Changer le mot de passe';
+        }
     });
 }
 

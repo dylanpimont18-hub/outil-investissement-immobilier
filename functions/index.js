@@ -491,3 +491,43 @@ exports.chatPortefeuille = onCall({ secrets: [mammouthApiKey], region: 'europe-w
         toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : []
     };
 });
+
+// ─── Changement de mot de passe (onglet Profil, PC + web + iPhone) ───────────
+// Pourquoi une Cloud Function plutôt que updatePassword() côté client : Firebase Auth refuse
+// updatePassword (auth/requires-recent-login) dès que la connexion date de plus de ~5 minutes,
+// ce qui est le cas quasi permanent ici (session persistée). L'utilisateur a demandé le
+// 2026-10-04 de NE PAS ressaisir l'ancien mot de passe pour l'instant : le SDK Admin modifie le
+// compte de l'appelant authentifié sans cette contrainte. Le client se reconnecte ensuite avec le
+// nouveau mot de passe (les autres appareils devront se reconnecter).
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
+const PASSWORD_RATE_LIMIT_MAX_CALLS = 5; // par heure et par compte
+const _passwordCallTimestampsByUid = new Map();
+
+function _adminAuth() {
+    const { getApps, initializeApp } = require('firebase-admin/app');
+    const { getAuth } = require('firebase-admin/auth');
+    if (!getApps().length) initializeApp();
+    return getAuth();
+}
+
+exports.changerMotDePasse = onCall({ region: 'europe-west1', timeoutSeconds: 30 }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Connectez-vous pour changer le mot de passe');
+    }
+    _checkRateLimit(request.auth.uid, _passwordCallTimestampsByUid, PASSWORD_RATE_LIMIT_MAX_CALLS);
+    const motDePasse = request.data?.motDePasse;
+    if (typeof motDePasse !== 'string'
+        || motDePasse.length < PASSWORD_MIN_LENGTH
+        || motDePasse.length > PASSWORD_MAX_LENGTH) {
+        throw new HttpsError('invalid-argument',
+            `Le mot de passe doit contenir entre ${PASSWORD_MIN_LENGTH} et ${PASSWORD_MAX_LENGTH} caractères`);
+    }
+    try {
+        await _adminAuth().updateUser(request.auth.uid, { password: motDePasse });
+    } catch (err) {
+        logger.error('changerMotDePasse: echec updateUser', { code: err?.code });
+        throw new HttpsError('internal', 'Impossible de changer le mot de passe, réessayez');
+    }
+    return { ok: true };
+});

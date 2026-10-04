@@ -35,6 +35,26 @@ export function cloudSignOut() {
     return signOut(auth);
 }
 
+// Changement de mot de passe sans ressaisie de l'ancien (choix utilisateur 2026-10-04) : passe
+// par la Cloud Function changerMotDePasse (SDK Admin), car updatePassword() cote client exige une
+// connexion de moins de ~5 minutes. Le SDK Admin invalide les sessions existantes : on reconnecte
+// aussitot cet appareil avec le nouveau mot de passe pour ne pas etre deconnecte dans l'heure.
+const _changerMotDePasse = httpsCallable(functions, 'changerMotDePasse');
+
+export async function cloudChangePassword(newPassword) {
+    const email = auth.currentUser?.email;
+    if (!email) throw new Error('not_authenticated');
+    await _changerMotDePasse({ motDePasse: newPassword });
+    // Le mot de passe est deja change a ce stade : un echec de reconnexion (reseau) ne doit pas
+    // etre presente comme un echec du changement, d'ou un retour plutot qu'une exception.
+    try {
+        await signInWithEmailAndPassword(auth, email, newPassword);
+        return { relogged: true };
+    } catch {
+        return { relogged: false };
+    }
+}
+
 // ─── ownedAssets : un document Firestore par bien ────────────────────────────
 
 export function watchOwnedAssets(onChange, onError) {
