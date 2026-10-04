@@ -504,11 +504,36 @@ const PASSWORD_MAX_LENGTH = 128;
 const PASSWORD_RATE_LIMIT_MAX_CALLS = 5; // par heure et par compte
 const _passwordCallTimestampsByUid = new Map();
 
+// Piège rencontré au premier déploiement (2026-10-04, erreur app/no-app) : firebase-functions
+// crée sa propre app Admin interne nommée "__FIREBASE_FUNCTIONS_SDK__" en vérifiant le jeton de
+// l'appelant. Tester getApps().length ne suffit donc pas : il faut chercher l'app par défaut.
 function _adminAuth() {
     const { getApps, initializeApp } = require('firebase-admin/app');
     const { getAuth } = require('firebase-admin/auth');
-    if (!getApps().length) initializeApp();
+    if (!getApps().some(app => app.name === '[DEFAULT]')) initializeApp();
     return getAuth();
+}
+
+// Traduit les erreurs du SDK Admin en messages français affichés tels quels sous le formulaire.
+// Le code technique reste visible entre parenthèses pour faciliter un diagnostic.
+function _passwordAdminErrorMessage(code) {
+    switch (code) {
+        case 'auth/invalid-password':
+            return 'Mot de passe refusé par Firebase : il doit contenir au moins 6 caractères.';
+        case 'auth/password-does-not-meet-requirements':
+            return 'Mot de passe refusé par la politique de sécurité du projet Firebase (longueur, majuscule, chiffre ou caractère spécial exigés).';
+        case 'auth/user-not-found':
+            return 'Compte introuvable : il a peut-être été supprimé. Reconnectez-vous.';
+        case 'auth/user-disabled':
+            return 'Ce compte est désactivé dans Firebase.';
+        case 'auth/insufficient-permission':
+            return "Le serveur n'a pas la permission de modifier les comptes (droits du compte de service Firebase).";
+        case 'app/no-app':
+        case 'app/invalid-credential':
+            return "Le serveur n'a pas pu s'authentifier auprès de Firebase (configuration du SDK Admin).";
+        default:
+            return 'Erreur inattendue du serveur Firebase.';
+    }
 }
 
 exports.changerMotDePasse = onCall({ region: 'europe-west1', timeoutSeconds: 30 }, async (request) => {
@@ -526,8 +551,10 @@ exports.changerMotDePasse = onCall({ region: 'europe-west1', timeoutSeconds: 30 
     try {
         await _adminAuth().updateUser(request.auth.uid, { password: motDePasse });
     } catch (err) {
-        logger.error('changerMotDePasse: echec updateUser', { code: err?.code });
-        throw new HttpsError('internal', 'Impossible de changer le mot de passe, réessayez');
+        const code = String(err?.code || 'inconnu');
+        logger.error('changerMotDePasse: echec updateUser', { code, detail: err?.message });
+        throw new HttpsError('internal',
+            `${_passwordAdminErrorMessage(code)} Mot de passe inchangé (code : ${code}).`, { code });
     }
     return { ok: true };
 });

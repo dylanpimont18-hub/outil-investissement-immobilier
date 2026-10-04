@@ -43,6 +43,8 @@ export async function cloudChangePassword(pwd) {
     S.passwordCalls.push(pwd);
     await new Promise(r => setTimeout(r, 50));
     if (S.passwordMode === 'invalid') { const e = new Error('Le mot de passe doit contenir entre 8 et 128 caractères'); e.code = 'functions/invalid-argument'; throw e; }
+    if (S.passwordMode === 'internal') { const e = new Error('Mot de passe refusé par la politique de sécurité du projet Firebase (longueur, majuscule, chiffre ou caractère spécial exigés). Mot de passe inchangé (code : auth/password-does-not-meet-requirements).'); e.code = 'functions/internal'; throw e; }
+    if (S.passwordMode === 'crash') { const e = new Error('INTERNAL'); e.code = 'functions/internal'; throw e; }
     if (S.passwordMode === 'notfound') { const e = new Error('NOT_FOUND'); e.code = 'functions/not-found'; throw e; }
     if (S.passwordMode === 'relogFail') return { relogged: false };
     // Reconnexion réussie : le vrai SDK redéclenche onAuthStateChanged, on le simule.
@@ -114,15 +116,23 @@ async function scenario(page, label, screenshotsDir) {
     await fill(page, 'nouveauMdp123', 'nouveauMdp123');
     await page.waitForFunction(() => {
         const el = document.querySelector('[data-form="change-password"] [data-password-error]');
-        return el && !el.hidden && /non déployée/.test(el.textContent);
+        return el && !el.hidden && /pas déployée/.test(el.textContent);
     });
+    for (const [mode, re] of [['internal', /politique de sécurité.*code : auth\/password-does-not-meet-requirements/], ['crash', /Erreur inattendue \(code : functions\/internal\)\. Mot de passe inchangé/]]) {
+        await page.evaluate(m => { window.__stub.passwordMode = m; }, mode);
+        await fill(page, 'nouveauMdp123', 'nouveauMdp123');
+        await page.waitForFunction(r => {
+            const el = document.querySelector('[data-form="change-password"] [data-password-error]');
+            return el && !el.hidden && new RegExp(r).test(el.textContent);
+        }, re.source);
+    }
     assert.equal(await page.$eval(`${form} button[type="submit"]`, b => b.disabled), false, `${label} : bouton réactivé après erreur`);
-    console.log(`  ✓ erreur serveur affichée, bouton réactivé`);
+    console.log(`  ✓ erreurs serveur détaillées affichées (non déployée, refus Firebase avec code, plantage), bouton réactivé`);
 
     await page.evaluate(() => { window.__stub.passwordMode = 'ok'; });
     await fill(page, 'nouveauMdp123', 'nouveauMdp123');
     await page.waitForSelector('.toast, [class*="toast"]', { state: 'attached', timeout: 3000 }).catch(() => {});
-    await page.waitForFunction(() => window.__stub.passwordCalls.length === 2);
+    await page.waitForFunction(() => window.__stub.passwordCalls.length === 4);
     await page.waitForTimeout(300); // laisse passer le re-rendu déclenché par la reconnexion simulée
     assert.equal(await page.evaluate(() => window.__stub.passwordCalls.at(-1)), 'nouveauMdp123');
     assert.equal(await errorText(page), '', `${label} : pas d'erreur après succès`);

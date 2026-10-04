@@ -1727,11 +1727,18 @@ function _renderAccountSection() {
 
 function _passwordErrorMessage(err) {
     const code = String(err?.code || '');
-    if (code === 'functions/invalid-argument' || code === 'functions/resource-exhausted') return err.message;
-    if (code === 'functions/not-found') return 'Fonction de changement de mot de passe non déployée sur le serveur.';
-    if (code === 'functions/unauthenticated') return 'Session expirée — reconnectez-vous puis réessayez.';
-    if (code === 'functions/unavailable' || code.includes('network')) return 'Pas de connexion internet — réessayez.';
-    return 'Impossible de changer le mot de passe, réessayez.';
+    const message = String(err?.message || '').trim();
+    // Messages français construits par la Cloud Function (validation, quota, erreur Firebase
+    // détaillée avec son code) : affichés tels quels. "INTERNAL" seul = plantage non prévu.
+    if (['functions/invalid-argument', 'functions/resource-exhausted', 'functions/internal'].includes(code)
+        && message && message !== 'INTERNAL') return message;
+    if (code === 'functions/not-found') return "La fonction de changement de mot de passe n'est pas déployée sur le serveur. Mot de passe inchangé.";
+    if (code === 'functions/unauthenticated' || message === 'not_authenticated') return 'Session expirée : reconnectez-vous puis réessayez. Mot de passe inchangé.';
+    if (code === 'functions/unavailable' || code === 'functions/deadline-exceeded' || code.includes('network')) {
+        return 'Le serveur ne répond pas (connexion internet absente ou trop lente). Mot de passe inchangé, réessayez.';
+    }
+    if (code === 'functions/permission-denied') return 'Requête refusée par le serveur. Mot de passe inchangé.';
+    return `Erreur inattendue${code ? ` (code : ${code})` : ''}${message && message !== 'INTERNAL' ? ` : ${message}` : ''}. Mot de passe inchangé, réessayez.`;
 }
 
 function _wireAccountSection(root) {
@@ -1758,7 +1765,7 @@ function _wireAccountSection(root) {
             form.reset();
             showToast(relogged
                 ? 'Mot de passe changé'
-                : 'Mot de passe changé — reconnectez-vous avec le nouveau si la session expire', 'success');
+                : "Mot de passe changé, mais la reconnexion automatique a échoué : reconnectez-vous avec le nouveau mot de passe si l'app vous déconnecte", 'success');
         } catch (err) {
             showError(_passwordErrorMessage(err));
         } finally {
