@@ -30,6 +30,7 @@
       "data/**",
       "scripts/**",
       "dist/**",
+      "build/**",
       "Spark/**",
       "Spark-*/**",
       "*.db",
