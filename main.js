@@ -1,4 +1,4 @@
-﻿import { calculateTMI, computeAnalysisViewModel, getHouseholdTaxParts, capitalRestantDu } from './calculs.js';
+﻿import { calculateTMI, computeAnalysisViewModel, getHouseholdTaxParts, capitalRestantDu, ratioRemboursement } from './calculs.js';
 import { buildDecisionPrintDocument } from './pdf.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
 import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel, openPrintDocument } from './utils.js';
@@ -2481,6 +2481,7 @@ function render(options = {}) {
         syncVariablesForm();
     }
 
+    renderRatioCredit();
     renderWorkspaceContent();
     renderModalState();
 }
@@ -2813,6 +2814,95 @@ function initAccordion() {
     });
 }
 
+// ─── Coût d'un euro emprunté (reprise de Spark Cash Flow) ────────────────────
+// Deux usages de la même formule (`ratioRemboursement`, calculs.js) :
+//  - une lecture directe sous les champs Taux/Durée du formulaire d'étude, recalculée à chaque rendu ;
+//  - une calculette autonome (bouton « € » de la barre latérale, <dialog> natif) : deux entrées,
+//    un ratio, rien de conservé — pré-remplie avec le taux et la durée de l'étude active.
+const fmtRatio = v => v.toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const fmtPct1 = v => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+const fmtNum2 = v => v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+
+function renderRatioCredit() {
+    const el = document.getElementById('ratio-credit-readout');
+    if (!el) return;
+    const r = ratioRemboursement(state.variablesData?.['taux-input'], state.variablesData?.['duree']);
+    if (r.ratio === null) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    // Le bornage de ratioRemboursement doit se voir : si le formulaire a dépassé [0 ; 20] % ou
+    // [1 ; 35] ans, on dit sur quelles valeurs le ratio a réellement été calculé.
+    const borne = r.borne
+        ? ` <span class="ratio-credit-readout__borne">(calcul borné à ${fmtNum2(r.taux)} % sur ${fmtNum2(r.duree)} ans)</span>`
+        : '';
+    el.innerHTML = `Pour <strong>1 €</strong> emprunté : <strong>${fmtRatio(r.ratio)} €</strong> remboursés, soit ${fmtPct1(r.pctInterets)} % d'intérêts${borne}`;
+}
+
+function initCalculette() {
+    const btn = document.getElementById('calculette-btn');
+    const dialog = document.getElementById('calculette');
+    if (!btn || !dialog || typeof dialog.showModal !== 'function') return;
+    const champTaux = dialog.querySelector('#calc-taux');
+    const champDuree = dialog.querySelector('#calc-duree');
+    const ratioEl = dialog.querySelector('#calc-ratio');
+    const interetsEl = dialog.querySelector('#calc-interets');
+    const alerteEl = dialog.querySelector('#calc-alerte');
+    const annonceEl = dialog.querySelector('#calc-annonce');
+    let annonceTimer = null;
+    // Région live débouncée : le résultat est recalculé à chaque frappe, mais une région qui relit
+    // un chiffre à chaque touche est inutilisable au lecteur d'écran — on n'annonce que la saisie stabilisée.
+    const annoncer = phrase => {
+        if (!annonceEl) return;
+        clearTimeout(annonceTimer);
+        annonceTimer = setTimeout(() => { annonceEl.textContent = phrase; }, 450);
+    };
+
+    const calculer = () => {
+        // Une saisie illisible dans un champ type=number laisse `value` VIDE : sans ce témoin elle
+        // se lirait comme un taux nul, c'est-à-dire comme un prêt gratuit.
+        const illisible = (champTaux.validity && champTaux.validity.badInput)
+            || (champDuree.validity && champDuree.validity.badInput);
+        const r = illisible ? { ratio: null, borne: 'saisie' } : ratioRemboursement(champTaux.value, champDuree.value);
+        if (r.ratio === null) {
+            ratioEl.textContent = '—';
+            interetsEl.textContent = '';
+            alerteEl.textContent = 'Ces deux champs n\'acceptent que des chiffres : le résultat ne peut pas être calculé.';
+            alerteEl.hidden = false;
+            annoncer('Résultat non calculable : la saisie n\'a pas pu être lue.');
+            return;
+        }
+        // Trois décimales sur le ratio : la troisième vaut encore quelques milliers d'euros sur un
+        // prêt courant. Le pourcentage d'intérêts est un ordre de grandeur : une décimale suffit.
+        ratioEl.textContent = `${fmtRatio(r.ratio)} €`;
+        interetsEl.textContent = `soit ${fmtPct1(r.pctInterets)} % d'intérêts`;
+        if (r.borne) {
+            alerteEl.textContent = `Hors bornes : le calcul retient ${fmtNum2(r.taux)} % sur ${fmtNum2(r.duree)} ans.`;
+            alerteEl.hidden = false;
+        } else {
+            alerteEl.textContent = '';
+            alerteEl.hidden = true;
+        }
+        annoncer(`${fmtRatio(r.ratio)} euros remboursés pour un euro emprunté, soit ${fmtPct1(r.pctInterets)} % d'intérêts.`);
+    };
+
+    champTaux.addEventListener('input', calculer);
+    champDuree.addEventListener('input', calculer);
+    btn.addEventListener('click', () => {
+        const t = Number(state.variablesData?.['taux-input']);
+        const d = Number(state.variablesData?.['duree']);
+        if (Number.isFinite(t) && t > 0) champTaux.value = String(t);
+        if (Number.isFinite(d) && d > 0) champDuree.value = String(d);
+        calculer();
+        dialog.showModal();
+        // Le focus part sur le premier champ plutôt que sur « Fermer » : la modale existe pour saisir.
+        champTaux.focus();
+        champTaux.select();
+    });
+    dialog.querySelector('#calculette-fermer')?.addEventListener('click', () => dialog.close());
+    // Clic sur le fond (le <dialog> lui-même, hors de .calculette__box) : fermer, comme les autres
+    // modales de l'app. Échap et le retour du focus au déclencheur sont gérés nativement.
+    dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+}
+
 // Synchronisation sliders
 function initSliders() {
     const pairs = [
@@ -2865,6 +2955,7 @@ if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
 initAccordion();
 initTutoBar();
 initGlossaire();
+initCalculette();
 initSliders();
 
 fetch('/api/version')

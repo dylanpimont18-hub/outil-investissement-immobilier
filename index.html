@@ -58,6 +58,7 @@
                         <span>Assistant</span>
                     </button>
                     <button id="glossaire-btn" class="glossaire-trigger topbar-btn" type="button" title="Glossaire des termes financiers" aria-label="Glossaire des termes financiers">?</button>
+                    <button id="calculette-btn" class="glossaire-trigger topbar-btn" type="button" title="Ce que coûte un euro emprunté" aria-label="Calculette : ce que coûte un euro emprunté" aria-haspopup="dialog">€</button>
                 </nav>
                 <div class="sidebar-mode">
                     <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
@@ -231,6 +232,8 @@
                                         <input id="duree" name="duree" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
                                         <input type="range" id="duree-slider" class="variables-slider" min="5" max="30" step="1" value="20" aria-hidden="true" tabindex="-1">
                                     </label>
+                                    <!-- Coût d'un euro emprunté pour le taux et la durée saisis (ratioRemboursement, calculs.js) -->
+                                    <div id="ratio-credit-readout" class="ratio-credit-readout" hidden></div>
                                     <label class="variables-field" for="assurance">
                                         <span class="status-label">Assurance %</span>
                                         <input id="assurance" name="assurance" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
@@ -971,6 +974,39 @@
         <div id="glossaire-content" class="glossaire-drawer__content"></div>
     </div>
     <div id="glossaire-overlay" class="glossaire-overlay" hidden></div>
+
+    <!-- Calculette « ce que coûte un euro emprunté » (reprise de Spark Cash Flow) : calcul autonome,
+         sans lien avec l'étude ou le bien ouvert, rien n'est conservé. Pré-remplie à l'ouverture avec
+         le taux et la durée de l'étude active (main.js, initCalculette). -->
+    <dialog id="calculette" class="calculette" aria-labelledby="calculette-titre">
+        <div class="calculette__box">
+            <h2 id="calculette-titre" class="calculette__title">Ce que coûte un euro emprunté</h2>
+            <p class="calculette__intro">Pour un taux et une durée donnés, combien rembourse-t-on au total par euro emprunté ?
+                Le capital n'entre pas dans le calcul : le résultat vaut pour n'importe quel montant.</p>
+            <div class="calculette__champs">
+                <label class="variables-field" for="calc-taux">
+                    <span class="status-label">Taux d'intérêt annuel (%)</span>
+                    <input id="calc-taux" type="number" class="variables-input" min="0" max="20" step="0.05" value="3.5" inputmode="decimal">
+                </label>
+                <label class="variables-field" for="calc-duree">
+                    <span class="status-label">Durée (ans)</span>
+                    <input id="calc-duree" type="number" class="variables-input" min="1" max="35" step="1" value="20" inputmode="decimal">
+                </label>
+            </div>
+            <p id="calc-alerte" class="calculette__alerte" hidden></p>
+            <div class="calculette__resultat">
+                <div class="calculette__ratio" id="calc-ratio">—</div>
+                <div class="calculette__libelle">remboursés pour <strong>1 €</strong> emprunté</div>
+                <div class="calculette__interets" id="calc-interets"></div>
+            </div>
+            <p class="calculette__note">Prêt à taux fixe, mensualité constante, sans assurance emprunteur ni
+                frais de dossier : ceux-ci s'ajoutent au coût réel. Estimation indicative, non contractuelle.</p>
+            <p id="calc-annonce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+            <div class="calculette__actions">
+                <button type="button" id="calculette-fermer" class="btn btn--primary btn--sm">Fermer</button>
+            </div>
+        </div>
+    </dialog>
 
     <script type="module" src="main.js"></script>
 

@@ -1914,7 +1914,9 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
         // loyersAnnuels/chargesAnneeTax/interetsAnnee/assuranceAnnee : composantes brutes de
         // l'année, réutilisées telles quelles par computeDeficitFoncierHistorique pour rejouer le
         // calcul du régime réel sans dupliquer la résolution loyer/charges/travaux ci-dessus.
-        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum, apportAnnee, loyersAnnuels, chargesAnneeTax, interetsAnnee, assuranceAnnee });
+        // travauxDeductiblesAnnee (déjà inclus dans chargesAnneeTax) est exposé à part pour que
+        // computeProjectionImpotsFoyer puisse isoler l'effet des travaux sur l'impôt.
+        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum, apportAnnee, loyersAnnuels, chargesAnneeTax, interetsAnnee, assuranceAnnee, travauxDeductiblesAnnee });
     }
 
     return { years, anneeAchat, endYear };
@@ -2237,6 +2239,48 @@ export function computeCapaciteEmprunt(mensualiteMax, dureeAns, tauxPct, apport)
     const budget = montantEmpruntable + apport;
     const prixAchatMax = Math.round(budget / 1.08); // frais notaire ~8%
     return { montantEmpruntable: Math.round(montantEmpruntable), prixAchatMax };
+}
+
+// ─── Coût d'un euro emprunté ─────────────────────────────────────────────────
+// Repris de Spark Cash Flow (calc.js, `ratioRemboursement`). Calcul autonome, sans lien avec un
+// bien ou une étude : « pour un taux et une durée, combien rembourse-t-on par euro emprunté ? ».
+// C'est la seule grandeur qu'on retient d'un tableau d'amortissement, et la seule qu'on puisse
+// poser sur un coin de table en rendez-vous.
+//
+// Elle se déduit de la mensualité d'un prêt à annuité constante :
+//   M = C × i / (1 − (1+i)^−n)   avec i = t/12 et n = 12Y
+//   total remboursé = M × n = C × 12Y × (t/12) / (1 − (1+t/12)^−12Y)
+//   r = total / C = Y × t / (1 − (1+t/12)^−12Y)
+// Le capital emprunté disparaît de l'expression : le ratio ne dépend QUE du taux et de la durée.
+// Vérifié contre un échéancier simulé mois par mois dans tests/test_ratio_credit.mjs.
+
+export const RATIO_TAUX_MIN = 0;
+export const RATIO_TAUX_MAX = 20;    // %/an
+export const RATIO_DUREE_MIN = 1;
+export const RATIO_DUREE_MAX = 35;   // ans
+
+// `tauxAnnuelPct` en POURCENTS (3,15 pour 3,15 %), `dureeAnnees` en années.
+// Les deux entrées sont bornées plutôt que rejetées, et le bornage est exposé (`borne`) : une
+// valeur substituée doit se VOIR, jamais être avalée en silence.
+export function ratioRemboursement(tauxAnnuelPct, dureeAnnees) {
+    const brutTaux = Number(tauxAnnuelPct);
+    const brutDuree = Number(dureeAnnees);
+    if (!Number.isFinite(brutTaux) || !Number.isFinite(brutDuree)) {
+        return { ratio: null, pctInterets: null, taux: null, duree: null, borne: 'saisie' };
+    }
+    const taux = Math.min(RATIO_TAUX_MAX, Math.max(RATIO_TAUX_MIN, brutTaux));
+    const duree = Math.min(RATIO_DUREE_MAX, Math.max(RATIO_DUREE_MIN, brutDuree));
+    const borne = Math.abs(taux - brutTaux) > 1e-9 || Math.abs(duree - brutDuree) > 1e-9;
+
+    // Taux nul : la formule tombe sur 0/0. La limite mathématique vaut 1, et c'est aussi le sens
+    // économique — sans intérêt, on rembourse exactement ce qu'on a emprunté.
+    const t = taux / 100;
+    if (!(t > 0)) return { ratio: 1, pctInterets: 0, taux, duree, borne };
+
+    const i = t / 12;
+    const n = 12 * duree;
+    const ratio = (duree * t) / (1 - Math.pow(1 + i, -n));
+    return { ratio, pctInterets: (ratio - 1) * 100, taux, duree, borne };
 }
 
 export function getOptimalRegime(asset, tmi) {
@@ -2660,4 +2704,164 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
     const nouveauCFMois = cfBase.cfNetNet + impactCFMois;
 
     return { montantTravaux, deductible, regime, deficitCree: Math.round(deficitCree), economieFiscale3ans: Math.round(economieFiscale3ans), applicable, impactCFMois: Math.round(impactCFMois), cfBase: Math.round(cfBase.cfNetNet), nouveauCFMois: Math.round(nouveauCFMois) };
+}
+
+// ─── PROJECTION DES IMPÔTS DU FOYER (effet des travaux déductibles) ──────────
+// « Si je fais ces travaux, combien d'impôts vais-je payer les années suivantes ? » Rejoue, au
+// niveau du FOYER (tous les biens additionnés, comme sur la 2044), chaque année depuis le premier
+// achat jusqu'à anneeDebut + horizon, en régime foncier réel simulé — seul régime où les travaux
+// sont déductibles et où le déficit foncier existe, quel que soit le régime actuellement suivi
+// (même convention que computeDeficitFoncierHistorique) :
+//   - résultat foncier = loyers − charges déductibles − intérêts − travaux déductibles ;
+//   - déficit HORS intérêts : imputé sur le revenu global (salaires) jusqu'à 10 700 €/an
+//     (« déduction des salaires », art. 156 I 3° CGI) ;
+//   - excédent au-delà du plafond + part due aux intérêts : reportés sur les revenus fonciers des
+//     10 années suivantes, consommés par ordre d'ancienneté (« déduction des loyers ») ;
+//   - impôt de l'année = IR au barème progressif du foyer + prélèvements sociaux 17,2 % sur le
+//     revenu foncier imposable (computeImpotFoyer, revenu salarial historisé de l'année).
+// Deux scénarios sont calculés avec le même moteur : « avec » (travaux déductibles saisis à partir
+// de anneeDebut + travaux simulés optionnels) et « sans » (aucun travaux à partir de anneeDebut).
+// Les travaux antérieurs à anneeDebut sont acquis dans les deux : l'économie affichée n'est due
+// qu'aux travaux à venir. Les années < anneeDebut servent à reconstituer le stock de report et ne
+// sont pas renvoyées.
+//
+// Limites assumées (affichées en UI) : l'imputation sur le revenu global suppose la location
+// maintenue 3 ans ; un déficit global (salaires < 10 700 €) n'est pas reporté ; le régime SCI-IS
+// (déduction au niveau de la société) et le micro-foncier (abattement forfaitaire) ne sont pas
+// modélisés — la projection dit ce que donnerait le régime réel.
+const DEFICIT_FONCIER_EXPIRATION_ANS = 10;
+
+export function computeProjectionImpotsFoyer(assets, profileData, options = {}) {
+    const currentYear = new Date().getFullYear();
+    const anneeDebut = Math.round(Number(options.anneeDebut)) || currentYear;
+    const horizon = Math.max(1, Math.min(30, Math.round(Number(options.horizon)) || 10));
+    const anneeFin = anneeDebut + horizon;
+    const foyer = { adults: profileData?.adults || 2, children: profileData?.children || 0 };
+
+    const rawSimule = options.travauxSimules || null;
+    const simule = rawSimule && Number(rawSimule.montant) > 0
+        ? { assetId: rawSimule.assetId ?? null, montant: Number(rawSimule.montant), annee: Math.round(Number(rawSimule.annee)) || anneeDebut }
+        : null;
+
+    const list = (assets || []).filter(a => a && (a.acquisition?.prix || 0) > 0);
+
+    // Composantes brutes agrégées par année civile, tous biens confondus (régime réel simulé).
+    const vide = () => ({ loyers: 0, chargesHorsTravaux: 0, interets: 0, travaux: 0, travauxSimules: 0 });
+    const parAnnee = new Map();
+    let anneeMin = anneeDebut;
+    for (const asset of list) {
+        const { years, anneeAchat } = computeOwnedAssetTimeline(asset, profileData, 'reel', { horizonYear: anneeFin });
+        anneeMin = Math.min(anneeMin, anneeAchat);
+        for (const r of years) {
+            if (r.year > anneeFin) break;
+            const agg = parAnnee.get(r.year) || vide();
+            agg.loyers += r.loyersAnnuels;
+            agg.chargesHorsTravaux += (r.chargesAnneeTax - r.travauxDeductiblesAnnee) + r.assuranceAnnee;
+            agg.interets += r.interetsAnnee;
+            agg.travaux += r.travauxDeductiblesAnnee;
+            parAnnee.set(r.year, agg);
+        }
+    }
+    if (simule && simule.annee >= anneeDebut && simule.annee <= anneeFin) {
+        const agg = parAnnee.get(simule.annee) || vide();
+        agg.travauxSimules += simule.montant;
+        parAnnee.set(simule.annee, agg);
+    }
+
+    function simuler(avecTravauxFuturs) {
+        const stock = []; // { annee, restant } — ordre chronologique = ordre FIFO
+        const rows = [];
+        for (let y = anneeMin; y <= anneeFin; y++) {
+            const agg = parAnnee.get(y) || vide();
+            const projete = y >= anneeDebut;
+            const travauxSaisis = projete && !avecTravauxFuturs ? 0 : agg.travaux;
+            const travauxSimules = projete && avecTravauxFuturs ? agg.travauxSimules : 0;
+            const travaux = travauxSaisis + travauxSimules;
+
+            // Les reports créés il y a 10 ans ou plus ne sont plus imputables : ce qui en reste est perdu.
+            const deficitPerdu = stock
+                .filter(l => y - l.annee === DEFICIT_FONCIER_EXPIRATION_ANS)
+                .reduce((s, l) => s + l.restant, 0);
+            const stockActif = stock.filter(l => y - l.annee < DEFICIT_FONCIER_EXPIRATION_ANS && l.restant > 0);
+
+            const resultatAvantInterets = agg.loyers - agg.chargesHorsTravaux - travaux;
+            const resultatFoncier = resultatAvantInterets - agg.interets;
+
+            let imputeRevenuGlobal = 0, reportUtilise = 0, deficitReporte = 0, revenuFoncierImposable = 0;
+            if (resultatFoncier > 0) {
+                let reste = resultatFoncier;
+                for (const l of stockActif) {
+                    if (reste <= 0) break;
+                    const absorbe = Math.min(l.restant, reste);
+                    l.restant -= absorbe;
+                    reste -= absorbe;
+                    reportUtilise += absorbe;
+                }
+                revenuFoncierImposable = reste;
+            } else if (resultatFoncier < 0) {
+                const deficit = -resultatFoncier;
+                if (resultatAvantInterets < 0) {
+                    imputeRevenuGlobal = Math.min(PLAFOND_DEFICIT_REVENU_GLOBAL, -resultatAvantInterets);
+                }
+                deficitReporte = deficit - imputeRevenuGlobal;
+                if (deficitReporte > 0) stock.push({ annee: y, restant: deficitReporte });
+            }
+            const stockFin = stock
+                .filter(l => y - l.annee < DEFICIT_FONCIER_EXPIRATION_ANS)
+                .reduce((s, l) => s + l.restant, 0);
+
+            const revenuSalarial = resolveRevenuFoyer(profileData, y);
+            const impot = computeImpotFoyer(revenuSalarial, revenuFoncierImposable - imputeRevenuGlobal, foyer);
+            const impotSalairesSeuls = computeImpotFoyer(revenuSalarial, 0, foyer).total;
+
+            rows.push({
+                annee: y,
+                loyers: agg.loyers, chargesHorsTravaux: agg.chargesHorsTravaux, interets: agg.interets,
+                travaux, travauxSaisis, travauxSimules,
+                resultatFoncier, imputeRevenuGlobal, reportUtilise, deficitReporte, deficitPerdu, stockFin,
+                revenuFoncierImposable, revenuSalarial,
+                irNet: impot.irNet, psFoncier: impot.psFoncier, impotTotal: impot.total, impotSalairesSeuls,
+            });
+        }
+        return rows;
+    }
+
+    const avec = simuler(true);
+    const sans = simuler(false);
+    const sansParAnnee = new Map(sans.map(r => [r.annee, r]));
+    const rd = v => Math.round(v);
+
+    const years = avec.filter(r => r.annee >= anneeDebut).map(r => {
+        const s = sansParAnnee.get(r.annee);
+        const out = {};
+        for (const [k, v] of Object.entries(r)) out[k] = typeof v === 'number' ? rd(v) : v;
+        out.impotSansTravaux = rd(s.impotTotal);
+        out.economie = rd(s.impotTotal) - rd(r.impotTotal);
+        return out;
+    });
+
+    const veille = avec.find(r => r.annee === anneeDebut - 1);
+    const stockInitial = rd(veille ? veille.stockFin : 0);
+    const somme = key => rd(years.reduce((s, r) => s + r[key], 0));
+
+    return {
+        anneeDebut, anneeFin, horizon,
+        regimeSimule: 'reel',
+        nbBiens: list.length,
+        plafondRevenuGlobal: PLAFOND_DEFICIT_REVENU_GLOBAL,
+        expirationAns: DEFICIT_FONCIER_EXPIRATION_ANS,
+        stockInitial,
+        travauxSimules: simule,
+        years,
+        totaux: {
+            travaux: somme('travaux'),
+            travauxSimules: somme('travauxSimules'),
+            imputeRevenuGlobal: somme('imputeRevenuGlobal'),
+            reportUtilise: somme('reportUtilise'),
+            deficitPerdu: somme('deficitPerdu'),
+            impotAvec: somme('impotTotal'),
+            impotSans: somme('impotSansTravaux'),
+            economie: somme('economie'),
+        },
+    };
 }

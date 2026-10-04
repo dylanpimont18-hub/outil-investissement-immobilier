@@ -7632,6 +7632,8 @@ body.asset-report-open .owned-quickfab { display: none; }
 }
 .owned-modal--wide { max-width: 680px; }
 .owned-modal--xwide { max-width: 960px; }
+/* Projection des impôts : 11 colonnes, la modale s'élargit pour les montrer sans défilement horizontal. */
+.owned-modal--projection { max-width: min(1200px, 96vw); }
 .owned-modal-head {
     display: flex;
     align-items: flex-start;
@@ -8148,6 +8150,66 @@ body.asset-report-open .owned-quickfab { display: none; }
     flex-shrink: 0; align-self: center;
 }
 .glossaire-trigger:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+
+/* Texte réservé aux lecteurs d'écran (région live de la calculette). */
+.sr-only {
+    position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ── Coût d'un euro emprunté : lecture directe (Analyse, formulaire Crédit) + calculette ── */
+.ratio-credit-readout {
+    grid-column: 1 / -1;
+    font-size: 11.5px; line-height: 1.45; color: var(--muted-strong);
+    padding: 6px 10px; border-left: 2px solid var(--accent-gold-border);
+    background: var(--accent-gold-dim); border-radius: 0 8px 8px 0;
+}
+.ratio-credit-readout[hidden] { display: none; }
+.ratio-credit-readout strong { font-family: 'IBM Plex Mono', 'Courier New', monospace; color: var(--accent); font-weight: 600; }
+.ratio-credit-readout__borne { color: var(--warning, #b7791f); }
+.ratio-credit-readout--owned { margin-top: 8px; }
+
+.calculette {
+    width: min(440px, 92vw); padding: 0; margin: auto;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); color: var(--text);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.18);
+}
+.calculette::backdrop { background: rgba(0,0,0,0.45); }
+.calculette__box { padding: 20px 22px; }
+.calculette__title { font-family: var(--font-heading); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; color: var(--text); }
+.calculette__intro { font-size: 12px; line-height: 1.5; color: var(--muted-strong); margin: 0 0 14px; }
+.calculette__champs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.calculette__champs .variables-field { margin: 0; }
+.calculette__alerte { font-size: 11.5px; color: var(--warning, #b7791f); margin: 0 0 10px; }
+.calculette__alerte[hidden] { display: none; }
+.calculette__resultat {
+    text-align: center; padding: 14px 12px; margin-bottom: 12px;
+    border: 1px solid var(--accent-gold-border); border-radius: 8px; background: var(--accent-gold-dim);
+}
+.calculette__ratio { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 30px; font-weight: 600; line-height: 1.1; color: var(--accent); }
+.calculette__libelle { font-size: 12.5px; color: var(--text); margin-top: 4px; }
+.calculette__interets { font-size: 12px; font-weight: 600; color: var(--muted-strong); margin-top: 6px; }
+.calculette__note { font-size: 11px; line-height: 1.45; color: var(--muted); margin: 0 0 14px; }
+.calculette__actions { display: flex; justify-content: flex-end; }
+html[data-theme='dark'] .calculette { box-shadow: 0 18px 56px rgba(0,0,0,0.5); }
+html[data-theme='dark'] .calculette::backdrop { background: rgba(0,0,0,0.6); }
+
+/* ── Projection des impôts (effet des travaux déductibles) ── */
+.projection-impots__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 12px 0; }
+.projection-impots__kpi { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; background: var(--surface-strong); }
+.projection-impots__kpi-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+.projection-impots__kpi-value { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 16px; font-weight: 600; margin-top: 4px; color: var(--text); }
+.projection-impots__kpi-value.positive { color: var(--success); }
+.projection-impots__kpi-value.negative { color: var(--danger); }
+.projection-impots .owned-cf-table-wrap { margin-top: 12px; }
+/* En-têtes autorisés à passer sur deux lignes (la largeur est pilotée par les montants), montants jamais coupés. */
+.projection-impots .owned-cf-table th { white-space: normal; line-height: 1.2; padding: 6px 8px; vertical-align: bottom; }
+.projection-impots .owned-cf-table td { white-space: nowrap; padding: 5px 8px; font-size: 11.5px; }
+.projection-impots .owned-cf-table td small { display: block; font-size: 10px; color: var(--text-tertiary, var(--muted)); }
+.projection-impots .owned-cf-table td small.negative { color: var(--danger); }
+.projection-impots__notes { font-size: 11px; line-height: 1.5; color: var(--text-tertiary, var(--muted)); margin: 12px 0 0; padding-left: 16px; }
+.projection-impots__notes li { margin-bottom: 3px; }
 .glossaire-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 900;
     animation: glossaire-fade-in 200ms ease;

@@ -17,7 +17,8 @@ import {
     computeRevenusLocatifsBruts, computeCompteResultat, computePortfolioAlerts,
     computeSimulationTravaux, computeCFBreakdown, computeRegimeComparison, resolveLoyerVacance,
     computeDeclaration2044, parseDateAchat, computeDeficitFoncierHistorique,
-    computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer
+    computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer,
+    ratioRemboursement, computeProjectionImpotsFoyer
 } from './calculs.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
@@ -635,6 +636,156 @@ function openSimulationTravauxModal(assetId) {
     modal.querySelector('#simu-montant')?.addEventListener('input', update);
     modal.querySelector('#simu-annee')?.addEventListener('input', update);
     modal.querySelector('#simu-deductible')?.addEventListener('change', update);
+}
+
+// ─── COÛT D'UN EURO EMPRUNTÉ (formulaire Crédit d'un bien) ───────────────────
+// Lecture directe sous les champs Durée/Taux du crédit : « pour 1 € emprunté, X € remboursés ».
+// Même formule que la calculette de la barre latérale (ratioRemboursement, calculs.js). Rien
+// n'est affiché tant que le crédit n'a pas de durée (bien payé comptant ou saisie incomplète).
+function renderRatioCreditOwned(credit) {
+    if (!(Number(credit?.duree) > 0)) return '';
+    const r = ratioRemboursement(credit.taux || 0, credit.duree);
+    if (r.ratio === null) return '';
+    const fmt3 = v => v.toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    const fmt1 = v => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+    const borne = r.borne
+        ? ` <span class="ratio-credit-readout__borne">(calcul borné à ${fmt1(r.taux)} % sur ${fmt1(r.duree)} ans)</span>`
+        : '';
+    return `<div class="ratio-credit-readout ratio-credit-readout--owned">Pour <strong>1 €</strong> emprunté : <strong>${fmt3(r.ratio)} €</strong> remboursés sur ${fmt1(r.duree)} ans, soit ${fmt1(r.pctInterets)} % d'intérêts (hors assurance)${borne}</div>`;
+}
+
+// ─── PROJECTION DES IMPÔTS (effet des travaux déductibles) ───────────────────
+// « Si je fais ces travaux, combien d'impôts les années suivantes ? » — computeProjectionImpotsFoyer
+// (calculs.js), au niveau du foyer, régime foncier réel simulé. Ouverte depuis le dashboard (aucun
+// bien présélectionné) ou depuis l'onglet Travaux d'un bien (ce bien présélectionné pour les
+// travaux supplémentaires à simuler). Desktop uniquement : le tableau à 11 colonnes n'a pas sa place
+// sur owned.html (bouton non rendu si IS_MOBILE_PAGE).
+function openProjectionImpotsModal(assetId = null) {
+    const assets = Object.values(loadOwnedAssets()).filter(a => (a.acquisition?.prix || 0) > 0);
+    const regime = getOwnedRegime();
+    const currentYear = new Date().getFullYear();
+    const fmt = v => `${Math.round(v).toLocaleString('fr-FR')} €`;
+    const fmtS = v => `${v > 0 ? '+' : ''}${Math.round(v).toLocaleString('fr-FR')} €`;
+    const REGIME_LABEL = { 'micro-foncier': 'micro-foncier', 'reel': 'foncier réel', 'sci-is': 'SCI à l\'IS' };
+    const cibleInitiale = assetId && assets.some(a => a.id === assetId) ? assetId : (assets[0]?.id ?? '');
+
+    function renderBody(montant, annee, cibleId) {
+        const proj = computeProjectionImpotsFoyer(assets, state.profileData, {
+            anneeDebut: currentYear, horizon: 10,
+            travauxSimules: montant > 0 ? { assetId: cibleId || null, montant, annee } : null
+        });
+        const t = proj.totaux;
+        const nomCible = assets.find(a => a.id === cibleId)?.nom || '';
+        const toneEco = t.economie > 0 ? 'positive' : t.economie < 0 ? 'negative' : '';
+
+        const rows = proj.years.map(r => `
+            <tr>
+                <td>${r.annee}</td>
+                <td>${fmt(r.loyers)}</td>
+                <td>${fmt(r.chargesHorsTravaux + r.interets)}</td>
+                <td>${r.travaux ? fmt(r.travaux) + (r.travauxSimules ? ' <small>dont ' + fmt(r.travauxSimules) + ' simulés</small>' : '') : '—'}</td>
+                <td class="${r.resultatFoncier < 0 ? 'negative' : ''}">${fmtS(r.resultatFoncier)}</td>
+                <td>${r.imputeRevenuGlobal ? `−${fmt(r.imputeRevenuGlobal)}` : '—'}</td>
+                <td>${r.reportUtilise ? `−${fmt(r.reportUtilise)}` : '—'}</td>
+                <td>${r.stockFin ? fmt(r.stockFin) : '—'}${r.deficitPerdu ? ` <small class="negative">${fmt(r.deficitPerdu)} expirés</small>` : ''}</td>
+                <td><strong>${fmt(r.impotTotal)}</strong></td>
+                <td>${fmt(r.impotSansTravaux)}</td>
+                <td class="${r.economie > 0 ? 'positive' : r.economie < 0 ? 'negative' : ''}">${r.economie ? fmtS(r.economie) : '—'}</td>
+            </tr>`).join('');
+
+        return `
+        <div class="projection-impots">
+            ${regime !== 'reel' ? `<div class="owned-alert owned-alert--info">Votre portefeuille est suivi en <strong>${REGIME_LABEL[regime] || regime}</strong> : cette projection simule le <strong>régime foncier réel</strong>, seul régime où les travaux sont déductibles et où le déficit foncier existe. Elle indique ce que donnerait une option pour le réel.</div>` : ''}
+            <div class="projection-impots__kpis">
+                <div class="projection-impots__kpi">
+                    <div class="projection-impots__kpi-label">Économie d'impôt sur ${proj.horizon} ans</div>
+                    <div class="projection-impots__kpi-value ${toneEco}">${fmtS(t.economie)}</div>
+                </div>
+                <div class="projection-impots__kpi">
+                    <div class="projection-impots__kpi-label">Travaux déductibles à venir</div>
+                    <div class="projection-impots__kpi-value">${fmt(t.travaux)}</div>
+                    ${t.travauxSimules ? `<div class="owned-caveat" style="margin:4px 0 0">dont ${fmt(t.travauxSimules)} simulés${nomCible ? ` (${escapeHtml(nomCible)})` : ''}</div>` : ''}
+                </div>
+                <div class="projection-impots__kpi">
+                    <div class="projection-impots__kpi-label">Déduits des salaires</div>
+                    <div class="projection-impots__kpi-value">${fmt(t.imputeRevenuGlobal)}</div>
+                    <div class="owned-caveat" style="margin:4px 0 0">plafond ${fmt(proj.plafondRevenuGlobal)}/an</div>
+                </div>
+                <div class="projection-impots__kpi">
+                    <div class="projection-impots__kpi-label">Déduits des loyers (report)</div>
+                    <div class="projection-impots__kpi-value">${fmt(t.reportUtilise)}</div>
+                    <div class="owned-caveat" style="margin:4px 0 0">report au 1ᵉʳ janv. ${proj.anneeDebut} : ${fmt(proj.stockInitial)}</div>
+                </div>
+            </div>
+            ${t.deficitPerdu > 0 ? `<div class="owned-alert owned-alert--warning">${fmt(t.deficitPerdu)} de déficit reportable expireront sans avoir servi (règle des ${proj.expirationAns} ans) : des loyers insuffisants pour les absorber à temps.</div>` : ''}
+            <div class="owned-cf-table-wrap">
+                <div class="owned-cf-table">
+                    <div class="owned-cf-table__title">Impôt du foyer année par année — ${proj.anneeDebut} à ${proj.anneeFin}</div>
+                    <div class="owned-cf-table__note">Impôt du foyer = IR au barème progressif (salaires + revenu foncier imposable) + prélèvements sociaux 17,2 % sur le revenu foncier. Colonne « Sans travaux » : même foyer, mêmes biens, aucun travaux déductible à partir de ${proj.anneeDebut}.</div>
+                    <div class="owned-cf-table__scroll">
+                        <table>
+                            <thead><tr>
+                                <th>Année</th><th>Loyers</th><th>Charges + intérêts</th><th>Travaux déductibles</th><th>Résultat foncier</th>
+                                <th>Déduit des salaires</th><th>Déduit des loyers</th><th>Report restant</th>
+                                <th>Impôt du foyer</th><th>Sans travaux</th><th>Économie</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <ul class="projection-impots__notes">
+                <li>Déficit foncier (art. 156 I 3° CGI) : la part hors intérêts d'emprunt s'impute sur le revenu global jusqu'à ${fmt(proj.plafondRevenuGlobal)} par an, à condition de louer le bien jusqu'au 31 décembre de la 3ᵉ année suivante ; l'excédent et la part due aux intérêts se reportent sur les revenus fonciers des ${proj.expirationAns} années suivantes.</li>
+                <li>Hypothèses de projection : loyers et charges au dernier niveau connu, revenu salarial du profil (historisé, puis dernier connu), barème ${currentYear} reconduit, échéancier de crédit réel. Revente, plus-value et évolution des loyers ne sont pas modélisées.</li>
+                <li>Calcul indicatif à partir de vos saisies — ne remplace pas un professionnel.</li>
+            </ul>
+        </div>`;
+    }
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--projection">
+            <div class="owned-modal-head">
+                <div>
+                    <h3 class="owned-modal-title">Impôts des prochaines années</h3>
+                    <div class="owned-modal-sub">Effet des travaux déductibles sur l'impôt du foyer — ${assets.length} bien${assets.length > 1 ? 's' : ''}, régime foncier réel simulé</div>
+                </div>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+            </div>
+            <div class="cr-section">
+                <div class="owned-section-title" style="margin-top:0">Travaux supplémentaires à simuler (non saisis)</div>
+                <div class="owned-form-grid">
+                    <label class="variables-field">
+                        <span class="variables-label">Bien concerné</span>
+                        <select class="variables-input" id="proj-bien" ${assets.length ? '' : 'disabled'}>
+                            ${assets.map(a => `<option value="${escapeHtml(a.id)}" ${a.id === cibleInitiale ? 'selected' : ''}>${escapeHtml(a.nom || 'Bien')}</option>`).join('') || '<option value="">Aucun bien</option>'}
+                        </select>
+                    </label>
+                    <label class="variables-field">
+                        <span class="variables-label">Montant déductible (€)</span>
+                        <input class="variables-input" type="number" id="proj-montant" min="0" step="500" value="0">
+                    </label>
+                    <label class="variables-field">
+                        <span class="variables-label">Année de réalisation</span>
+                        <input class="variables-input" type="number" id="proj-annee" min="${currentYear}" max="${currentYear + 10}" step="1" value="${currentYear}">
+                    </label>
+                </div>
+                <p class="owned-caveat" style="margin:6px 0 0">Les frais déjà saisis avec le tag « Déductible » (onglet Travaux de chaque bien) sont pris en compte automatiquement ; ce formulaire sert à tester un chantier supplémentaire.</p>
+            </div>
+            <div id="proj-body">${renderBody(0, currentYear, cibleInitiale)}</div>
+        </div>
+    `, 'owned-projection-impots-modal');
+
+    const update = () => {
+        const m = Math.max(0, Number(modal.querySelector('#proj-montant')?.value) || 0);
+        const aBrut = Math.round(Number(modal.querySelector('#proj-annee')?.value)) || currentYear;
+        const a = Math.min(currentYear + 10, Math.max(currentYear, aBrut));
+        const c = modal.querySelector('#proj-bien')?.value || '';
+        const body = modal.querySelector('#proj-body');
+        if (body) body.innerHTML = renderBody(m, a, c);
+    };
+    modal.querySelector('#proj-montant')?.addEventListener('input', update);
+    modal.querySelector('#proj-annee')?.addEventListener('input', update);
+    modal.querySelector('#proj-bien')?.addEventListener('change', update);
 }
 
 // ─── CAPACITÉ D'EMPRUNT ───────────────────────────────────────────────────────
@@ -1593,6 +1744,7 @@ function renderOwnedDashboard(list, profileData, regime) {
                 <button class="btn btn--ghost btn--sm" data-action="open-objectifs">Objectifs</button>
                 <button class="btn btn--ghost btn--sm" data-action="open-rapport">Rapport annuel</button>
                 <button class="btn btn--ghost btn--sm" data-action="open-declaration">Déclaration fiscale</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-projection-impots">Impôts à venir</button>
             </div>
         </div>
 
@@ -1674,6 +1826,9 @@ function renderOwnedDashboard(list, profileData, regime) {
     });
     wrap.querySelectorAll('[data-action="open-declaration"]').forEach(btn => {
         btn.addEventListener('click', openDeclarationFiscaleModal);
+    });
+    wrap.querySelectorAll('[data-action="open-projection-impots"]').forEach(btn => {
+        btn.addEventListener('click', () => openProjectionImpotsModal(null));
     });
 }
 
@@ -1846,6 +2001,8 @@ function initOwnedPortfolioEvents() {
             openCompteResultatModal(id);
         } else if (action === 'open-simu-travaux' && id) {
             openSimulationTravauxModal(id);
+        } else if (action === 'open-projection-impots') {
+            openProjectionImpotsModal(id);
         } else if (action === 'focus-valeur-estimee') {
             e.preventDefault();
             const accBtn = document.querySelector('[data-acc="acquisition"]');
@@ -3453,6 +3610,7 @@ function renderOwnedTravauxTab(asset) {
         <div class="owned-travaux-toolbar">
             <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…">
             <button type="button" class="btn btn--ghost btn--sm" data-action="print-selection" disabled>🖨 Imprimer la sélection</button>
+            ${IS_MOBILE_PAGE ? '' : `<button type="button" class="btn btn--ghost btn--sm" data-action="open-projection-impots" title="Effet des travaux déductibles sur l'impôt du foyer, année par année">Impôts des prochaines années</button>`}
         </div>
         ${yearBlocksHtml}
         ${totalDed > 0 ? `<div class="owned-travaux-totals"><span>Déductible ${currentYear} : <strong>${Math.round(totalDed).toLocaleString('fr-FR')} €</strong></span></div>` : ''}
@@ -4815,6 +4973,7 @@ function renderAccordionAcquisition(asset) {
                 </select>
             </label>
         </div>
+        ${renderRatioCreditOwned(credit)}
         <div class="owned-section-title" style="margin-top:20px">Valeur patrimoniale</div>
         <div class="owned-form-grid">
             <label class="variables-field">
