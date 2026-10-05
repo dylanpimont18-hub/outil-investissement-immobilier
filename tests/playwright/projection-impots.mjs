@@ -56,6 +56,7 @@ const notify = () => setTimeout(() => S.assetListeners.forEach(cb => cb(clone(S.
 export function watchAuth(cb) { setTimeout(() => cb({ uid: 'u-test', email: 'test@example.com' }), 0); return () => {}; }
 export function cloudSignIn() { return Promise.resolve(); }
 export function cloudSignOut() { return Promise.resolve(); }
+export async function cloudChangePassword() {}
 export function watchOwnedAssets(cb) { S.assetListeners.push(cb); setTimeout(() => cb(clone(S.assets)), 0); return () => {}; }
 export function cloudSetAsset(id, data) { S.assets[id] = clone(data); notify(); return Promise.resolve(); }
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; notify(); return Promise.resolve(); }
@@ -182,8 +183,107 @@ async function scenarioPC(browser) {
         const ecoApres = await page.$eval('#owned-projection-impots-modal .projection-impots__kpi-value', e => parseInt(e.textContent.replace(/[^\d-]/g, ''), 10));
         assert.ok(ecoApres > ecoAvant, `économie ${ecoApres} doit dépasser ${ecoAvant}`);
         await shot(page, 'projection-simulation');
-        await page.click('#owned-projection-impots-modal [data-close-modal]');
+    });
+
+    const M = '#owned-projection-impots-modal';
+
+    await step('projection : phrase de synthèse, 2 graphiques dessinés, tableau replié', async () => {
+        const synth = await page.$eval(`${M} .projection-impots__synthese`, e => e.textContent);
+        assert.match(synth, /en moyenne [\d\s ]+ € d'impôt par an/);
+        for (const id of ['proj-chart-impot', 'proj-chart-report']) {
+            const ok = await page.$eval(`${M} #${id}`, c => c.width > 100 && c.height > 100 && !!window.Chart?.getChart(c));
+            assert.ok(ok, `graphique ${id} non rendu`);
+        }
+        const nbBarres = await page.$eval(`${M} #proj-chart-impot`, c => window.Chart.getChart(c).data.datasets[0].data.length);
+        assert.equal(nbBarres, 11);
+        assert.equal(await page.$eval(`${M} details.projection-impots__table`, d => d.open), false);
+    });
+
+    await step('détail d\'une année : sélecteur et clic sur une barre changent l\'année détaillée', async () => {
+        await page.selectOption(`${M} #proj-annee-detail`, String(Y + 1));
+        await page.waitForFunction(y => document.querySelector('#owned-projection-impots-modal .projection-ledger__title')?.textContent.includes(String(y)), Y + 1);
+        const txt = await page.$eval(`${M} #proj-detail`, e => e.textContent);
+        assert.match(txt, /20[\s ]000 € simulés/, 'l\'année des travaux simulés montre la ligne travaux');
+        assert.match(txt, /Impôt sur les salaires seuls/);
+        // Clic sur la 4ᵉ barre (Y + 3).
+        const pt = await page.$eval(`${M} #proj-chart-impot`, c => {
+            const ch = window.Chart.getChart(c); const el = ch.getDatasetMeta(0).data[3];
+            const r = c.getBoundingClientRect(); return { x: r.left + el.x, y: r.top + el.y + 5 };
+        });
+        await page.mouse.click(pt.x, pt.y);
+        await page.waitForFunction(y => document.querySelector('#owned-projection-impots-modal .projection-ledger__title')?.textContent.includes(String(y)), Y + 3);
+        await shot(page, 'projection-graphiques');
+        if (SHOTS) {
+            const detail = await page.$(`${M} #proj-detail`);
+            await detail.scrollIntoViewIfNeeded();
+            await detail.screenshot({ path: `${SHOTS}/projection-detail-annee.png` });
+        }
+    });
+
+    await step('répartition sur 2 ans : 10 000 € simulés deux années de suite', async () => {
+        await page.selectOption(`${M} #proj-repartition`, '2');
+        await page.waitForFunction(() => (document.querySelector('#owned-projection-impots-modal tbody')?.textContent.match(/10[\s ]000 € simulés/g) || []).length === 2);
+    });
+
+    await step('onglet « Quand faire les travaux ? » : 12 options, une meilleure, Appliquer remplit le formulaire', async () => {
+        await page.click(`${M} [data-proj-tab="optimisation"]`);
+        await page.waitForSelector(`${M} table.projection-opt tbody tr`);
+        assert.equal(await page.$$eval(`${M} table.projection-opt tbody tr`, r => r.length), 12);
+        assert.equal(await page.$$eval(`${M} .projection-opt--best`, r => r.length), 1);
+        assert.match(await page.$eval(`${M} .projection-impots__synthese`, e => e.textContent), /Meilleur calendrier pour 20[\s ]000 €/);
+        assert.equal(await page.$$eval(`${M} .projection-opt--actuelle`, r => r.length), 1, 'le choix actuel (Y+1, 2 ans) est repéré');
+        await shot(page, 'projection-optimisation');
+        // Appliquer la meilleure option (si ce n'est pas déjà le choix actuel) → formulaire mis à jour.
+        const btn = await page.$(`${M} .projection-opt--best [data-proj-appliquer]`);
+        if (btn) {
+            const [annee, etalement] = (await btn.getAttribute('data-proj-appliquer')).split(':');
+            await btn.click();
+            await page.waitForFunction(() => document.querySelector('#owned-projection-impots-modal .projection-opt--best.projection-opt--actuelle'));
+            assert.equal(await page.$eval(`${M} #proj-annee`, i => i.value), annee);
+            assert.equal(await page.$eval(`${M} #proj-repartition`, s => s.value), etalement);
+        }
+    });
+
+    await step('onglet « Quand » avec montant nul : invitation à saisir un montant', async () => {
+        await page.fill(`${M} #proj-montant`, '0');
+        await page.waitForSelector(`${M} .projection-impots__vide`);
+        await page.fill(`${M} #proj-montant`, '20000');
+        await page.waitForSelector(`${M} table.projection-opt`);
+    });
+
+    await step('onglet « Quel régime ? » : graphique 3 régimes, tableau, meilleur repéré, pas de bandeau réel', async () => {
+        await page.click(`${M} [data-proj-tab="regimes"]`);
+        await page.waitForSelector(`${M} #proj-chart-regimes`);
+        const n = await page.$eval(`${M} #proj-chart-regimes`, c => window.Chart.getChart(c)?.data.datasets.length);
+        assert.equal(n, 3);
+        assert.equal(await page.$$eval(`${M} table.projection-opt tbody tr`, r => r.length), 3);
+        assert.equal(await page.$$eval(`${M} .projection-opt--best`, r => r.length), 1);
+        assert.match(await page.$eval(`${M} .projection-impots__synthese`, e => e.textContent), /Sur \d{4}–\d{4}/);
+        assert.equal(await page.$(`${M} .owned-alert--info`), null, 'le bandeau « réel simulé » n\'a pas de sens sur la comparaison des régimes');
+        await shot(page, 'projection-regimes');
+    });
+
+    await step('retour à l\'onglet Projection : état conservé, fermeture', async () => {
+        await page.click(`${M} [data-proj-tab="projection"]`);
+        await page.waitForSelector(`${M} #proj-chart-impot`);
+        await page.click(`${M} [data-close-modal]`);
         await page.waitForFunction(() => document.querySelector('#owned-projection-impots-modal').hidden === true);
+    });
+
+    await step('thème sombre : la modale se rend sans erreur', async () => {
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+        await page.click('#owned-dashboard-wrap [data-action="open-projection-impots"]');
+        await page.waitForSelector(`${M} #proj-chart-impot`);
+        await shot(page, 'projection-sombre');
+        await page.click(`${M} [data-proj-tab="regimes"]`);
+        await page.waitForSelector(`${M} #proj-chart-regimes`);
+        await shot(page, 'projection-regimes-sombre');
+        await page.click(`${M} [data-close-modal]`);
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+        await page.click('#owned-dashboard-wrap [data-action="open-projection-impots"]');
+        await page.waitForSelector(`${M} #proj-chart-impot`);
+        await shot(page, 'projection-clair');
+        await page.click(`${M} [data-close-modal]`);
     });
 
     await step('fiche d\'un bien → onglet Travaux : bouton « Impôts des prochaines années », bien présélectionné', async () => {

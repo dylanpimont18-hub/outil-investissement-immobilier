@@ -119,6 +119,7 @@ const notify = () => setTimeout(() => S.assetListeners.forEach(cb => cb(clone(S.
 export function watchAuth(cb) { setTimeout(() => cb({ uid: 'u-test', email: 'test@example.com' }), 0); return () => {}; }
 export function cloudSignIn() { return Promise.resolve(); }
 export function cloudSignOut() { return Promise.resolve(); }
+export async function cloudChangePassword() {}
 export function watchOwnedAssets(cb) { S.assetListeners.push(cb); setTimeout(() => cb(clone(S.assets)), 0); return () => {}; }
 export function cloudSetAsset(id, data) { S.assets[id] = clone(data); notify(); return Promise.resolve(); }
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; notify(); return Promise.resolve(); }

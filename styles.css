@@ -8211,6 +8211,53 @@ html[data-theme='dark'] .calculette::backdrop { background: rgba(0,0,0,0.6); }
 .projection-impots .owned-cf-table td small.negative { color: var(--danger); }
 .projection-impots__notes { font-size: 11px; line-height: 1.5; color: var(--text-tertiary, var(--muted)); margin: 12px 0 0; padding-left: 16px; }
 .projection-impots__notes li { margin-bottom: 3px; }
+/* Onglets internes à la modale : pas de sticky (le .owned-tabs de la page est collé sous le header). */
+.owned-tabs.projection-impots__tabs { position: static; margin: 16px 0 4px; background: transparent; }
+.projection-impots__form { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.projection-impots__synthese { font-size: 13.5px; line-height: 1.6; color: var(--text); margin: 12px 0; padding: 12px 14px; border-left: 3px solid var(--accent-gold); background: var(--surface-strong); border-radius: 0 8px 8px 0; }
+.projection-impots__vide { font-size: 13px; line-height: 1.6; color: var(--text-secondary); padding: 24px 16px; text-align: center; border: 1px dashed var(--border-subtle); border-radius: 12px; margin-top: 12px; }
+.projection-impots__charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; margin: 12px 0; }
+.projection-impots__chart { margin: 12px 0; }
+.projection-impots__charts .projection-impots__chart { margin: 0; }
+/* Hauteur fixe du canvas (maintainAspectRatio: false) — l'axe des x est inclus dans ces 240px. */
+.projection-impots__canvas { position: relative; height: 240px; }
+.projection-impots__table { margin-top: 12px; }
+.projection-impots__table > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); padding: 6px 0; }
+.projection-impots__table > summary:hover { color: var(--text); }
+.projection-impots .owned-badge:not(.owned-badge--optimal) { border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+/* Détail d'une année : deux « livres de compte » côte à côte. */
+.projection-detail { margin-top: 12px; }
+.projection-detail__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.projection-detail__annee { width: auto; min-width: 90px; }
+.projection-detail__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.projection-ledger { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; }
+.projection-ledger__title { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); margin-bottom: 6px; font-weight: 700; }
+.projection-ledger__row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; font-size: 12.5px; color: var(--text); }
+.projection-ledger__row > span:last-child { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.projection-ledger__row small { display: block; font-size: 10.5px; color: var(--text-tertiary, var(--muted)); }
+.projection-ledger__row--total { border-top: 1px solid var(--border-subtle); margin-top: 2px; padding-top: 6px; font-weight: 700; }
+.projection-ledger__row.positive > span:last-child { color: var(--success); }
+.projection-ledger__row.negative > span:last-child { color: var(--danger); }
+/* Tableaux d'options (calendrier des travaux, régimes). */
+.projection-opt td { vertical-align: middle; }
+.projection-opt tr.projection-opt--best td { background: rgba(197,160,89,.08); }
+.projection-opt tr.projection-opt--equiv td { background: rgba(197,160,89,.035); }
+.projection-opt td small { color: var(--text-tertiary, var(--muted)); }
+.projection-opt tr.projection-opt--actuelle td:first-child { box-shadow: inset 3px 0 0 var(--accent-gold); }
+.projection-opt__eco { min-width: 200px; }
+.projection-opt__bar { display: inline-block; width: 110px; height: 8px; border-radius: 4px; background: var(--surface-strong); vertical-align: middle; margin-right: 8px; overflow: hidden; }
+.projection-opt__bar > span { display: block; height: 100%; background: #B08A3E; border-radius: 4px; }
+html[data-theme='dark'] .projection-opt__bar > span { background: #B3902E; }
+.projection-opt__val { font-family: 'IBM Plex Mono', 'Courier New', monospace; }
+.projection-impots .owned-cf-table td.projection-regime__remarque { text-align: left; white-space: normal; min-width: 260px; font-size: 11px; color: var(--text-secondary); }
+.projection-regime--exclu td:not(.projection-regime__remarque) { opacity: .55; }
+.projection-regime__puce { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+.projection-regime__puce--micro-foncier { background: #3F6FD1; }
+.projection-regime__puce--reel { background: #B08A3E; }
+.projection-regime__puce--sci-is { background: #0E9E8A; }
+html[data-theme='dark'] .projection-regime__puce--micro-foncier { background: #5A85E6; }
+html[data-theme='dark'] .projection-regime__puce--reel { background: #B3902E; }
+html[data-theme='dark'] .projection-regime__puce--sci-is { background: #17A28C; }
 .glossaire-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 900;
     animation: glossaire-fade-in 200ms ease;

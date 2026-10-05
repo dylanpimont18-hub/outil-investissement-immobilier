@@ -222,4 +222,48 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     console.log('Test 8 OK — portefeuille vide, frais non déductibles ignorés, valeurs entières finies');
 }
 
+// --- Test 9 : travaux simulés étalés (tableau) — chaque tranche dans son année ---
+{
+    const asset = makeAsset({ dateAchat: `${currentYear - 3}-01`, loyer: 500 });
+    const proj = computeProjectionImpotsFoyer([asset], profileData, {
+        anneeDebut: currentYear, horizon: 5,
+        travauxSimules: [
+            { assetId: 'bien', montant: 10000, annee: currentYear },
+            { assetId: 'bien', montant: 10000, annee: currentYear + 1 },
+        ]
+    });
+    const y0 = row(proj, currentYear), y1 = row(proj, currentYear + 1);
+    assert.equal(y0.travauxSimules, 10000);
+    assert.equal(y1.travauxSimules, 10000);
+    assert.equal(y0.resultatFoncier, -4000);
+    assert.equal(y0.imputeRevenuGlobal, 4000, 'sous le plafond : tout est déduit des salaires');
+    assert.equal(y1.imputeRevenuGlobal, 4000);
+    assert.equal(proj.totaux.travauxSimules, 20000);
+    assert.ok(Array.isArray(proj.travauxSimules) && proj.travauxSimules.length === 2, 'la forme reçue (tableau) est conservée');
+    console.log('Test 9 OK — travaux simulés étalés sur plusieurs années');
+}
+
+// --- Test 10 : effet du foncier et synthèse ---
+{
+    const sansTravaux = makeAsset({ dateAchat: `${currentYear - 3}-01`, loyer: 500 });
+    const p1 = computeProjectionImpotsFoyer([sansTravaux], profileData, { anneeDebut: currentYear, horizon: 10 });
+    assert.equal(row(p1, currentYear).effetFoncier, impot(6000) - impot(0), 'effet du foncier = impôt total − impôt sur les salaires seuls');
+    assert.equal(p1.synthese.anneeFinReport, null, 'aucun report : pas d\'année d\'épuisement');
+    assert.equal(p1.synthese.impotMoyen, impot(6000));
+
+    // Cas du test 2 : report de 3 300 € épuisé l'année suivante.
+    const asset = makeAsset({
+        dateAchat: `${currentYear - 3}-01`, loyer: 500,
+        travaux: [{ date: `${currentYear}-05-10`, montant: 20000, tag: 'deductible' }]
+    });
+    const p2 = computeProjectionImpotsFoyer([asset], profileData, { anneeDebut: currentYear, horizon: 10 });
+    assert.ok(row(p2, currentYear).effetFoncier < 0, 'année de déficit : le foncier fait baisser l\'impôt sous celui des salaires seuls');
+    assert.equal(p2.synthese.anneeFinReport, currentYear + 1);
+    assert.equal(p2.synthese.anneeMax, currentYear + 2, 'année la plus chère : la première sans déficit ni report (à égalité, la plus tôt)');
+    assert.equal(p2.synthese.impotMax, impot(6000));
+    const somme = p2.years.reduce((s, r) => s + r.impotTotal, 0);
+    assert.equal(p2.synthese.impotMoyen, Math.round(somme / p2.years.length));
+    console.log('Test 10 OK — effet du foncier par année et synthèse (moyenne, année max, fin du report)');
+}
+
 console.log('ALL PROJECTION IMPOTS TESTS PASSED');
