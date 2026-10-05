@@ -69,20 +69,20 @@ if errorlevel 1 (
 
 echo.
 echo [7/8] Tests JS - quand faire les travaux (optimisation)...
-node tests${f}
+node tests\test_optimisation_travaux.mjs
 if errorlevel 1 (
   echo.
-  echo ECHEC : tests${f} ne passe pas. Verification interrompue.
+  echo ECHEC : tests\test_optimisation_travaux.mjs ne passe pas. Verification interrompue.
   if not defined CALLED_FROM_BUILD pause
   exit /b 1
 )
 
 echo.
 echo [8/8] Tests JS - impots par regime dans le temps...
-node tests${f}
+node tests\test_projection_regimes.mjs
 if errorlevel 1 (
   echo.
-  echo ECHEC : tests${f} ne passe pas. Verification interrompue.
+  echo ECHEC : tests\test_projection_regimes.mjs ne passe pas. Verification interrompue.
   if not defined CALLED_FROM_BUILD pause
   exit /b 1
 )
