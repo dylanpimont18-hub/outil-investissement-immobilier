@@ -207,6 +207,69 @@ async function scenarioOnboarding(browser) {
     }
 }
 
+async function scenarioEtudes(browser, viewport, label) {
+    console.log(`\nÉtudes — ${label}`);
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false });
+    await waitAppStarted(page);
+
+    await step('saisie → une seule écriture settings/analysis après 1,5 s d inactivité', async () => {
+        await page.fill('#variables-form [name="nom-bien"]', 'Studio test');
+        await page.fill('#variables-form [name="prix"]', '150000');
+        await page.fill('#variables-form [name="loyer"]', '750');
+        await page.waitForTimeout(700);
+        assert.equal(await page.evaluate(() => window.__store.writes.filter(w => w[0] === 'analysis').length), 0, 'pas encore écrit (débounce)');
+        await page.waitForFunction(() => window.__store.settings.analysis?.variablesData?.prix === 150000, null, { timeout: 4000 });
+        const writes = await page.evaluate(() => window.__store.writes.filter(w => w[0] === 'analysis').length);
+        assert.equal(writes, 1, `écritures analysis : ${writes}`);
+        assert.ok(await page.evaluate(() => Number.isFinite(window.__store.settings.analysis.updatedAt)));
+    });
+
+    await step('Sauvegarder → studies/{id} avec id, variablesData, createdAt, updatedAt', async () => {
+        await page.click('#save-asset');
+        await page.waitForFunction(() => Object.keys(window.__store.studies).length === 1);
+        const study = await page.evaluate(() => Object.values(window.__store.studies)[0]);
+        assert.match(study.id, /^asset-/);
+        assert.equal(study.variablesData['nom-bien'], 'Studio test');
+        assert.ok(study.createdAt > 0 && study.updatedAt >= study.createdAt);
+        await page.waitForFunction(id => window.__store.settings.analysis?.activeAssetId === id, study.id, { timeout: 4000 });
+    });
+
+    await step('rechargement → étude et saisie reviennent du cloud, aucune écriture', async () => {
+        await reloadWithStore(page, context);
+        await waitAppStarted(page);
+        assert.equal(await page.inputValue('#variables-form [name="nom-bien"]'), 'Studio test');
+        assert.equal(await page.inputValue('#variables-form [name="prix"]'), '150000');
+        assert.match(await page.textContent('#asset-status-bar'), /À jour/);
+        await page.waitForTimeout(800);
+        assert.deepEqual(await page.evaluate(() => window.__store.writes), []);
+        await shot(page, `etudes-${label}`);
+    });
+
+    await step('snapshot distant plus ancien pendant la frappe → la saisie locale reste', async () => {
+        await page.fill('#variables-form [name="prix"]', '160000');
+        // Un autre appareil pousse une vieille valeur avant la fin du débounce local
+        await page.evaluate(() => window.__store.listeners.analysis.forEach(cb => cb({ variablesData: { prix: 99999 }, activeAssetId: null, updatedAt: 1 })));
+        await page.waitForTimeout(100);
+        assert.equal(await page.inputValue('#variables-form [name="prix"]'), '160000');
+        await page.waitForFunction(() => window.__store.settings.analysis?.variablesData?.prix === 160000, null, { timeout: 4000 });
+    });
+
+    await step('snapshot distant au repos → appliqué', async () => {
+        await page.evaluate(() => window.__store.listeners.analysis.forEach(cb => cb({ ...window.__store.settings.analysis, variablesData: { ...window.__store.settings.analysis.variablesData, loyer: 800 }, updatedAt: Date.now() })));
+        await page.waitForFunction(() => document.querySelector('#variables-form [name="loyer"]').value === '800', null, { timeout: 2000 });
+    });
+
+    await step('masquage de l onglet → flush immédiat', async () => {
+        await page.fill('#variables-form [name="loyer"]', '820');
+        await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+        await page.waitForFunction(() => window.__store.settings.analysis?.variablesData?.loyer === 820, null, { timeout: 500 });
+        await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
+    });
+
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+}
+
 const browser = await chromium.launch();
 try {
     await scenarioConnexion(browser, PC, 'PC');
@@ -214,6 +277,8 @@ try {
     await scenarioPreferences(browser, PC, 'PC');
     await scenarioPreferences(browser, IPHONE, 'iPhone');
     await scenarioOnboarding(browser);
+    await scenarioEtudes(browser, PC, 'PC');
+    await scenarioEtudes(browser, IPHONE, 'iPhone');
     await scenarioImpression(browser, PC, 'PC');
     await scenarioImpression(browser, IPHONE, 'iPhone');
 } finally {

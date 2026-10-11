@@ -663,12 +663,62 @@ function saveProfileData() {
     syncProfileToCloud();
 }
 
-// PROVISOIRE (Tache 6) : les etudes et l'etude courante seront ecrites dans Firestore.
-function saveVariablesData() {}
+// ─── Études du comparateur : users/{uid}/studies/{id} ─────────────────────────
+// Même mécanique que saveOwnedAssets (owned-portfolio.js) : diff contre le dernier état connu, une
+// écriture par étude réellement modifiée/supprimée. _studiesCache contient des enregistrements déjà
+// passés par sanitizeAssetRecord (ordre de clés stable → comparaison JSON fiable).
+let _studiesCache = {};
 
-function saveAssetRecords() {}
+function saveAssetRecords() {
+    if (!_authUser) return;
+    const next = {};
+    state.assetRecords.forEach(record => { next[record.id] = record; });
+    const ids = new Set([...Object.keys(_studiesCache), ...Object.keys(next)]);
+    for (const id of ids) {
+        const had = id in _studiesCache, has = id in next;
+        if (has && (!had || JSON.stringify(_studiesCache[id]) !== JSON.stringify(next[id]))) {
+            cloudSetStudy(id, next[id]).catch(() => showToast('Échec de synchronisation de l’étude', 'negative'));
+        } else if (had && !has) {
+            cloudDeleteStudy(id).catch(() => showToast('Échec de suppression de l’étude dans le cloud', 'negative'));
+        }
+    }
+    _studiesCache = next;
+}
 
-function saveActiveAssetId() {}
+// ─── Étude en cours : users/{uid}/settings/analysis ───────────────────────────
+// computeAnalysisViewModel reste appelé à chaque frappe ; seule l'écriture Firestore est débouncée
+// (1,5 s d'inactivité, quota gratuit), avec flush quand l'onglet se cache ou se ferme. Tant qu'une
+// écriture est en attente (_analysisDirty), les snapshots entrants sont ignorés : la frappe locale
+// gagne — dernière écriture gagnante, comme pour le portefeuille.
+const ANALYSIS_SAVE_DELAY = 1500;
+let _analysisSaveTimer = null;
+let _analysisDirty = false;
+
+function _scheduleAnalysisSave() {
+    _analysisDirty = true;
+    window.clearTimeout(_analysisSaveTimer);
+    _analysisSaveTimer = window.setTimeout(_flushAnalysisSave, ANALYSIS_SAVE_DELAY);
+}
+
+// Vrai entre une frappe dans le formulaire et son relevé (débounce 250 ms de updateVariablesFromForm).
+let _formInputPending = false;
+
+function _flushAnalysisSave() {
+    window.clearTimeout(_analysisSaveTimer);
+    // Onglet masqué/fermé pendant le débounce de saisie : relire d'abord le formulaire, sinon on
+    // écrirait l'état d'avant la dernière frappe.
+    if (_formInputPending) { updateVariablesFromForm(); window.clearTimeout(_analysisSaveTimer); }
+    if (!_analysisDirty || !_authUser) return;
+    _analysisDirty = false;
+    cloudSaveAnalysis({ variablesData: state.variablesData, activeAssetId: state.activeAssetId, updatedAt: Date.now() })
+        .catch(() => showToast('Échec de synchronisation de l’étude en cours', 'negative'));
+}
+
+function saveVariablesData() { _scheduleAnalysisSave(); }
+function saveActiveAssetId() { _scheduleAnalysisSave(); }
+
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _flushAnalysisSave(); });
+window.addEventListener('pagehide', _flushAnalysisSave);
 
 // PROVISOIRE (Tache 7) : synchronisation des deux fenetres via Firestore.
 function emitStateUpdate() {
@@ -2392,6 +2442,7 @@ function updateProfileFromForm() {
 }
 
 function updateVariablesFromForm() {
+    _formInputPending = false;
     const rawVariables = {};
     VARIABLE_KEYS.forEach(key => {
         const field = nodes.variablesForm.elements.namedItem(key);
@@ -2492,7 +2543,9 @@ function bindEvents() {
     nodes.profileForm.addEventListener('input', updateProfileFromForm);
     nodes.profileForm.addEventListener('change', updateProfileFromForm);
     const debouncedUpdateVariablesFromForm = debounce(updateVariablesFromForm, 250);
-    nodes.variablesForm.addEventListener('input', debouncedUpdateVariablesFromForm);
+    // Dès la première frappe la saisie est « en attente » : un snapshot distant arrivant pendant le
+    // débounce de 250 ms ne doit pas écraser le champ (sinon _analysisDirty ne serait posé que trop tard).
+    nodes.variablesForm.addEventListener('input', () => { _analysisDirty = true; _formInputPending = true; debouncedUpdateVariablesFromForm(); });
     nodes.variablesForm.addEventListener('change', updateVariablesFromForm);
 
     document.getElementById('type-bien')?.addEventListener('change', e => {
@@ -2848,9 +2901,44 @@ function _afterFirstSnapshots() {
     if (!_appStarted && Object.values(_cloudReady).every(Boolean)) _startApp();
 }
 
-// PROVISOIRE (Tâche 6) : watchStudies + watchAnalysis remplaceront ces deux stubs.
-function _startStudiesAndAnalysis() { _cloudReady.studies = true; _cloudReady.analysis = true; }
-function _reconcileActiveAsset() {}
+function _applyStudies(map) {
+    const records = Object.values(map || {}).map(sanitizeAssetRecord).filter(Boolean).sort((a, b) => a.createdAt - b.createdAt);
+    _studiesCache = {};
+    records.forEach(r => { _studiesCache[r.id] = r; });
+    state.assetRecords = records;
+}
+
+// Document absent → valeurs par défaut, sans rien écrire. Snapshot identique à l'état (écho de notre
+// propre écriture) → rien à faire ; différent et aucune saisie en attente → appliqué (autre appareil).
+function _applyAnalysis(data) {
+    if (!data || _analysisDirty) return;
+    const incomingVars = sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...(data.variablesData || {}) });
+    const incomingActive = typeof data.activeAssetId === 'string' && data.activeAssetId ? data.activeAssetId : null;
+    if (incomingActive === state.activeAssetId && JSON.stringify(incomingVars) === JSON.stringify(state.variablesData)) return;
+    state.variablesData = incomingVars;
+    state.activeAssetId = incomingActive;
+    if (_appStarted) { _reconcileActiveAsset(); render({ syncVariables: true, syncProfile: false }); }
+}
+
+// Une étude active supprimée sur un autre appareil : on revient à « nouvelle étude » sans écrire
+// (l'écriture suivra la prochaine action de l'utilisateur).
+function _reconcileActiveAsset() {
+    if (state.activeAssetId && !state.assetRecords.some(a => a.id === state.activeAssetId)) state.activeAssetId = null;
+}
+
+function _startStudiesAndAnalysis() {
+    _unsubs.push(watchStudies(map => {
+        _applyStudies(map);
+        _cloudReady.studies = true;
+        if (_appStarted) { _reconcileActiveAsset(); render({ syncVariables: false, syncProfile: false }); }
+        _afterFirstSnapshots();
+    }, _onCloudError));
+    _unsubs.push(watchAnalysis(data => {
+        _applyAnalysis(data);
+        _cloudReady.analysis = true;
+        _afterFirstSnapshots();
+    }, _onCloudError));
+}
 
 function _startCloud() {
     _stopCloud();
@@ -2874,6 +2962,9 @@ function _startCloud() {
 function _stopCloud() {
     _unsubs.forEach(unsub => { try { unsub(); } catch { /* déjà coupé */ } });
     _unsubs = [];
+    _studiesCache = {};
+    _analysisDirty = false;
+    window.clearTimeout(_analysisSaveTimer);
     Object.keys(_cloudReady).forEach(k => { _cloudReady[k] = false; });
     _appStarted = false;
 }
