@@ -227,7 +227,7 @@ Règles pures de la migration unique stockage local → cloud (aucun DOM, `getIt
 Migration unique exe → cloud, chargée par `main.js` seulement sur 127.0.0.1/localhost:8080 ou avec `?migration-locale=1`, après connexion ; ne fait rien si `settings/migration` existe ; à supprimer en fin de chantier (Phase 6). Ne supprime rien en local.
 - `runLocalMigration({ sanitizeAssetRecord, normaliserVariables })` — point d'entrée, boucle Réessayer, retourne `{ skipped }` ou le bilan
 - `_migrer(deps, modale)` — 5 étapes : études (la plus récente gagne), réglages (analyse, prefs, profil/regime/order/goals seulement si absents du cloud), archives (octets bruts `/exports/<nom>` → Storage), justificatifs PDF (`/api/documents/…` si absents), relecture complète
-- règle : le marqueur `settings/migration` n'est écrit QUE si la relecture correspond à tout ; sinon écarts listés
+- règle : le marqueur `settings/migration` n'est écrit QUE si la relecture correspond à tout ; sinon écarts listés. Sont des écarts : liste des archives illisible (`_lireListeExports` renvoie null), archive listée illisible et absente du cloud, exception pendant le run (bilan « erreur pendant la migration » + Réessayer/Ignorer, modale fermée en `finally`)
 - `_lireListeExports()` / `_lireFichierLocal(url)` — lectures des routes locales de l'exe
 - `_ouvrirModale()` — modale progression (z-index 1600, au-dessus de #app-cloud-loading), contrat `[data-etape]`, `[data-migration-close|retry|skip]`
 - `_afficherBilan(modale, bilan)` — bilan + URL web, ou écarts + Réessayer/Ignorer (`escapeHtml`)

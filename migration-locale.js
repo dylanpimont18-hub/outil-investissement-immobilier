@@ -21,14 +21,25 @@ export async function runLocalMigration({ sanitizeAssetRecord, normaliserVariabl
     if (await cloudGetSetting('migration')) return { skipped: true };
     const modale = _ouvrirModale();
     let bilan;
-    for (;;) {
-        modale.reset();
-        bilan = await _migrer({ sanitizeAssetRecord, normaliserVariables }, modale);
-        _afficherBilan(modale, bilan);
-        const choix = await modale.attendreChoix(); // 'close' | 'retry' | 'skip'
-        if (choix !== 'retry') break;
+    try {
+        for (;;) {
+            modale.reset();
+            try {
+                bilan = await _migrer({ sanitizeAssetRecord, normaliserVariables }, modale);
+            } catch (err) {
+                // Une panne (réseau, Storage, déconnexion…) ne doit jamais laisser la modale sans bouton :
+                // bilan en échec (jamais de marqueur) avec Réessayer / Ignorer.
+                console.error('[Spark] migration locale :', err);
+                modale.etape(modale.etapeCourante, 'erreur', 'interrompue');
+                bilan = { ok: false, counts: { etudes: 0, archives: 0, documents: 0 }, ecarts: [`erreur pendant la migration : ${err?.message || err}`], avertissements: [] };
+            }
+            _afficherBilan(modale, bilan);
+            const choix = await modale.attendreChoix(); // 'close' | 'retry' | 'skip'
+            if (choix !== 'retry') break;
+        }
+    } finally {
+        modale.fermer();
     }
-    modale.fermer();
     return bilan;
 }
 
@@ -75,14 +86,20 @@ async function _migrer({ sanitizeAssetRecord, normaliserVariables }, modale) {
     // 3. Archives JSON (dossier exports/) → Storage, octets bruts tels quels.
     modale.etape('archives', 'en cours', 'Archives du portefeuille…');
     const fichiers = await _lireListeExports();
-    for (const nom of fichiers) {
+    if (fichiers === null) ecarts.push('liste des archives locales illisible (/api/portfolio/import/list)');
+    for (const nom of fichiers || []) {
         const existante = await cloudArchiveMeta(nom);
         const blob = await _lireFichierLocal(`/exports/${encodeURIComponent(nom)}`);
-        if (!blob) { avertissements.push(`archive ${nom} illisible localement`); continue; }
+        if (!blob) {
+            // Listée mais illisible : seul un exemplaire déjà au cloud la rend acceptable (relue plus bas).
+            if (existante) attendu.archives.push({ nom, taille: existante.size });
+            else ecarts.push(`archive ${nom} listée mais illisible localement (/exports/${nom})`);
+            continue;
+        }
         if (!existante) await cloudUploadArchive(nom, blob);
         attendu.archives.push({ nom, taille: blob.size });
     }
-    modale.etape('archives', 'ok', `${attendu.archives.length} archive(s)`);
+    modale.etape('archives', fichiers === null ? 'erreur' : 'ok', fichiers === null ? 'liste illisible' : `${attendu.archives.length} archive(s)`);
 
     // 4. Justificatifs PDF manquants dans Storage, relus via l'ancienne route /api/documents.
     modale.etape('documents', 'en cours', 'Justificatifs…');
@@ -129,14 +146,15 @@ async function _migrer({ sanitizeAssetRecord, normaliserVariables }, modale) {
     return { ok: !ecarts.length, counts, ecarts, avertissements };
 }
 
+// null = liste illisible (route absente, erreur, JSON invalide) ≠ [] = liste lue et vraiment vide.
 async function _lireListeExports() {
     try {
         const res = await fetch('/api/portfolio/import/list');
-        if (!res.ok) return [];
+        if (!res.ok) return null;
         const { files } = await res.json();
-        return Array.isArray(files) ? files.filter(f => typeof f === 'string' && f.endsWith('.json')) : [];
+        return Array.isArray(files) ? files.filter(f => typeof f === 'string' && f.endsWith('.json')) : null;
     } catch {
-        return [];
+        return null;
     }
 }
 
@@ -180,7 +198,9 @@ function _ouvrirModale() {
                     <div class="owned-modal-actions" data-migration-actions hidden></div>
                 </div>`;
         },
+        etapeCourante: 'etudes',
         etape(id, statut, detail = '') {
+            this.etapeCourante = id;
             const li = el.querySelector(`[data-etape="${id}"]`);
             if (!li) return;
             li.querySelector('[data-symbole]').textContent = SYMBOLE[statut] || SYMBOLE.attente;
@@ -213,7 +233,7 @@ function _afficherBilan(modale, bilan) {
         zone.innerHTML = `
             <p><strong>${c.etudes} étude${c.etudes > 1 ? 's' : ''}, ${c.archives} archive${c.archives > 1 ? 's' : ''}, ${c.documents} document${c.documents > 1 ? 's' : ''}</strong> migrés et vérifiés.</p>
             <p>Ouvrez désormais l'application depuis un favori du navigateur, sur PC comme sur iPhone :<br>
-            <a href="${URL_WEB}" target="_blank" rel="noopener">${URL_WEB}</a> (portefeuille seul : <a href="${URL_WEB}/portefeuille" target="_blank" rel="noopener">${URL_WEB}/portefeuille</a>)</p>
+            <a style="color:var(--accent-light)" href="${URL_WEB}" target="_blank" rel="noopener">${URL_WEB}</a> (portefeuille seul : <a style="color:var(--accent-light)" href="${URL_WEB}/portefeuille" target="_blank" rel="noopener">${URL_WEB}/portefeuille</a>)</p>
             ${avert}`;
         actions.innerHTML = `<button type="button" class="btn btn--primary" data-migration-close>Continuer</button>`;
     } else {
