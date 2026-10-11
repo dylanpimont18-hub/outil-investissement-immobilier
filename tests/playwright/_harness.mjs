@@ -152,7 +152,7 @@ export async function reloadWithStore(page, context) {
     await page.reload({ waitUntil: 'load' });
 }
 
-export const waitAppStarted = page => page.waitForSelector('#app-cloud-loading[hidden]', { timeout: 10000 });
+export const waitAppStarted = page => page.waitForSelector('#app-cloud-loading[hidden]', { state: 'attached', timeout: 10000 });
 
 let failures = 0;
 export async function step(name, fn) {

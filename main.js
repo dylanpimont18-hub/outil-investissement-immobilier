@@ -2,7 +2,9 @@
 import { buildDecisionPrintDocument } from './pdf.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
 import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel, openPrintDocument } from './utils.js';
-import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections, syncProfileToCloud, invalidateOwnedMap } from './owned-portfolio.js';
+import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections, syncProfileToCloud, invalidateOwnedMap, renderAuthGateInto } from './owned-portfolio.js';
+import { watchAuth, watchPortfolioMeta } from './owned-cloud.js';
+import { watchPrefs, savePref, watchStudies, cloudSetStudy, cloudDeleteStudy, watchAnalysis, cloudSaveAnalysis } from './cloud-store.js';
 import { initAssistantChat } from './assistant-chat.js';
 
 const _counterState = new WeakMap();
@@ -33,23 +35,10 @@ function animateCounter(el, targetText) {
     requestAnimationFrame(tick);
 }
 
-const STORAGE_KEYS = {
-    theme: 'investissementWebTheme',
-    screens: 'investissementWebScreens',
-    profilePreset: 'investissementWebProfile',
-    profileData: 'investissementWebProfileData',
-    profileConfigured: 'investissementWebProfileConfigured',
-    variablesData: 'investissementWebVariablesData',
-    assetRecords: 'investissementWebAssetRecords',
-    activeAssetId: 'investissementWebActiveAssetId',
-    syncTick: 'investissementWebSyncTick',
-    guidedMode: 'investissementWebGuidedMode',
-    sparkMode: 'investissementWebSparkMode',
-    ownedAssets: 'investissementWebOwnedAssets',
-    ownedOrder: 'investissementWebOwnedOrder',
-    ownedCompact: 'investissementWebOwnedCompact',
-    ownedSort: 'investissementWebOwnedSort'
-};
+// Migration unique depuis l'exe (origine http://127.0.0.1:8080, seule à pouvoir lire son localStorage) :
+// le module n'est chargé que là, ou avec ?migration-locale=1 (tests). Supprimé en fin de chantier.
+const MIGRATION_LOCALE_ACTIVE = (['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '8080')
+    || new URLSearchParams(location.search).has('migration-locale');
 
 // --- Portfolio biens détenus ---
 
@@ -239,33 +228,35 @@ const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 const COPRO_RISK_VALUES = new Set(['stable', 'medium', 'high']);
 const SOURCE_STATUS_VALUES = new Set(['verified', 'estimated', 'unknown']);
 const PASSOIRE_POLICY_VALUES = new Set(['yes', 'no']);
-const STORAGE_SYNC_KEYS = new Set(Object.values(STORAGE_KEYS));
 const PANEL_MODE = getPanelMode();
 const IS_ANALYSIS_WINDOW = PANEL_MODE === 'analysis';
-const initialProfilePreset = loadProfilePreset();
-
+// Valeurs par défaut uniquement : les vraies valeurs arrivent par les snapshots Firestore (prefs,
+// portfolioMeta, studies, settings/analysis) avant le premier render(), voir _startCloud/_startApp.
+// Rien ici n'est jamais réécrit dans le cloud : seules les actions de l'utilisateur écrivent.
 const state = {
-    theme: loadTheme(),
-    screens: loadScreens(),
-    profilePreset: initialProfilePreset,
-    profileData: loadProfileData(initialProfilePreset),
-    profileConfigured: loadProfileConfigured(),
+    theme: 'dark',
+    screens: 1,
+    profilePreset: 'famille',
+    profileData: createProfileData('famille'),
+    profileConfigured: false,
     isProfileModalOpen: false,
-    variablesData: loadVariablesData(),
-    assetRecords: loadAssetRecords(),
-    activeAssetId: loadActiveAssetId(),
-    sparkMode: loadSparkMode(),
+    variablesData: sanitizeVariablesData(VARIABLE_DEFAULTS),
+    assetRecords: [],
+    activeAssetId: null,
+    sparkMode: 'full',
+    guidedMode: false,
+    tutoStep: 0,
+    analysisView: 'quick',
     guidedStepIndex: 0,
     analysisPopupBlocked: false,
     activeOwnedAssetId: null,
-    ownedRegime: localStorage.getItem('investissementWebOwnedRegime') || 'micro-foncier',
+    ownedRegime: 'micro-foncier',
     ownedYearFilter: 1,
-    ownedYearFilters: JSON.parse(localStorage.getItem('investissementWebOwnedYearFilters') || '{}'),
-    ownedPieYear: JSON.parse(localStorage.getItem('investissementWebOwnedPieYear') || '{}'),
-    ownedPieMonth: JSON.parse(localStorage.getItem('investissementWebOwnedPieMonth') || '{}'),
-    ownedOrder: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder) || '[]'),
-    ownedCompact: localStorage.getItem(STORAGE_KEYS.ownedCompact) === '1',
-    ownedSort: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedSort) || 'null'),
+    ownedYearFilters: {},
+    ownedOrder: [],
+    ownedCompact: false,
+    ownedSort: null,
+    facturesLastAsset: null,
     ownedExpandedIds: new Set(),
 };
 
@@ -428,28 +419,6 @@ function buildPanelUrl(panel) {
     return url.toString();
 }
 
-function loadTheme() {
-    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
-    if (savedTheme === 'light' || savedTheme === 'dark') {
-        return savedTheme;
-    }
-    return 'dark';
-}
-
-function loadScreens() {
-    const savedValue = Number.parseInt(localStorage.getItem(STORAGE_KEYS.screens) || '1', 10);
-    return savedValue === 1 ? 1 : 2;
-}
-
-function loadProfilePreset() {
-    const savedProfile = localStorage.getItem(STORAGE_KEYS.profilePreset);
-    return PROFILE_OPTIONS.some(profile => profile.key === savedProfile) ? savedProfile : 'famille';
-}
-
-function loadProfileConfigured() {
-    return localStorage.getItem(STORAGE_KEYS.profileConfigured) === '1';
-}
-
 function getProfileOption(profileKey) {
     return PROFILE_OPTIONS.find(profile => profile.key === profileKey) || PROFILE_OPTIONS[0];
 }
@@ -458,42 +427,9 @@ function createProfileData(profileKey) {
     return sanitizeProfileData(getProfileOption(profileKey).defaults);
 }
 
-function loadProfileData(profileKey) {
-    const profile = getProfileOption(profileKey);
-    const defaults = profile.defaults;
-
-    try {
-        const savedData = JSON.parse(localStorage.getItem(STORAGE_KEYS.profileData) || 'null');
-        if (savedData && typeof savedData === 'object') {
-            return sanitizeProfileData({ ...defaults, ...savedData });
-        }
-    } catch (error) {
-        // Ignore malformed local data and fall back to defaults.
-    }
-
-    return sanitizeProfileData(defaults);
-}
-
-function loadVariablesData() {
-    try {
-        const savedData = JSON.parse(localStorage.getItem(STORAGE_KEYS.variablesData) || 'null');
-        if (savedData && typeof savedData === 'object') {
-            return sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...savedData });
-        }
-    } catch (error) {
-        // Ignore malformed local data and fall back to defaults.
-    }
-
-    return sanitizeVariablesData(VARIABLE_DEFAULTS);
-}
-
-function loadSparkMode() {
-    const saved = localStorage.getItem(STORAGE_KEYS.sparkMode);
-    return saved === 'guided' ? 'guided' : 'full';
-}
-
 function saveSparkMode(mode) {
-    localStorage.setItem(STORAGE_KEYS.sparkMode, mode);
+    state.sparkMode = mode;
+    savePref({ sparkMode: mode }).catch(() => {});
 }
 
 function renderModeSwitch(mode) {
@@ -617,26 +553,6 @@ function syncGuidedFieldsToForm() {
     });
 }
 
-function loadAssetRecords() {
-    try {
-        const savedAssets = JSON.parse(localStorage.getItem(STORAGE_KEYS.assetRecords) || 'null');
-        if (Array.isArray(savedAssets)) {
-            return savedAssets
-                .map(sanitizeAssetRecord)
-                .filter(Boolean);
-        }
-    } catch (error) {
-        // Ignore malformed local data and fall back to empty array.
-    }
-
-    return [];
-}
-
-function loadActiveAssetId() {
-    const savedValue = localStorage.getItem(STORAGE_KEYS.activeAssetId);
-    return typeof savedValue === 'string' && savedValue ? savedValue : null;
-}
-
 function normalizeLegacyCopy(value) {
     const text = String(value || '').trim();
 
@@ -741,56 +657,28 @@ function createAssetId() {
     return `asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Le profil n'a plus de copie locale : portfolioMeta.profile est la source unique (income/adults/
+// children pilotent le TMI donc le CF net-net apres impot, synchronises PC/iPhone via Firestore).
 function saveProfileData() {
-    localStorage.setItem(STORAGE_KEYS.profileData, JSON.stringify(state.profileData));
-    // income/adults/children pilotent le TMI donc le CF net-net apres impot du portefeuille :
-    // synchronises vers owned.html (iPhone, sans formulaire Profil) via Firestore.
     syncProfileToCloud();
 }
 
-function saveVariablesData() {
-    localStorage.setItem(STORAGE_KEYS.variablesData, JSON.stringify(state.variablesData));
-}
+// PROVISOIRE (Tache 6) : les etudes et l'etude courante seront ecrites dans Firestore.
+function saveVariablesData() {}
 
-function saveAssetRecords() {
-    localStorage.setItem(STORAGE_KEYS.assetRecords, JSON.stringify(state.assetRecords));
-}
+function saveAssetRecords() {}
 
-function saveActiveAssetId() {
-    if (state.activeAssetId) {
-        localStorage.setItem(STORAGE_KEYS.activeAssetId, state.activeAssetId);
-    } else {
-        localStorage.removeItem(STORAGE_KEYS.activeAssetId);
-    }
-}
+function saveActiveAssetId() {}
 
+// PROVISOIRE (Tache 7) : synchronisation des deux fenetres via Firestore.
 function emitStateUpdate() {
-    localStorage.setItem(STORAGE_KEYS.syncTick, String(Date.now()));
     if (syncChannel) {
         syncChannel.postMessage({ type: 'state-update' });
     }
 }
 
+// PROVISOIRE (Taches 6-7) : les donnees arrivent par les snapshots Firestore, simple re-rendu.
 function refreshStateFromStorage() {
-    const nextPreset = loadProfilePreset();
-    state.theme = loadTheme();
-    state.screens = loadScreens();
-    state.profilePreset = nextPreset;
-    state.profileData = loadProfileData(nextPreset);
-    state.profileConfigured = loadProfileConfigured();
-    state.variablesData = loadVariablesData();
-    state.assetRecords = loadAssetRecords();
-    state.activeAssetId = loadActiveAssetId();
-
-    if (state.activeAssetId && !state.assetRecords.some(asset => asset.id === state.activeAssetId)) {
-        state.activeAssetId = null;
-        saveActiveAssetId();
-    }
-
-    if (!IS_ANALYSIS_WINDOW && state.screens === 1) {
-        closeAnalysisWindow();
-    }
-
     render();
 }
 
@@ -803,12 +691,6 @@ function setupCrossWindowSync() {
             }
         });
     }
-
-    window.addEventListener('storage', event => {
-        if (event.key && STORAGE_SYNC_KEYS.has(event.key)) {
-            refreshStateFromStorage();
-        }
-    });
 }
 
 function getProfileComposition(profileData) {
@@ -1463,7 +1345,6 @@ function loadAssetIntoWorkspace(assetId) {
 function applyTheme() {
     document.documentElement.dataset.theme = state.theme;
     document.body.classList.toggle('panel-analysis', IS_ANALYSIS_WINDOW);
-    localStorage.setItem(STORAGE_KEYS.theme, state.theme);
 
     if (nodes.themeMeta) {
         nodes.themeMeta.setAttribute('content', state.theme === 'dark' ? '#09090b' : '#f4f4f5');
@@ -1647,7 +1528,6 @@ function openEssentielAccordions() {
 
 function setProfileConfigured() {
     state.profileConfigured = true;
-    localStorage.setItem(STORAGE_KEYS.profileConfigured, '1');
 }
 
 function canDismissProfileModal() {
@@ -1706,6 +1586,7 @@ function dismissProfileModal() {
 
 function confirmProfileModal() {
     setProfileConfigured();
+    saveProfileData();
     emitStateUpdate();
     dismissProfileModal();
 }
@@ -1724,7 +1605,7 @@ function closeProfileModal() {
 
 function applyProfilePreset(profileKey) {
     state.profilePreset = profileKey;
-    localStorage.setItem(STORAGE_KEYS.profilePreset, state.profilePreset);
+    savePref({ profilePreset: profileKey }).catch(() => {});
     state.profileData = { ...createProfileData(profileKey), autresCredits: state.profileData.autresCredits, revenuHistorique: state.profileData.revenuHistorique };
     saveProfileData();
     emitStateUpdate();
@@ -2342,20 +2223,15 @@ function renderModalState() {
     document.body.classList.toggle('modal-open', state.isProfileModalOpen);
 }
 
-function isGuidedModeActive() {
-    return localStorage.getItem(STORAGE_KEYS.guidedMode) === 'true';
-}
-
-function getTutoStep() {
-    return parseInt(localStorage.getItem('sparkTutoStep') || '0', 10);
-}
-
+function isGuidedModeActive() { return state.guidedMode; }
+function getTutoStep() { return state.tutoStep; }
 function setTutoStep(n) {
-    localStorage.setItem('sparkTutoStep', String(n));
+    state.tutoStep = n;
+    savePref({ tutoStep: n }).catch(() => {});
 }
-
 function setGuidedMode(active) {
-    localStorage.setItem(STORAGE_KEYS.guidedMode, String(active));
+    state.guidedMode = Boolean(active);
+    savePref({ guidedMode: state.guidedMode }).catch(() => {});
     if (active) setTutoStep(0);
     applyGuidedModeUI(active);
     render({ syncVariables: false, syncProfile: false });
@@ -2532,7 +2408,7 @@ function updateVariablesFromForm() {
 
 function handleScreenToggle() {
     state.screens = state.screens === 1 ? 2 : 1;
-    localStorage.setItem(STORAGE_KEYS.screens, String(state.screens));
+    savePref({ screens: state.screens }).catch(() => {});
 
     if (!IS_ANALYSIS_WINDOW) {
         if (state.screens === 2) {
@@ -2554,7 +2430,7 @@ function bindEvents() {
     }
     nodes.themeToggle.addEventListener('click', () => {
         state.theme = state.theme === 'dark' ? 'light' : 'dark';
-        localStorage.setItem(STORAGE_KEYS.theme, state.theme);
+        savePref({ theme: state.theme }).catch(() => {});
         emitStateUpdate();
         render({ syncVariables: false, syncProfile: false });
     });
@@ -2672,10 +2548,11 @@ function bindEvents() {
 }
 
 // ── Toggle Vue rapide / Vue complète ──────────────────────────────────────
-const ANALYSIS_VIEW_KEY = 'investissementWebAnalysisView';
-
-function _applyAnalysisView(view) {
+// Vue rapide/complète de l'Analyse : appliquée depuis les prefs cloud au démarrage (_startApp), écrite
+// uniquement au clic (persist) — jamais au chargement.
+function _applyAnalysisView(view, { persist = false } = {}) {
     if (!nodes.analysisPanel) return;
+    state.analysisView = view;
     nodes.analysisPanel.dataset.analysisView = view;
     if (nodes.btnViewQuick) {
         nodes.btnViewQuick.classList.toggle('view-toggle-btn--active', view === 'quick');
@@ -2685,15 +2562,12 @@ function _applyAnalysisView(view) {
         nodes.btnViewFull.classList.toggle('view-toggle-btn--active', view === 'full');
         nodes.btnViewFull.setAttribute('aria-pressed', String(view === 'full'));
     }
-    try { localStorage.setItem(ANALYSIS_VIEW_KEY, view); } catch {}
+    if (persist) savePref({ analysisView: view }).catch(() => {});
 }
 
 function _initAnalysisViewToggle() {
-    let saved = 'quick';
-    try { saved = localStorage.getItem(ANALYSIS_VIEW_KEY) || 'quick'; } catch {}
-    _applyAnalysisView(saved === 'full' ? 'full' : 'quick');
-    nodes.btnViewQuick?.addEventListener('click', () => _applyAnalysisView('quick'));
-    nodes.btnViewFull?.addEventListener('click', () => _applyAnalysisView('full'));
+    nodes.btnViewQuick?.addEventListener('click', () => _applyAnalysisView('quick', { persist: true }));
+    nodes.btnViewFull?.addEventListener('click', () => _applyAnalysisView('full', { persist: true }));
 }
 
 function initWorkspaceTabs() {
@@ -2932,38 +2806,149 @@ function initSliders() {
     });
 }
 
+// ─── Démarrage cloud ───────────────────────────────────────────────────────────
+// Firestore est la seule source de vérité. Le premier render() attend les 4 premiers snapshots pour
+// ne jamais afficher de valeurs par défaut qui sauteraient ensuite ; d'ici là #app-cloud-loading
+// (visible dès le HTML) recouvre la page. Déconnecté : #app-auth-gate recouvre tout (connexion
+// obligatoire pour toute l'app, pas seulement le portefeuille).
+const _cloudReady = { prefs: false, meta: false, studies: false, analysis: false };
+let _appStarted = false;
+let _authUser = null;
+let _unsubs = [];
+
+function _applyPrefs(prefs) {
+    state.theme = prefs.theme === 'light' ? 'light' : 'dark';
+    state.screens = Number(prefs.screens) === 2 ? 2 : 1;
+    state.profilePreset = PROFILE_OPTIONS.some(p => p.key === prefs.profilePreset) ? prefs.profilePreset : 'famille';
+    state.sparkMode = prefs.sparkMode === 'guided' ? 'guided' : 'full';
+    state.guidedMode = prefs.guidedMode === true;
+    state.tutoStep = Number.isInteger(prefs.tutoStep) ? prefs.tutoStep : 0;
+    state.analysisView = prefs.analysisView === 'full' ? 'full' : 'quick';
+    state.facturesLastAsset = typeof prefs.facturesLastAsset === 'string' ? prefs.facturesLastAsset : null;
+}
+
+// portfolioMeta.profile = le profil du foyer (déjà synchronisé PC/iPhone). Un profil présent vaut
+// « profil configuré » : plus de clé dédiée, l'onboarding ne se rouvre que tant qu'il n'existe pas.
+function _applyMeta(meta) {
+    const profile = meta?.profile;
+    state.profileConfigured = Boolean(profile);
+    state.profileData = sanitizeProfileData({ ...getProfileOption(state.profilePreset).defaults, ...(profile || {}) });
+}
+
+function _onCloudError() {
+    showToast('Connexion au cloud impossible — vérifiez votre connexion internet', 'negative');
+}
+
+function _afterFirstSnapshots() {
+    if (!_appStarted && Object.values(_cloudReady).every(Boolean)) _startApp();
+}
+
+// PROVISOIRE (Tâche 6) : watchStudies + watchAnalysis remplaceront ces deux stubs.
+function _startStudiesAndAnalysis() { _cloudReady.studies = true; _cloudReady.analysis = true; }
+function _reconcileActiveAsset() {}
+
+function _startCloud() {
+    _stopCloud();
+    _unsubs.push(watchPrefs(prefs => {
+        _applyPrefs(prefs);
+        _cloudReady.prefs = true;
+        if (_appStarted) { _applyAnalysisView(state.analysisView); applyGuidedModeUI(state.guidedMode); render({ syncVariables: false, syncProfile: true }); }
+        _afterFirstSnapshots();
+    }, _onCloudError));
+    _unsubs.push(watchPortfolioMeta(meta => {
+        _applyMeta(meta);
+        _cloudReady.meta = true;
+        if (_appStarted) render({ syncVariables: false, syncProfile: true });
+        _afterFirstSnapshots();
+    }, _onCloudError));
+    _startStudiesAndAnalysis(); // Tâche 6 : watchStudies + watchAnalysis
+}
+
+function _stopCloud() {
+    _unsubs.forEach(unsub => { try { unsub(); } catch { /* déjà coupé */ } });
+    _unsubs = [];
+    Object.keys(_cloudReady).forEach(k => { _cloudReady[k] = false; });
+    _appStarted = false;
+}
+
+function _startApp() {
+    _appStarted = true;
+    _reconcileActiveAsset(); // Tâche 6
+    const loading = document.getElementById('app-cloud-loading');
+    if (loading) loading.hidden = true;
+    render();
+    _applyAnalysisView(state.analysisView);
+    applyGuidedModeUI(state.guidedMode);
+    if (!IS_ANALYSIS_WINDOW && !state.profileConfigured) {
+        setTimeout(() => openProfileModal(), 400);
+    }
+    if (!IS_ANALYSIS_WINDOW && state.screens === 2) {
+        openAnalysisWindow({ focus: false });
+        if (state.analysisPopupBlocked) render({ syncVariables: false, syncProfile: false });
+    }
+}
+
+function _showAuthGate(show) {
+    const gate = document.getElementById('app-auth-gate');
+    if (!gate) return;
+    gate.hidden = !show;
+    if (show) renderAuthGateInto(gate, { title: 'Spark Investissement — Connexion' });
+}
+
+function _initCloud() {
+    watchAuth(async user => {
+        _authUser = user;
+        const loading = document.getElementById('app-cloud-loading');
+        if (!user) {
+            _stopCloud();
+            if (loading) loading.hidden = true;
+            _showAuthGate(true);
+            return;
+        }
+        _showAuthGate(false);
+        if (loading) loading.hidden = false;
+        if (MIGRATION_LOCALE_ACTIVE && !IS_ANALYSIS_WINDOW) {
+            // Doit tourner avant tout abonnement : l'app n'écrit dans settings/* que sur action, mais
+            // on ne veut même pas lire des documents que la migration est en train de remplir.
+            try {
+                const { runLocalMigration } = await import('./migration-locale.js');
+                await runLocalMigration({
+                    sanitizeAssetRecord,
+                    normaliserVariables: raw => sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...(raw || {}) })
+                });
+            } catch (err) {
+                console.error('[Spark] migration locale :', err);
+                showToast('Migration locale impossible — voir la console', 'negative');
+            }
+            if (_authUser !== user) return; // déconnecté pendant la migration
+        }
+        _startCloud();
+    });
+}
+
 console.log('[Spark] Init start');
-initOwnedPortfolio({ state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE: false });
+initOwnedPortfolio({ state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE: false });
 populateProfiles();
 setupCrossWindowSync();
 bindEvents();
-try {
-    render();
-    console.log('[Spark] render() OK');
-} catch (err) {
-    console.error('[Spark] Erreur au render initial :', err);
-    showToast('Erreur au démarrage — consultez la console.', 'negative');
-}
-applyGuidedModeUI(isGuidedModeActive());
 initWorkspaceTabs();
 _initAnalysisViewToggle();
 initOwnedPortfolioEvents();
 if (!IS_ANALYSIS_WINDOW) initAssistantChat({ state, nodes });
-if (!state.profileConfigured && !IS_ANALYSIS_WINDOW) {
-    setTimeout(() => openProfileModal(), 400);
-}
 initAccordion();
 initTutoBar();
 initGlossaire();
 initCalculette();
 initSliders();
+// Câblage DOM terminé (aucune écriture) : le premier render() viendra des snapshots cloud (_startApp).
+_initCloud();
 
-fetch('/api/version')
-    .then((res) => res.json())
-    .then((data) => {
-        if (nodes.topbarVersion && data && data.version) {
-            nodes.topbarVersion.textContent = `v${data.version}`;
-        }
+// Numéro de version : fichier statique VERSION servi par Hosting (plus de route /api/version).
+fetch('VERSION', { cache: 'no-store' })
+    .then(res => (res.ok ? res.text() : ''))
+    .then(text => {
+        const version = String(text || '').trim();
+        if (nodes.topbarVersion && /^\d+\.\d+\.\d+$/.test(version)) nodes.topbarVersion.textContent = `v${version}`;
     })
     .catch(() => {});
 
@@ -2988,10 +2973,4 @@ if (btnRegimeModal && modalRegimes) {
     });
 }
 
-if (!IS_ANALYSIS_WINDOW && state.screens === 2) {
-    openAnalysisWindow({ focus: false });
-    if (state.analysisPopupBlocked) {
-        render({ syncVariables: false, syncProfile: false });
-    }
-}
 

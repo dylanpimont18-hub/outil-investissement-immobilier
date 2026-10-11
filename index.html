@@ -17,8 +17,9 @@
     <!-- Connexion obligatoire pour toute l'app (main.js) : recouvre tout tant que Firebase Auth n'a pas de session -->
     <div id="app-auth-gate" class="app-auth-gate" hidden></div>
     <!-- Premier chargement des données cloud (≈ 0,5 s) : visible dès le HTML pour ne jamais montrer de valeurs par défaut.
-         L'attribut hidden est retiré par l'amorçage cloud de main.js (jusque-là, l'ancien main.js ne le masquerait jamais). -->
-    <div id="app-cloud-loading" class="app-cloud-loading" role="status" aria-live="polite" hidden>
+         main.js l'affiche aussi pendant la connexion, puis le masque (attribut hidden) dès les premiers snapshots
+         (_startApp) ou si l'utilisateur est déconnecté (_initCloud). -->
+    <div id="app-cloud-loading" class="app-cloud-loading" role="status" aria-live="polite">
         <div class="app-cloud-loading__box">Chargement de vos données…</div>
     </div>
     <div class="shell">

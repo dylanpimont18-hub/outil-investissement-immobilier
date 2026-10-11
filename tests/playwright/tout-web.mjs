@@ -77,8 +77,7 @@ async function scenarioImpression(browser, viewport, label) {
         await page.click('#asset-report-close');
     });
 
-    // Temporaire (jusqu en Tache 5-6) : main.js interroge encore /api/version (404 sur le web), retiré avec le serveur.
-    await step('aucune erreur JS', () => assert.deepEqual(errors.filter(e => !/api[/]version|Failed to load resource.*404/.test(e)), []));
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 }
 
@@ -105,7 +104,7 @@ async function scenarioConnexion(browser, viewport, label) {
     await step('connexion → gate masqué, chargement puis application', async () => {
         await page.fill('#app-auth-gate [name="password"]', 'secret');
         await page.click('#app-auth-gate button[type="submit"]');
-        await page.waitForSelector('#app-auth-gate[hidden]', { timeout: 8000 });
+        await page.waitForSelector('#app-auth-gate[hidden]', { state: 'attached', timeout: 8000 });
         // Temporaire (Tâche 5 restaure waitAppStarted) : main.js n est pas encore migré.
         await page.waitForSelector('#owned-quickfab:not([hidden])');
         assert.deepEqual(await page.evaluate(() => window.__stub.signIns.map(s => s.email)), ['test@example.com', 'test@example.com']);
@@ -124,10 +123,73 @@ async function scenarioConnexion(browser, viewport, label) {
     await o.context.close();
 }
 
+async function scenarioPreferences(browser, viewport, label) {
+    console.log(`\nPréférences — ${label}`);
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false });
+    await waitAppStarted(page);
+
+    await step('chargement : thème sombre par défaut, AUCUNE écriture cloud', async () => {
+        assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
+        await page.waitForTimeout(800);
+        assert.deepEqual(await page.evaluate(() => window.__store.writes), [], 'rien ne doit être écrit au simple chargement');
+        assert.deepEqual(await page.evaluate(() => window.__stub.metaWrites), [], 'ni dans portfolioMeta');
+    });
+
+    await step('version lue depuis le fichier VERSION', async () => {
+        await page.waitForFunction(() => /^v\d+\.\d+\.\d+$/.test(document.getElementById('topbar-version').textContent), null, { timeout: 5000 });
+    });
+
+    await step('thème → settings/prefs.theme, conservé après rechargement', async () => {
+        await page.click('#theme-toggle');
+        await page.waitForFunction(() => window.__store.settings.prefs?.theme === 'light');
+        await reloadWithStore(page, context);
+        await waitAppStarted(page);
+        assert.equal(await page.getAttribute('html', 'data-theme'), 'light');
+    });
+
+    await step('prefs seedées appliquées sans flash : vue analyse complète, saisie guidée', async () => {
+        // guidedMode (tuto) n'a pas de DOM dédié dans index.html (#guided-toggle absent) : on vérifie sparkMode.
+        await context.addInitScript(`window.__seedStore = ${JSON.stringify({ settings: { prefs: { theme: 'light', analysisView: 'full', sparkMode: 'guided', screens: 1 } } })};`);
+        await page.reload({ waitUntil: 'load' });
+        await waitAppStarted(page);
+        assert.equal(await page.getAttribute('#analysis-panel', 'data-analysis-view'), 'full');
+        assert.equal(await page.getAttribute('#mode-btn-guided', 'aria-pressed'), 'true');
+        await page.waitForTimeout(500);
+        assert.deepEqual(await page.evaluate(() => window.__store.writes), [], 'appliquer des prefs ne réécrit rien');
+        await shot(page, `prefs-${label}`);
+    });
+
+    await step('profil cloud → TMI/profil affichés, pas de modale d onboarding', async () => {
+        assert.equal(await page.isVisible('#profile-modal.open'), false);
+        assert.match(await page.textContent('#topbar-profile-label'), /Test/);
+    });
+
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+}
+
+async function scenarioOnboarding(browser) {
+    console.log('\nOnboarding profil — PC');
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedCloud: { meta: { order: ['oa-test-1'], regime: 'micro-foncier' } } });
+    await waitAppStarted(page);
+    await step('sans profil cloud → modale profil ouverte, Valider pousse portfolioMeta.profile', async () => {
+        await page.waitForSelector('#profile-modal.open', { timeout: 5000 });
+        await page.fill('#profile-income', '3000');
+        await page.click('#profile-save');
+        await page.waitForFunction(() => window.__stub.meta.profile && window.__stub.meta.profile.income === 36000);
+        await page.waitForSelector('#profile-modal:not(.open)', { state: 'attached' });
+    });
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+}
+
 const browser = await chromium.launch();
 try {
     await scenarioConnexion(browser, PC, 'PC');
     await scenarioConnexion(browser, IPHONE, 'iPhone');
+    await scenarioPreferences(browser, PC, 'PC');
+    await scenarioPreferences(browser, IPHONE, 'iPhone');
+    await scenarioOnboarding(browser);
     await scenarioImpression(browser, PC, 'PC');
     await scenarioImpression(browser, IPHONE, 'iPhone');
 } finally {
