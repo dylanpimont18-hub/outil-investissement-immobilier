@@ -35,7 +35,7 @@ function animateCounter(el, targetText) {
     requestAnimationFrame(tick);
 }
 
-// Migration unique depuis l'exe (origine http://127.0.0.1:8080, seule à pouvoir lire son localStorage) :
+// Migration unique depuis l'exe (origine http://127.0.0.1:8080, seule à pouvoir lire son ancien stockage local) :
 // le module n'est chargé que là, ou avec ?migration-locale=1 (tests). Supprimé en fin de chantier.
 const MIGRATION_LOCALE_ACTIVE = (['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '8080')
     || new URLSearchParams(location.search).has('migration-locale');
@@ -720,27 +720,44 @@ function saveActiveAssetId() { _scheduleAnalysisSave(); }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _flushAnalysisSave(); });
 window.addEventListener('pagehide', _flushAnalysisSave);
 
-// PROVISOIRE (Tache 7) : synchronisation des deux fenetres via Firestore.
+// ─── Mode deux fenêtres (?panel=analysis) ─────────────────────────────────────
+// Le message BroadcastChannel porte l'état lui-même (plus de relais par stockage local) : la fenêtre
+// détachée suit la frappe immédiatement, sans attendre le débounce Firestore. Au rechargement, elle
+// repart des snapshots cloud comme la fenêtre principale.
 function emitStateUpdate() {
-    if (syncChannel) {
-        syncChannel.postMessage({ type: 'state-update' });
-    }
+    if (!syncChannel) return;
+    syncChannel.postMessage({
+        type: 'state-update',
+        payload: {
+            theme: state.theme, screens: state.screens, sparkMode: state.sparkMode, profilePreset: state.profilePreset,
+            profileData: state.profileData, profileConfigured: state.profileConfigured,
+            variablesData: state.variablesData, activeAssetId: state.activeAssetId, assetRecords: state.assetRecords
+        }
+    });
 }
 
-// PROVISOIRE (Taches 6-7) : les donnees arrivent par les snapshots Firestore, simple re-rendu.
-function refreshStateFromStorage() {
+function applyRemoteState(payload) {
+    if (!payload || !_appStarted) return; // avant le premier render, les snapshots cloud suffisent
+    state.theme = payload.theme === 'light' ? 'light' : 'dark';
+    state.screens = Number(payload.screens) === 2 ? 2 : 1;
+    state.sparkMode = payload.sparkMode === 'guided' ? 'guided' : 'full';
+    state.profilePreset = PROFILE_OPTIONS.some(p => p.key === payload.profilePreset) ? payload.profilePreset : state.profilePreset;
+    if (payload.profileData) state.profileData = sanitizeProfileData(payload.profileData);
+    state.profileConfigured = Boolean(payload.profileConfigured);
+    if (payload.variablesData) state.variablesData = sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...payload.variablesData });
+    state.activeAssetId = typeof payload.activeAssetId === 'string' && payload.activeAssetId ? payload.activeAssetId : null;
+    if (Array.isArray(payload.assetRecords)) state.assetRecords = payload.assetRecords.map(sanitizeAssetRecord).filter(Boolean);
+    _reconcileActiveAsset();
+    if (!IS_ANALYSIS_WINDOW && state.screens === 1) closeAnalysisWindow();
     render();
 }
 
 function setupCrossWindowSync() {
-    if ('BroadcastChannel' in window) {
-        syncChannel = new BroadcastChannel('investissement-web-sync');
-        syncChannel.addEventListener('message', event => {
-            if (event.data && event.data.type === 'state-update') {
-                refreshStateFromStorage();
-            }
-        });
-    }
+    if (!('BroadcastChannel' in window)) return;
+    syncChannel = new BroadcastChannel('investissement-web-sync');
+    syncChannel.addEventListener('message', event => {
+        if (event.data && event.data.type === 'state-update') applyRemoteState(event.data.payload);
+    });
 }
 
 function getProfileComposition(profileData) {
