@@ -29,6 +29,7 @@ async function scenarioImpression(browser, viewport, label) {
         assert.doesNotMatch(p.title, /\.pdf$/i);
         assert.ok(p.title.length > 3, `titre vide : ${p.title}`);
         assert.match(p.text, /Rapport d.analyse/);
+        assert.ok(p.bg, 'fond non défini (variables :root perdues ?)');
         assert.equal(p.hasPageRule, true, '@page hissé dans le document');
         await page.waitForFunction(() => !document.getElementById('spark-print-root'));
         assert.equal(await page.title(), 'Spark Investissement | Analyse locative', 'titre restauré après afterprint');
@@ -62,6 +63,7 @@ async function scenarioImpression(browser, viewport, label) {
             const p = await page.evaluate(() => window.__prints.at(-1));
             assert.match(p.text, /Dossier bancaire/);
             assert.match(p.title, /ossier/);
+            assert.ok(p.bg, 'fond non défini (variables :root perdues ?)');
         }
         const before2 = await page.evaluate(() => window.__prints.length);
         await page.click('#owned-report-btn');

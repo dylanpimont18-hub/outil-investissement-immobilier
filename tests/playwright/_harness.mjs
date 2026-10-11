@@ -118,6 +118,8 @@ window.print = () => {
         hostCount: document.querySelectorAll('#spark-print-root').length,
         printing: document.body.classList.contains('spark-printing'),
         text: (host?.shadowRoot?.querySelector('.print-root')?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 400),
+        // Fond du conteneur .print-root (html/body/:root réécrits) : couleur ou dégradé issus des variables --paper.
+        bg: (() => { const el = host?.shadowRoot?.querySelector('.print-root'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundColor !== 'rgba(0, 0, 0, 0)' ? cs.backgroundColor : (cs.backgroundImage !== 'none' ? cs.backgroundImage : ''); })(),
         hasPageRule: !!document.getElementById('spark-print-page')
     });
     setTimeout(() => window.dispatchEvent(new Event('afterprint')), 0);

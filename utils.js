@@ -159,9 +159,11 @@ export function getChecklistLabel(status) {
 const PRINT_ROOT_ID = 'spark-print-root';
 let _printCleanup = null;
 
-// Dans un Shadow DOM, les sélecteurs html/body ne matchent rien : rabattus sur le conteneur .print-root.
+// Dans un Shadow DOM, les sélecteurs html/body/:root ne matchent rien (les variables CSS définies
+// sur :root seraient perdues) : rabattus sur le conteneur .print-root.
 export function cssPourShadow(css) {
     return String(css)
+        .replace(/(^|[^\w.#:-]):root(?![\w-])/g, '$1.print-root')
         .replace(/(^|[^\w.#-])html\s*,\s*body(?![\w-])/g, '$1.print-root')
         .replace(/(^|[^\w.#-])(?:html|body)(?![\w-])/g, '$1.print-root');
 }
