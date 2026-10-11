@@ -2,11 +2,13 @@
   "name": "investissement_web",
   "version": "1.0.0",
   "private": true,
-  "description": "Outil d'analyse d'investissement immobilier (app desktop) + tests calculs.js + tooling de verification navigateur (Playwright)",
+  "description": "Spark Investissement — application web (Firebase Hosting) d'analyse d'investissement immobilier + tests calculs.js + verification navigateur (Playwright)",
   "main": "main.js",
   "type": "module",
   "scripts": {
-    "test": "for f in tests/*.mjs; do node \"$f\" || exit 1; done"
+    "test": "node scripts/run-tests.mjs",
+    "verify": "node scripts/run-tests.mjs --check",
+    "serve": "node scripts/serve-static.mjs 8090"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

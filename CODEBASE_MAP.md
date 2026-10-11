@@ -379,7 +379,21 @@ Lancement rapide en développement (hors build) : ferme l'instance existante sur
 
 ---
 
+## scripts/run-tests.mjs
+Lance en séquence tous les `tests/*.mjs` (Node), s'arrête au premier échec (exit 1). Point d'entrée de `npm test` et `npm run verify` (remplace la boucle bash, qui échouait sous cmd.exe).
+- `--check` — passe d'abord `node --check` sur chaque `.js` racine (syntaxe seule), puis la suite
+- sans option — suite de tests seule
+
+---
+
+## scripts/serve-static.mjs
+Serveur statique de développement sans dépendance, lié à 127.0.0.1 (jamais 8080). Sert l'app et les tests Playwright avec MIME explicites et les mêmes réécritures que `firebase.json` (`/` → `index.html`, `/portefeuille` → `owned.html`). Point d'entrée de `npm run serve`.
+- `[port]` (argument 1) — port d'écoute, défaut 8090 (ou variable `PORT`)
+
+---
+
 ## verify.bat
+Remplacé par `npm run verify` (même vérification, sans boucle bash) ; ce fichier sera supprimé en Phase 6 du passage au tout-web.
 Vérification locale : `pytest tests/` puis `tests/test_frais_fiscalite.mjs`, `tests/test_regimes_fiscaux.mjs`, `tests/test_loyer_historique.mjs`, `tests/test_ratio_credit.mjs`, `tests/test_projection_impots.mjs`, `tests/test_optimisation_travaux.mjs` et `tests/test_projection_regimes.mjs` (8 étapes), s'arrête net (exit non-zero) au premier échec. Appelé par `build.bat` en première étape (variable `CALLED_FROM_BUILD` pour ne pas `pause` en mode non-interactif).
 
 ---
