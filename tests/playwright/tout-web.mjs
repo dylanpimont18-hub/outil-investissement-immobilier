@@ -295,6 +295,50 @@ async function scenarioDeuxFenetres(browser) {
     await context.close();
 }
 
+async function scenarioPrefsPortefeuille(browser) {
+    console.log('\nPréférences portefeuille — owned.html iPhone');
+    const { page, context, errors } = await openPage(browser, '/owned.html', { viewport: IPHONE, spyStorage: false });
+    await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 8000 });
+
+    await step('chargement : aucune écriture', async () => {
+        await page.waitForTimeout(800);
+        assert.deepEqual(await page.evaluate(() => window.__store.writes), []);
+    });
+
+    await step('densité compacte → prefs.ownedCompact, conservée après rechargement', async () => {
+        // Bouton masqué en CSS sur owned.html (.shell--owned) : clic programmatique sur le vrai handler.
+        await page.evaluate(() => document.getElementById('owned-density-btn').click());
+        await page.waitForFunction(() => window.__store.settings.prefs?.ownedCompact === true);
+        await reloadWithStore(page, context);
+        await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 8000 });
+        assert.equal(await page.evaluate(() => window.__store.settings.prefs.ownedCompact), true);
+        // Bouton masqué en CSS sur owned.html (.shell--owned) : clic programmatique sur le vrai handler.
+        await page.evaluate(() => document.getElementById('owned-density-btn').click());
+        await page.waitForFunction(() => window.__store.settings.prefs?.ownedCompact === false, null, { timeout: 2000 });
+    });
+
+    await step('filtre d année d un bien → prefs.ownedYearFilters[id]', async () => {
+        await page.locator('[data-open-asset="oa-test-1"], [data-asset-id="oa-test-1"]').first().click();
+        await page.waitForSelector('#owned-detail-view:not([hidden])');
+        await page.click('.owned-tab[data-tab="calcul"]');
+        const btn = page.locator('[data-calcul-year]').nth(2);
+        const year = await btn.getAttribute('data-calcul-year');
+        await btn.click();
+        await page.waitForFunction(y => window.__store.settings.prefs?.ownedYearFilters?.['oa-test-1'] === Number(y), year);
+    });
+
+    await step('modale factures : dernier bien mémorisé dans prefs.facturesLastAsset', async () => {
+        await page.click('#owned-quickfab');
+        await page.waitForSelector('#owned-factures-modal:not([hidden])');
+        await page.selectOption('[data-fm-asset]', 'oa-test-1');
+        await page.waitForFunction(() => window.__store.settings.prefs?.facturesLastAsset === 'oa-test-1');
+        await page.click('#owned-factures-modal [data-close-modal]');
+    });
+
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+}
+
 const browser = await chromium.launch();
 try {
     await scenarioDeuxFenetres(browser);
@@ -307,6 +351,7 @@ try {
     await scenarioEtudes(browser, IPHONE, 'iPhone');
     await scenarioImpression(browser, PC, 'PC');
     await scenarioImpression(browser, IPHONE, 'iPhone');
+    await scenarioPrefsPortefeuille(browser);
 } finally {
     await browser.close();
 }

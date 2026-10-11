@@ -1,8 +1,8 @@
-// Module Portefeuille biens detenus — CRUD (ownedAssets, localStorage), rendu (liste, fiche detail,
+// Module Portefeuille biens detenus — CRUD (ownedAssets, Firestore via owned-cloud.js), rendu (liste, fiche detail,
 // onglets Acquisition/Exploitation/Travaux/Projection) et evenements. Extrait de main.js (axe 3).
 //
 // Interface : initOwnedPortfolio(deps) doit etre appelee en tout premier (avant le premier render()),
-// avec { state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE } (les memes objets partages
+// avec { state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE } (les memes objets partages
 // que main.js, passes par reference) — renderCollections() en depend des le premier rendu.
 // IS_MOBILE_PAGE (true depuis owned-entry.js, false depuis main.js) fait sauter dashboard/carte/
 // graphiques/comparaison regimes/diagnostic IA dans le rendu, pour ne garder sur owned.html (page
@@ -29,8 +29,9 @@ import {
     cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
     cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword
 } from './owned-cloud.js';
+import { watchPrefs, savePref } from './cloud-store.js';
 
-let state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
+let state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
 
 // Affichage de dateAchat ('YYYY-MM', voir parseDateAchat dans calculs.js) au format français MM/YYYY.
 // Accepte aussi une année brute (biens saisis avant l'ajout du mois précis) : affichée telle quelle.
@@ -51,11 +52,11 @@ let _metaCache = {};
 let _authUser = null;
 let _cloudLoaded = false; // premier snapshot ownedAssets recu depuis la connexion
 let _metaLoaded = false; // premier snapshot portfolioMeta (regime/profil/ordre) recu depuis la connexion
+let _prefsLoaded = false; // premier snapshot settings/prefs (densite, tri, filtres d'annee, dernier bien factures)
 
 export function initOwnedPortfolio(deps) {
     state = deps.state;
     nodes = deps.nodes;
-    STORAGE_KEYS = deps.STORAGE_KEYS;
     IS_ANALYSIS_WINDOW = deps.IS_ANALYSIS_WINDOW;
     IS_MOBILE_PAGE = !!deps.IS_MOBILE_PAGE;
     _initCloudSync();
@@ -63,17 +64,19 @@ export function initOwnedPortfolio(deps) {
 
 // Un seul compte Firebase pour tout le portefeuille (PC + iPhone) ; tant que personne n'est
 // connecte, renderCollections() affiche la grille de connexion (_renderAuthGate) a la place.
-let _unsubAssets = null, _unsubMeta = null;
+let _unsubAssets = null, _unsubMeta = null, _unsubPrefs = null;
 function _initCloudSync() {
     watchAuth(user => {
         _authUser = user;
         if (_unsubAssets) { _unsubAssets(); _unsubAssets = null; }
         if (_unsubMeta) { _unsubMeta(); _unsubMeta = null; }
+        if (_unsubPrefs) { _unsubPrefs(); _unsubPrefs = null; }
         if (!user) {
             _assetsCache = {};
             _metaCache = {};
             _cloudLoaded = false;
             _metaLoaded = false;
+            _prefsLoaded = false;
             renderCollections();
             return;
         }
@@ -93,12 +96,17 @@ function _initCloudSync() {
             // que index.html (PC, seul endroit ou le profil s'edite). Voir syncProfileToCloud().
             if (_metaCache.profile) {
                 state.profileData = { ...state.profileData, ...(_metaCache.profile) };
-            } else if (state.profileConfigured) {
-                // Bootstrap : le cloud n'a encore jamais recu de profil (premiere connexion depuis
-                // ce mecanisme), mais celui-ci est deja configure localement (PC uniquement —
-                // owned-entry.js/owned.html ne pose jamais profileConfigured=true) -> on le pousse.
-                syncProfileToCloud();
             }
+            renderCollections();
+        }, () => {});
+        // Préférences d'affichage du portefeuille : settings/prefs (cloud-store.js), partagées avec
+        // main.js qui y lit les siennes (thème, écrans…). Clé absente → défaut local, jamais écrit.
+        _unsubPrefs = watchPrefs(prefs => {
+            state.ownedCompact = prefs.ownedCompact === true;
+            state.ownedSort = prefs.ownedSort && typeof prefs.ownedSort === 'object' ? prefs.ownedSort : null;
+            state.ownedYearFilters = prefs.ownedYearFilters && typeof prefs.ownedYearFilters === 'object' ? prefs.ownedYearFilters : {};
+            state.facturesLastAsset = typeof prefs.facturesLastAsset === 'string' ? prefs.facturesLastAsset : null;
+            _prefsLoaded = true;
             renderCollections();
         }, () => {});
     });
@@ -1868,10 +1876,9 @@ function renderOwnedImpotTab() {
 // ─── ONGLET PROFIL (revenus historisés + composition du foyer) ──────────────
 // Remplace la modale Profil pour toute édition courante (PC et téléphone) — la modale ne sert plus
 // qu'au tout premier remplissage (onboarding), voir main.js. Persistance identique à
-// main.js:saveProfileData() (localStorage + sync cloud) pour rester cohérent entre les deux points
-// d'entrée : les champs simples partagent le même state.profileData que la modale.
+// main.js:saveProfileData() : portfolioMeta.profile, source unique. Les champs simples partagent
+// le même state.profileData que la modale.
 function saveOwnedProfileData() {
-    localStorage.setItem(STORAGE_KEYS.profileData, JSON.stringify(state.profileData));
     syncProfileToCloud();
 }
 
@@ -2305,7 +2312,7 @@ function initOwnedPortfolioEvents() {
     if (densityBtn) {
         densityBtn.addEventListener('click', () => {
             state.ownedCompact = !state.ownedCompact;
-            localStorage.setItem(STORAGE_KEYS.ownedCompact, state.ownedCompact ? '1' : '0');
+            savePref({ ownedCompact: state.ownedCompact }).catch(() => {});
             renderOwnedPortfolioList();
         });
     }
@@ -2994,7 +3001,7 @@ function renderOwnedPortfolioList() {
                 } else {
                     state.ownedSort = { criterion, dir: 'asc' };
                 }
-                localStorage.setItem(STORAGE_KEYS.ownedSort, JSON.stringify(state.ownedSort));
+                savePref({ ownedSort: state.ownedSort }).catch(() => {});
                 renderOwnedPortfolioList();
             };
             const sortSelect = document.getElementById('owned-sort-select');
@@ -3006,7 +3013,7 @@ function renderOwnedPortfolioList() {
                     } else {
                         state.ownedSort = { criterion: val, dir: 'asc' };
                     }
-                    localStorage.setItem(STORAGE_KEYS.ownedSort, JSON.stringify(state.ownedSort));
+                    savePref({ ownedSort: state.ownedSort }).catch(() => {});
                     renderOwnedPortfolioList();
                 });
             }
@@ -3582,7 +3589,7 @@ function renderOwnedVerdictBlock(asset) {
     el.querySelectorAll('[data-verdict-year]').forEach(btn => {
         btn.addEventListener('click', () => {
             state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: Number(btn.dataset.verdictYear) };
-            localStorage.setItem('investissementWebOwnedYearFilters', JSON.stringify(state.ownedYearFilters));
+            savePref({ ownedYearFilters: state.ownedYearFilters }).catch(() => {});
             renderOwnedVerdictBlock(asset);
             const freshPost = getOwnedAsset(asset.id);
             if (freshPost) renderOwnedCalculTab(freshPost);
@@ -4306,7 +4313,6 @@ function renderOwnedTravauxTab(asset) {
 // résumé / montant / date d'émission, revue en ligne, un clic pour tout enregistrer. Rien n'est
 // stocké tant que l'utilisateur n'a pas validé (pas de boîte de réception persistante, choix spec).
 
-const FM_LAST_ASSET_KEY = 'spark:factures:lastAsset';
 const FM_MAX_FILES_PER_DROP = 50;
 const FM_EXISTING_VISIBLE = 10;
 const FM_FILE_EXT = /\.(pdf|jpe?g|png)$/i;
@@ -4400,8 +4406,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
         empty.querySelector('[data-fm-add-bien]')?.addEventListener('click', () => { empty.hidden = true; openOwnedAddModal(); });
         return;
     }
-    let lastUsed = null;
-    try { lastUsed = localStorage.getItem(FM_LAST_ASSET_KEY); } catch { /* stockage indisponible */ }
+    const lastUsed = state.facturesLastAsset;
     const initialId = [assetId, lastUsed, assets[0].id].find(id => id && assets.some(a => a.id === id));
     let currentAssetId = initialId;
 
@@ -4697,7 +4702,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             if (i >= 0) rows.splice(i, 1);
             row.el.remove();
         }
-        try { localStorage.setItem(FM_LAST_ASSET_KEY, currentAssetId); } catch { /* ignore */ }
+        state.facturesLastAsset = currentAssetId; savePref({ facturesLastAsset: currentAssetId }).catch(() => {});
         if (added) showToast(`${added} frais ajouté${added > 1 ? 's' : ''} à ${asset.nom || 'ce bien'}${failed ? ` — ${failed} en échec` : ''}`, failed ? 'negative' : 'positive');
         else if (failed) showToast('Aucun frais ajouté — échec de l\'envoi des fichiers', 'negative');
         renderExisting();
@@ -4723,7 +4728,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
 
     assetSelect.addEventListener('change', () => {
         currentAssetId = assetSelect.value;
-        try { localStorage.setItem(FM_LAST_ASSET_KEY, currentAssetId); } catch { /* ignore */ }
+        state.facturesLastAsset = currentAssetId; savePref({ facturesLastAsset: currentAssetId }).catch(() => {});
         rows.forEach(r => { r.dupSeen = false; });
         existingExpanded = false;
         renderExisting();
@@ -5263,7 +5268,7 @@ function renderOwnedCalculTab(asset) {
     topEl.querySelectorAll('[data-calcul-year]').forEach(btn => {
         btn.addEventListener('click', () => {
             state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: Number(btn.dataset.calculYear) };
-            localStorage.setItem('investissementWebOwnedYearFilters', JSON.stringify(state.ownedYearFilters));
+            savePref({ ownedYearFilters: state.ownedYearFilters }).catch(() => {});
             renderOwnedCalculTab(asset);
             if (!IS_MOBILE_PAGE) renderOwnedVerdictBlock(asset);
         });
@@ -6336,11 +6341,12 @@ function renderCollections() {
     if (gate) gate.hidden = true;
     if (regimeLabel) regimeLabel.hidden = false;
     if (regimeAnchor) regimeAnchor.hidden = false;
-    // En attente du premier snapshot Firestore (biens ET regime/profil) : sans _metaLoaded,
+    // En attente du premier snapshot Firestore (biens, regime/profil ET preferences) : sans _metaLoaded,
     // un rendu prematuré utiliserait la valeur par defaut locale de state.ownedRegime/profileData
     // (ex. "Micro-foncier") le temps que watchPortfolioMeta reponde, provoquant un flash visible
-    // du CF net-net avant qu'il ne se corrige vers la vraie valeur (audit UX 2026-07-29).
-    if (!_cloudLoaded || !_metaLoaded) return;
+    // du CF net-net avant qu'il ne se corrige vers la vraie valeur (audit UX 2026-07-29) ; sans
+    // _prefsLoaded, la densite/le tri/les filtres d'annee basculeraient apres le premier rendu.
+    if (!_cloudLoaded || !_metaLoaded || !_prefsLoaded) return;
 
     if (state.activeOwnedAssetId) {
         if (nodes.ownedListView) nodes.ownedListView.hidden = true;

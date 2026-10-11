@@ -1,27 +1,21 @@
 // Bootstrap minimal pour owned.html (page iPhone) — equivalent, pour le seul module portefeuille,
-// de ce que main.js fait pour toute l'app. STORAGE_KEYS/state ne couvrent que les reglages d'affichage
-// locaux a cet appareil (ownedCompact/ownedSort/ownedYearFilters) : les donnees du portefeuille
-// elles-memes viennent de Firestore via owned-cloud.js (voir initOwnedPortfolio dans owned-portfolio.js).
+// de ce que main.js fait pour toute l'app. Aucune donnee locale : biens, profil, ordre, regime
+// viennent de Firestore (owned-cloud.js) et les reglages d'affichage de settings/prefs
+// (cloud-store.js), via initOwnedPortfolio (owned-portfolio.js).
 import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections } from './owned-portfolio.js';
 import { initAssistantChat } from './assistant-chat.js';
-
-const STORAGE_KEYS = {
-    ownedOrder: 'investissementWebOwnedOrder',
-    ownedCompact: 'investissementWebOwnedCompact',
-    ownedSort: 'investissementWebOwnedSort'
-};
 
 const state = {
     activeOwnedAssetId: null,
     ownedExpandedIds: new Set(),
-    ownedYearFilters: JSON.parse(localStorage.getItem('investissementWebOwnedYearFilters') || '{}'),
-    ownedOrder: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder) || '[]'),
-    ownedCompact: localStorage.getItem(STORAGE_KEYS.ownedCompact) === '1',
-    ownedSort: JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedSort) || 'null'),
-    ownedRegime: localStorage.getItem('investissementWebOwnedRegime') || 'micro-foncier',
-    // Profil du foyer (TMI) : reglage local a cet appareil, comme sur PC — a renseigner une fois ici
-    // aussi pour que les impots/CF net-net affiches soient corrects (non synchronise depuis le PC).
-    profileData: JSON.parse(localStorage.getItem('investissementWebProfileData') || 'null') || { income: 0, adults: 1, children: 0, autresCredits: [] }
+    ownedYearFilters: {},
+    ownedOrder: [],
+    ownedCompact: false,
+    ownedSort: null,
+    ownedRegime: 'micro-foncier',
+    facturesLastAsset: null,
+    // Profil du foyer (TMI) : rempli par le snapshot portfolioMeta.profile avant le premier rendu.
+    profileData: { income: 0, adults: 1, children: 0, autresCredits: [] }
 };
 
 const nodes = {
@@ -63,7 +57,7 @@ const nodes = {
     accSimulateurSummary: document.getElementById('acc-simulateur-summary')
 };
 
-initOwnedPortfolio({ state, nodes, STORAGE_KEYS, IS_ANALYSIS_WINDOW: false, IS_MOBILE_PAGE: true });
+initOwnedPortfolio({ state, nodes, IS_ANALYSIS_WINDOW: false, IS_MOBILE_PAGE: true });
 initOwnedPortfolioEvents();
 initAssistantChat({ state, nodes });
 renderCollections();
