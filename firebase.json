@@ -57,6 +57,13 @@
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
         ]
+      },
+      {
+        "source": "/VERSION",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" },
+          { "key": "Content-Type", "value": "text/plain; charset=utf-8" }
+        ]
       }
     ]
   }

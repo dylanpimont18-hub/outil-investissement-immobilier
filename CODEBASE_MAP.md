@@ -259,7 +259,7 @@ Bootstrap minimal pour `owned.html` — équivalent, pour le seul module portefe
 ---
 
 ## firebase.json / firestore.rules / storage.rules / .firebaserc
-Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, `build/` (intermédiaires PyInstaller, ~26 Mo, exclu le 2026-10-04 — il n'était pas dans la liste et aurait été publié), `Spark/`, `dist/`, les binaires de build et fichiers Python — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt).
+Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, `build/` (intermédiaires PyInstaller, ~26 Mo, exclu le 2026-10-04 — il n'était pas dans la liste et aurait été publié), `Spark/`, `dist/`, les binaires de build et fichiers Python — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt). `/VERSION` est servi avec `Cache-Control: no-cache` et `Content-Type: text/plain` (2026-10-12, lu par l'application pour son numéro de version).
 
 ---
 
@@ -435,10 +435,23 @@ Harnais commun des tests navigateur (tout-web, 2026-10-11) : stubs complets de `
 ## tests/playwright/tout-web.mjs
 Scénarios Playwright de la version 100 % web (hors `npm test`, serveur statique 8090 requis) ; premier scénario : impression.
 - `scenarioImpression(browser, viewport, label)` — PDF décision, dossier bancaire, rapport d'un bien via Shadow DOM (PC + iPhone)
+- Espion `localStorage`/`sessionStorage` actif dans TOUS les scénarios (plus de `spyStorage: false`) : étape « zéro accès » avant « aucune erreur JS » (2026-10-12)
 
 ## tests/playwright/migration-locale.mjs
 Test Playwright de la migration (hors `npm test`, serveur 8090 ; localStorage pré-rempli via `initScripts`, `ML_SCREENSHOTS=<dir>` pour captures).
 - `scenarioNominal` / `scenarioDejaFaite` / `scenarioEcart` / `scenarioRelance` — nominal, marqueur présent, relecture non conforme + Réessayer, idempotence
+
+## tests/playwright/factures-modal.mjs
+Test Playwright de la modale globale « Ajouter des factures » (PC index.html + iPhone owned.html ; hors `npm test`, `FM_SCREENSHOTS=<dir>`). Adapté au tout-web le 2026-10-12 : stub local d'`owned-cloud.js` complété (`profile` dans `meta`, `cloudGetMeta`/`cloudGetAllAssets`/`cloudDocumentExists`, `cloudSaveMeta` notifie), `cloud-store.js` servi par `CLOUD_STORE_STUB_SOURCE` (harnais), plus d'initScript `localStorage`, attente de `#app-cloud-loading[hidden]` sur index.html. Prérequis : `node scripts/serve-static.mjs 8090`.
+- `openPage(browser, path, viewport)` — page stubbée (deux modules cloud), erreurs collectées
+
+## tests/playwright/change-password.mjs
+Test Playwright du changement de mot de passe (onglet Profil : PC, index.html, iPhone ; hors `npm test`). Même adaptation tout-web que factures-modal (stub `owned-cloud.js` complété + `cloud-store.js` du harnais, plus de `localStorage`). Prérequis : `node scripts/serve-static.mjs 8090`.
+- `openPage(browser, path, viewport)` — page stubbée, attend `window.__stub.authListeners`
+
+## tests/playwright/projection-impots.mjs
+Test Playwright du coût d'un euro emprunté et de la projection « Impôts des prochaines années » (3 onglets ; PC 1440 + iPhone ; `PI_SCREENSHOTS=<dir>`; hors `npm test`). Même adaptation tout-web (profil revenu 48 000 € dans le `meta` du stub, `cloud-store.js` du harnais). Prérequis : `node scripts/serve-static.mjs 8090`.
+- `openPage(browser, path, viewport)` — page stubbée, attend les 2 biens du stub
 
 ## scripts/run-tests.mjs
 Lance en séquence tous les `tests/*.mjs` (Node), s'arrête au premier échec (exit 1). Point d'entrée de `npm test` et `npm run verify` (remplace la boucle bash, qui échouait sous cmd.exe).

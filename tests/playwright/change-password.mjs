@@ -1,16 +1,17 @@
 // Test navigateur du changement de mot de passe (onglet Profil du portefeuille, PC + iPhone).
 //
-// Prérequis : `python server.py` lancé (http://127.0.0.1:8080, ou autre port via SPARK_TEST_BASE),
+// Prérequis : `node scripts/serve-static.mjs 8090` lancé (jamais le 8080 : l'exe de bureau y sert des fichiers figés),
 // `npm install` fait, Chromium installé (`npx playwright install chromium`).
 // Lancer : SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/change-password.mjs
 //
-// owned-cloud.js est remplacé par un stub (page.route) : aucun appel Firebase réel, le vrai mot
+// owned-cloud.js (stub local) et cloud-store.js (stub du harnais) sont remplacés (page.route) : aucun appel Firebase réel, le vrai mot
 // de passe du compte n'est jamais touché. Le stub enregistre les appels à cloudChangePassword et
 // simule les réponses de la Cloud Function (succès, reconnexion ratée, erreurs serveur).
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { CLOUD_STORE_STUB_SOURCE } from './_harness.mjs';
 
-const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8080';
+const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8090';
 
 const STUB_SOURCE = `
 const S = window.__stub = {
@@ -29,7 +30,9 @@ const S = window.__stub = {
             diagnosticHistory: []
         }
     },
-    meta: { order: ['oa-test-1'], regime: 'micro-foncier' },
+    meta: { order: ['oa-test-1'], regime: 'micro-foncier',
+        profile: { name: 'Test', income: 40000, adults: 1, children: 0, revenuHistorique: [], objectifCF: 1000, revaloAnnuelle: 2, autresCredits: [] } },
+    metaListeners: [],
     authListeners: [],
     passwordCalls: [],
     passwordMode: 'ok'
@@ -54,8 +57,11 @@ export async function cloudChangePassword(pwd) {
 export function watchOwnedAssets(cb) { setTimeout(() => cb(clone(S.assets)), 0); return () => {}; }
 export function cloudSetAsset(id, data) { S.assets[id] = clone(data); return Promise.resolve(); }
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; return Promise.resolve(); }
-export function watchPortfolioMeta(cb) { setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
-export function cloudSaveMeta(patch) { Object.assign(S.meta, patch); return Promise.resolve(); }
+export function watchPortfolioMeta(cb) { S.metaListeners.push(cb); setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
+export function cloudSaveMeta(patch) { Object.assign(S.meta, clone(patch)); setTimeout(() => S.metaListeners.forEach(cb => cb(clone(S.meta))), 0); return Promise.resolve(); }
+export async function cloudGetMeta() { return clone(S.meta); }
+export async function cloudGetAllAssets() { return clone(S.assets); }
+export async function cloudDocumentExists() { return false; }
 export async function cloudUploadDocument() { return 'x.png'; }
 export function cloudDocumentUrl() { return Promise.resolve(''); }
 export async function cloudUploadDocumentAs() {}
@@ -70,18 +76,14 @@ export async function cloudGeocode() { return null; }
 
 async function openPage(browser, path, viewport) {
     const context = await browser.newContext({ viewport });
-    await context.addInitScript(() => {
-        try {
-            localStorage.setItem('investissementWebProfileConfigured', '1');
-            localStorage.setItem('investissementWebProfileData', JSON.stringify({ name: 'Test', income: 40000, adults: 1, children: 0 }));
-        } catch { /* stockage indisponible */ }
-    });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', err => errors.push(`pageerror: ${err.message}`));
     page.on('console', msg => { if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`); });
+    await page.route('**/cloud-store.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: CLOUD_STORE_STUB_SOURCE }));
     await page.route('**/owned-cloud.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: STUB_SOURCE }));
     await page.goto(`${BASE}${path}`, { waitUntil: 'load' });
+    if (path.startsWith('/index.html')) await page.waitForSelector('#app-cloud-loading[hidden]', { state: 'attached' });
     await page.waitForFunction(() => window.__stub && window.__stub.authListeners.length > 0);
     return { page, context, errors };
 }

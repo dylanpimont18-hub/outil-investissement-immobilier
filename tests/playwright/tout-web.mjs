@@ -13,7 +13,7 @@ const IPHONE = { width: 393, height: 852 };
 
 async function scenarioImpression(browser, viewport, label) {
     console.log(`\nImpression — ${label}`);
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport });
     await waitAppStarted(page);
 
     await step('PDF décision : window.print sur un Shadow DOM titré d après le fichier', async () => {
@@ -75,13 +75,16 @@ async function scenarioImpression(browser, viewport, label) {
         await page.click('#asset-report-close');
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 }
 
 async function scenarioConnexion(browser, viewport, label) {
     console.log(`\nConnexion — ${label}`);
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, seedCloud: { user: null }, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, seedCloud: { user: null } });
 
     await step('non connecté : gate plein écran sur index.html, rien d autre cliquable', async () => {
         await page.waitForSelector('#app-auth-gate:not([hidden]) form#owned-auth-form', { timeout: 8000 });
@@ -107,14 +110,20 @@ async function scenarioConnexion(browser, viewport, label) {
         assert.deepEqual(await page.evaluate(() => window.__stub.signIns.map(s => s.email)), ['test@example.com', 'test@example.com']);
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 
     console.log(`\nConnexion owned.html — ${label}`);
-    const o = await openPage(browser, '/owned.html', { viewport, seedCloud: { user: null }, spyStorage: false });
+    const o = await openPage(browser, '/owned.html', { viewport, seedCloud: { user: null } });
     await step('owned.html non connecté → #owned-auth-gate visible', async () => {
         await o.page.waitForSelector('#owned-auth-gate:not([hidden]) form#owned-auth-form', { timeout: 8000 });
         assert.equal(await o.page.isVisible('#owned-list-view'), false);
+    });
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await o.page.evaluate(() => window.__storageHits), []);
     });
     await step('aucune erreur JS', () => assert.deepEqual(o.errors, []));
     await o.context.close();
@@ -122,7 +131,7 @@ async function scenarioConnexion(browser, viewport, label) {
 
 async function scenarioPreferences(browser, viewport, label) {
     console.log(`\nPréférences — ${label}`);
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport });
     await waitAppStarted(page);
 
     await step('chargement : thème sombre par défaut, AUCUNE écriture cloud', async () => {
@@ -161,6 +170,9 @@ async function scenarioPreferences(browser, viewport, label) {
         assert.match(await page.textContent('#topbar-profile-label'), /Test/);
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 }
@@ -170,7 +182,7 @@ async function scenarioOnboarding(browser) {
 
     console.log('\nOnboarding profil (Valider seul) — PC');
     {
-        const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedCloud: seed });
+        const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, seedCloud: seed });
         await waitAppStarted(page);
         await step('sans profil cloud, Valider sans toucher un champ → portfolioMeta.profile créé, modale fermée', async () => {
             await page.waitForSelector('#profile-modal.open', { timeout: 5000 });
@@ -181,13 +193,16 @@ async function scenarioOnboarding(browser) {
             assert.ok(Number.isFinite(income), `revenu du preset par défaut attendu, reçu : ${income}`);
             await page.waitForSelector('#profile-modal:not(.open)', { state: 'attached' });
         });
+        await step('zéro accès localStorage/sessionStorage', async () => {
+            assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+        });
         await step('aucune erreur JS', () => assert.deepEqual(errors, []));
         await context.close();
     }
 
     console.log('\nOnboarding profil (saisie) — PC');
     {
-        const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedCloud: seed });
+        const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, seedCloud: seed });
         await waitAppStarted(page);
         await step('saisie du revenu : l écho du snapshot ne réécrit pas le champ ni ne ferme la modale', async () => {
             await page.waitForSelector('#profile-modal.open', { timeout: 5000 });
@@ -202,6 +217,9 @@ async function scenarioOnboarding(browser) {
             await page.click('#profile-save');
             await page.waitForSelector('#profile-modal:not(.open)', { state: 'attached' });
         });
+        await step('zéro accès localStorage/sessionStorage', async () => {
+            assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+        });
         await step('aucune erreur JS', () => assert.deepEqual(errors, []));
         await context.close();
     }
@@ -209,7 +227,7 @@ async function scenarioOnboarding(browser) {
 
 async function scenarioEtudes(browser, viewport, label) {
     console.log(`\nÉtudes — ${label}`);
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport });
     await waitAppStarted(page);
 
     await step('saisie → une seule écriture settings/analysis après 1,5 s d inactivité', async () => {
@@ -266,13 +284,16 @@ async function scenarioEtudes(browser, viewport, label) {
         await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 }
 
 async function scenarioDeuxFenetres(browser) {
     console.log('\nDeux fenêtres — PC');
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC });
     await waitAppStarted(page);
     const popup = await context.newPage();
     const popupErrors = [];
@@ -291,13 +312,17 @@ async function scenarioDeuxFenetres(browser) {
         await popup.waitForFunction(() => document.documentElement.dataset.theme === 'light', null, { timeout: 1000 });
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+        assert.deepEqual(await popup.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS dans les deux fenêtres', () => { assert.deepEqual(errors, []); assert.deepEqual(popupErrors, []); });
     await context.close();
 }
 
 async function scenarioPrefsPortefeuille(browser) {
     console.log('\nPréférences portefeuille — owned.html iPhone');
-    const { page, context, errors } = await openPage(browser, '/owned.html', { viewport: IPHONE, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/owned.html', { viewport: IPHONE });
     await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 8000 });
 
     await step('chargement : aucune écriture', async () => {
@@ -335,13 +360,16 @@ async function scenarioPrefsPortefeuille(browser) {
         await page.click('#owned-factures-modal [data-close-modal]');
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 }
 
 async function scenarioExportImport(browser) {
     console.log('\nExport / import — PC');
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false });
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC });
     await waitAppStarted(page);
     await page.click('.workspace-tab[data-target="collection-panel"]');
     await page.waitForSelector('#owned-list-view:not([hidden])');
@@ -441,17 +469,23 @@ async function scenarioExportImport(browser) {
         assert.equal(await page.evaluate(() => window.__stub.assets['oa-import-11'].nom), 'Pendant le chargement');
     });
 
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
+    });
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 
     console.log('\nExport avec Storage en panne — PC');
-    const k = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedStore: { failUploadArchive: true } });
+    const k = await openPage(browser, '/index.html', { viewport: PC, seedStore: { failUploadArchive: true } });
     await waitAppStarted(k.page);
     await k.page.click('.workspace-tab[data-target="collection-panel"]');
     await step('le téléchargement a lieu quand même + toast négatif', async () => {
         const [download] = await Promise.all([k.page.waitForEvent('download'), k.page.click('#owned-export-btn')]);
         assert.match(download.suggestedFilename(), /\.json$/);
         await k.page.waitForSelector('#app-toast.app-toast--negative', { timeout: 4000 });
+    });
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await k.page.evaluate(() => window.__storageHits), []);
     });
     await step('aucune erreur JS', () => assert.deepEqual(k.errors, []));
     await k.context.close();

@@ -1,16 +1,17 @@
 // Test navigateur (Playwright) — coût d'un euro emprunté (calculette + lectures directes) et
 // projection « Impôts des prochaines années » (effet des travaux déductibles).
 //
-// Prérequis : server.py lancé (port au choix via SPARK_TEST_BASE), `npm install`, `npx playwright
-// install chromium`. Lancer : `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/projection-impots.mjs`.
+// Prérequis : `node scripts/serve-static.mjs 8090` lancé (jamais le 8080 : l'exe de bureau y sert des fichiers figés),
+// `npm install`, `npx playwright install chromium`. Lancer : `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/projection-impots.mjs`.
 // `PI_SCREENSHOTS=<dir>` enregistre des captures PNG. Hors `npm test` volontairement (serveur + navigateur).
 //
-// owned-cloud.js est remplacé par un stub (page.route) : aucun appel Firebase, aucune donnée réelle.
+// owned-cloud.js (stub local) et cloud-store.js (stub du harnais) sont remplacés (page.route) : aucun appel Firebase, aucune donnée réelle.
 
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { CLOUD_STORE_STUB_SOURCE } from './_harness.mjs';
 
-const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8080';
+const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8090';
 const SHOTS = process.env.PI_SCREENSHOTS || '';
 const Y = new Date().getFullYear();
 
@@ -48,7 +49,9 @@ const S = window.__stub = {
             diagnosticHistory: []
         }
     },
-    meta: { order: ['oa-test-1', 'oa-test-2'], regime: 'micro-foncier' },
+    meta: { order: ['oa-test-1', 'oa-test-2'], regime: 'micro-foncier',
+        profile: { name: 'Test', income: 48000, adults: 1, children: 0, revenuHistorique: [], objectifCF: 1000, revaloAnnuelle: 2, autresCredits: [] } },
+    metaListeners: [],
     assetListeners: []
 };
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -60,8 +63,11 @@ export async function cloudChangePassword() {}
 export function watchOwnedAssets(cb) { S.assetListeners.push(cb); setTimeout(() => cb(clone(S.assets)), 0); return () => {}; }
 export function cloudSetAsset(id, data) { S.assets[id] = clone(data); notify(); return Promise.resolve(); }
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; notify(); return Promise.resolve(); }
-export function watchPortfolioMeta(cb) { setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
-export function cloudSaveMeta(patch) { Object.assign(S.meta, patch); return Promise.resolve(); }
+export function watchPortfolioMeta(cb) { S.metaListeners.push(cb); setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
+export function cloudSaveMeta(patch) { Object.assign(S.meta, clone(patch)); setTimeout(() => S.metaListeners.forEach(cb => cb(clone(S.meta))), 0); return Promise.resolve(); }
+export async function cloudGetMeta() { return clone(S.meta); }
+export async function cloudGetAllAssets() { return clone(S.assets); }
+export async function cloudDocumentExists() { return false; }
 export async function cloudUploadDocument() { return 'x'; }
 export function cloudDocumentUrl() { return Promise.resolve(''); }
 export async function cloudUploadDocumentAs() {}
@@ -76,18 +82,14 @@ export async function cloudGeocode() { return null; }
 
 async function openPage(browser, path, viewport) {
     const context = await browser.newContext({ viewport });
-    await context.addInitScript(() => {
-        try {
-            localStorage.setItem('investissementWebProfileConfigured', '1');
-            localStorage.setItem('investissementWebProfileData', JSON.stringify({ name: 'Test', income: 48000, adults: 1, children: 0 }));
-        } catch { /* stockage indisponible */ }
-    });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', err => errors.push(`pageerror: ${err.message}`));
     page.on('console', msg => { if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`); });
+    await page.route('**/cloud-store.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: CLOUD_STORE_STUB_SOURCE }));
     await page.route('**/owned-cloud.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: STUB_SOURCE }));
     await page.goto(`${BASE}${path}`, { waitUntil: 'load' });
+    if (path.startsWith('/index.html')) await page.waitForSelector('#app-cloud-loading[hidden]', { state: 'attached' });
     await page.waitForFunction(() => window.__stub && Object.keys(window.__stub.assets).length === 2);
     return { page, context, errors };
 }

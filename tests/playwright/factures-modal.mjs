@@ -1,21 +1,23 @@
 // Test navigateur (Playwright) de la modale globale « Ajouter des factures » — voir
 // docs/superpowers/specs/2026-10-02-ajout-factures-bouton-global.md.
 //
-// Prérequis : `python server.py` lancé (http://127.0.0.1:8080, ou autre port via SPARK_TEST_BASE), `npm install` fait,
-// `npx playwright install chromium` fait. Lancer : `node tests/playwright/factures-modal.mjs`.
+// Prérequis : `node scripts/serve-static.mjs 8090` lancé (serveur statique, jamais le 8080 : l'exe de bureau y sert des fichiers figés),
+// `npm install` fait, `npx playwright install chromium` fait.
+// Lancer : `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/factures-modal.mjs`.
 // Hors `npm test` volontairement (dépend d'un serveur et d'un navigateur).
 //
-// Le module owned-cloud.js est remplacé par un stub (page.route) : aucun appel Firebase réel,
+// Les modules owned-cloud.js (stub local) et cloud-store.js (stub du harnais) sont remplacés (page.route) : aucun appel Firebase réel,
 // aucune donnée réelle touchée. Le stub pilote owned-portfolio.js tel quel.
 
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
 import { chromium } from 'playwright';
+import { CLOUD_STORE_STUB_SOURCE } from './_harness.mjs';
 
 // Port configurable : l'exe Spark de bureau occupe souvent 8080 avec ses PROPRES fichiers (figés
 // au build) — pour tester le code courant, lancer server.py sur un autre port et passer
 // SPARK_TEST_BASE=http://127.0.0.1:8090.
-const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8080';
+const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8090';
 
 // ─── Fichiers de test générés en mémoire ─────────────────────────────────────────────────────
 
@@ -108,7 +110,9 @@ const S = window.__stub = {
             diagnosticHistory: []
         }
     },
-    meta: { order: ['oa-test-1', 'oa-test-2'], regime: 'micro-foncier' },
+    meta: { order: ['oa-test-1', 'oa-test-2'], regime: 'micro-foncier',
+        profile: { name: 'Test', income: 40000, adults: 1, children: 0, revenuHistorique: [], objectifCF: 1000, revaloAnnuelle: 2, autresCredits: [] } },
+    metaListeners: [],
     assetListeners: [],
     extractCalls: [],
     uploads: [],
@@ -123,8 +127,11 @@ export async function cloudChangePassword() {}
 export function watchOwnedAssets(cb) { S.assetListeners.push(cb); setTimeout(() => cb(clone(S.assets)), 0); return () => {}; }
 export function cloudSetAsset(id, data) { S.assets[id] = clone(data); notify(); return Promise.resolve(); }
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; notify(); return Promise.resolve(); }
-export function watchPortfolioMeta(cb) { setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
-export function cloudSaveMeta(patch) { Object.assign(S.meta, patch); return Promise.resolve(); }
+export function watchPortfolioMeta(cb) { S.metaListeners.push(cb); setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
+export function cloudSaveMeta(patch) { Object.assign(S.meta, clone(patch)); setTimeout(() => S.metaListeners.forEach(cb => cb(clone(S.meta))), 0); return Promise.resolve(); }
+export async function cloudGetMeta() { return clone(S.meta); }
+export async function cloudGetAllAssets() { return clone(S.assets); }
+export async function cloudDocumentExists() { return false; }
 export async function cloudUploadDocument(assetId, file) {
     const name = 'up-' + (S.uploads.length + 1) + '-' + file.name;
     S.uploads.push({ assetId, name, type: file.type, size: file.size });
@@ -153,20 +160,14 @@ export async function cloudGeocode() { return null; }
 
 async function openPage(browser, path, viewport) {
     const context = await browser.newContext({ viewport });
-    // Profil du foyer marqué comme configuré : sinon index.html ouvre la modale d'onboarding
-    // (#profile-modal, non fermable) dès l'onglet Portefeuille et bloque tous les clics derrière.
-    await context.addInitScript(() => {
-        try {
-            localStorage.setItem('investissementWebProfileConfigured', '1');
-            localStorage.setItem('investissementWebProfileData', JSON.stringify({ name: 'Test', income: 40000, adults: 1, children: 0 }));
-        } catch { /* stockage indisponible */ }
-    });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', err => errors.push(`pageerror: ${err.message}`));
     page.on('console', msg => { if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`); });
+    await page.route('**/cloud-store.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: CLOUD_STORE_STUB_SOURCE }));
     await page.route('**/owned-cloud.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: STUB_SOURCE }));
     await page.goto(`${BASE}${path}`, { waitUntil: 'load' });
+    if (path.startsWith('/index.html')) await page.waitForSelector('#app-cloud-loading[hidden]', { state: 'attached' });
     await page.waitForFunction(() => window.__stub && Object.keys(window.__stub.assets).length === 2);
     return { page, context, errors };
 }
