@@ -223,6 +223,15 @@ Règles pures de la migration unique stockage local → cloud (aucun DOM, `getIt
 
 ---
 
+## migration-locale.js
+Migration unique exe → cloud, chargée par `main.js` seulement sur 127.0.0.1/localhost:8080 ou avec `?migration-locale=1`, après connexion ; ne fait rien si `settings/migration` existe ; à supprimer en fin de chantier (Phase 6). Ne supprime rien en local.
+- `runLocalMigration({ sanitizeAssetRecord, normaliserVariables })` — point d'entrée, boucle Réessayer, retourne `{ skipped }` ou le bilan
+- `_migrer(deps, modale)` — 5 étapes : études (la plus récente gagne), réglages (analyse, prefs, profil/regime/order/goals seulement si absents du cloud), archives (octets bruts `/exports/<nom>` → Storage), justificatifs PDF (`/api/documents/…` si absents), relecture complète
+- règle : le marqueur `settings/migration` n'est écrit QUE si la relecture correspond à tout ; sinon écarts listés
+- `_lireListeExports()` / `_lireFichierLocal(url)` — lectures des routes locales de l'exe
+- `_ouvrirModale()` — modale progression (z-index 1600, au-dessus de #app-cloud-loading), contrat `[data-etape]`, `[data-migration-close|retry|skip]`
+- `_afficherBilan(modale, bilan)` — bilan + URL web, ou écarts + Réessayer/Ignorer (`escapeHtml`)
+
 ## cloud-store.js
 Couche cloud des données hors portefeuille (Firestore + Storage) : études du comparateur, réglages (`settings/{analysis|prefs|migration}`, `prefs`) et archives JSON du portefeuille (Storage `users/{uid}/archives/`). Wrapper fin, aucune logique métier. Importé par `main.js`, `owned-portfolio.js` et `migration-locale.js`. Tout vit sous `users/{uid}/`.
 - `watchStudies(onChange, onError)` / `cloudSetStudy(id, record)` / `cloudDeleteStudy(id)` — une étude du comparateur par document (`users/{uid}/studies`)
@@ -426,6 +435,10 @@ Harnais commun des tests navigateur (tout-web, 2026-10-11) : stubs complets de `
 ## tests/playwright/tout-web.mjs
 Scénarios Playwright de la version 100 % web (hors `npm test`, serveur statique 8090 requis) ; premier scénario : impression.
 - `scenarioImpression(browser, viewport, label)` — PDF décision, dossier bancaire, rapport d'un bien via Shadow DOM (PC + iPhone)
+
+## tests/playwright/migration-locale.mjs
+Test Playwright de la migration (hors `npm test`, serveur 8090 ; localStorage pré-rempli via `initScripts`, `ML_SCREENSHOTS=<dir>` pour captures).
+- `scenarioNominal` / `scenarioDejaFaite` / `scenarioEcart` / `scenarioRelance` — nominal, marqueur présent, relecture non conforme + Réessayer, idempotence
 
 ## scripts/run-tests.mjs
 Lance en séquence tous les `tests/*.mjs` (Node), s'arrête au premier échec (exit 1). Point d'entrée de `npm test` et `npm run verify` (remplace la boucle bash, qui échouait sous cmd.exe).
