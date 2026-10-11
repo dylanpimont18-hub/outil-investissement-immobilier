@@ -2831,8 +2831,13 @@ function _applyPrefs(prefs) {
 // « profil configuré » : plus de clé dédiée, l'onboarding ne se rouvre que tant qu'il n'existe pas.
 function _applyMeta(meta) {
     const profile = meta?.profile;
-    state.profileConfigured = Boolean(profile);
-    state.profileData = sanitizeProfileData({ ...getProfileOption(state.profilePreset).defaults, ...(profile || {}) });
+    // Écho du snapshot pendant la frappe : tant que la modale d'onboarding est ouverte, la première
+    // touche écrit déjà portfolioMeta.profile ; seul « Valider » (confirmProfileModal) doit passer
+    // le profil à « configuré », sinon fermer la modale après un caractère supprimerait l'onboarding.
+    if (!(state.isProfileModalOpen && !state.profileConfigured)) state.profileConfigured = Boolean(profile);
+    // incomeUnit n'est pas poussé dans le cloud (préférence d'affichage propre à l'appareil) : on garde
+    // la valeur locale, sinon l'écho du snapshot remet « mensuel » pendant que l'utilisateur tape en annuel.
+    state.profileData = sanitizeProfileData({ ...getProfileOption(state.profilePreset).defaults, ...(profile || {}), incomeUnit: state.profileData?.incomeUnit });
 }
 
 function _onCloudError() {
@@ -2858,7 +2863,9 @@ function _startCloud() {
     _unsubs.push(watchPortfolioMeta(meta => {
         _applyMeta(meta);
         _cloudReady.meta = true;
-        if (_appStarted) render({ syncVariables: false, syncProfile: true });
+        // Écho de notre propre écriture pendant la saisie : ne jamais resynchroniser le formulaire du
+        // profil sous les doigts de l'utilisateur tant que la modale est ouverte.
+        if (_appStarted) render({ syncVariables: false, syncProfile: !state.isProfileModalOpen });
         _afterFirstSnapshots();
     }, _onCloudError));
     _startStudiesAndAnalysis(); // Tâche 6 : watchStudies + watchAnalysis

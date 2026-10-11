@@ -13,10 +13,8 @@ const IPHONE = { width: 393, height: 852 };
 
 async function scenarioImpression(browser, viewport, label) {
     console.log(`\nImpression — ${label}`);
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false,
-        // Temporaire (jusqu en Tache 5-6) : main.js lit encore localStorage ; sans ce drapeau l onboarding profil bloque les clics.
-        initScripts: [[() => localStorage.setItem('investissementWebProfileConfigured', '1'), null]] });
-    await page.waitForSelector('#owned-quickfab:not([hidden])');
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, spyStorage: false });
+    await waitAppStarted(page);
 
     await step('PDF décision : window.print sur un Shadow DOM titré d après le fichier', async () => {
         await page.fill('#variables-form [name="prix"]', '150000');
@@ -105,8 +103,7 @@ async function scenarioConnexion(browser, viewport, label) {
         await page.fill('#app-auth-gate [name="password"]', 'secret');
         await page.click('#app-auth-gate button[type="submit"]');
         await page.waitForSelector('#app-auth-gate[hidden]', { state: 'attached', timeout: 8000 });
-        // Temporaire (Tâche 5 restaure waitAppStarted) : main.js n est pas encore migré.
-        await page.waitForSelector('#owned-quickfab:not([hidden])');
+        await waitAppStarted(page);
         assert.deepEqual(await page.evaluate(() => window.__stub.signIns.map(s => s.email)), ['test@example.com', 'test@example.com']);
     });
 
@@ -169,18 +166,45 @@ async function scenarioPreferences(browser, viewport, label) {
 }
 
 async function scenarioOnboarding(browser) {
-    console.log('\nOnboarding profil — PC');
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedCloud: { meta: { order: ['oa-test-1'], regime: 'micro-foncier' } } });
-    await waitAppStarted(page);
-    await step('sans profil cloud → modale profil ouverte, Valider pousse portfolioMeta.profile', async () => {
-        await page.waitForSelector('#profile-modal.open', { timeout: 5000 });
-        await page.fill('#profile-income', '3000');
-        await page.click('#profile-save');
-        await page.waitForFunction(() => window.__stub.meta.profile && window.__stub.meta.profile.income === 36000);
-        await page.waitForSelector('#profile-modal:not(.open)', { state: 'attached' });
-    });
-    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
-    await context.close();
+    const seed = { meta: { order: ['oa-test-1'], regime: 'micro-foncier' } };
+
+    console.log('\nOnboarding profil (Valider seul) — PC');
+    {
+        const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedCloud: seed });
+        await waitAppStarted(page);
+        await step('sans profil cloud, Valider sans toucher un champ → portfolioMeta.profile créé, modale fermée', async () => {
+            await page.waitForSelector('#profile-modal.open', { timeout: 5000 });
+            assert.deepEqual(await page.evaluate(() => window.__stub.metaWrites), [], 'rien d écrit tant que rien n est validé');
+            await page.click('#profile-save');
+            await page.waitForFunction(() => window.__stub.meta.profile && typeof window.__stub.meta.profile === 'object');
+            const income = await page.evaluate(() => window.__stub.meta.profile.income);
+            assert.ok(Number.isFinite(income), `revenu du preset par défaut attendu, reçu : ${income}`);
+            await page.waitForSelector('#profile-modal:not(.open)', { state: 'attached' });
+        });
+        await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+        await context.close();
+    }
+
+    console.log('\nOnboarding profil (saisie) — PC');
+    {
+        const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedCloud: seed });
+        await waitAppStarted(page);
+        await step('saisie du revenu : l écho du snapshot ne réécrit pas le champ ni ne ferme la modale', async () => {
+            await page.waitForSelector('#profile-modal.open', { timeout: 5000 });
+            await page.fill('#profile-income', '3000');
+            await page.waitForFunction(() => window.__stub.meta.profile && window.__stub.meta.profile.income === 36000);
+            await page.waitForTimeout(300);
+            assert.equal(await page.inputValue('#profile-income'), '3000');
+            assert.equal(await page.isVisible('#profile-modal.open'), true, 'la modale reste ouverte pendant la saisie');
+            assert.equal(await page.isVisible('#profile-skip'), true, 'onboarding non terminé : « Plus tard » toujours proposé');
+        });
+        await step('Valider ferme la modale', async () => {
+            await page.click('#profile-save');
+            await page.waitForSelector('#profile-modal:not(.open)', { state: 'attached' });
+        });
+        await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+        await context.close();
+    }
 }
 
 const browser = await chromium.launch();
