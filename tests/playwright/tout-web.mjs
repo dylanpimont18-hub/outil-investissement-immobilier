@@ -339,6 +339,83 @@ async function scenarioPrefsPortefeuille(browser) {
     await context.close();
 }
 
+async function scenarioExportImport(browser) {
+    console.log('\nExport / import — PC');
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false });
+    await waitAppStarted(page);
+    await page.click('.workspace-tab[data-target="collection-panel"]');
+    await page.waitForSelector('#owned-list-view:not([hidden])');
+
+    let archiveName;
+    await step('Export → téléchargement portefeuille-AAAA-MM-JJ.json + archive Storage identique', async () => {
+        const [download] = await Promise.all([page.waitForEvent('download'), page.click('#owned-export-btn')]);
+        assert.match(download.suggestedFilename(), /^portefeuille-\d{4}-\d{2}-\d{2}\.json$/);
+        await page.waitForFunction(() => Object.keys(window.__store.archives).length === 1, null, { timeout: 4000 });
+        archiveName = await page.evaluate(() => Object.keys(window.__store.archives)[0]);
+        assert.equal(archiveName, download.suggestedFilename());
+        const content = await page.evaluate(n => JSON.parse(window.__store.archives[n]), archiveName);
+        assert.deepEqual(Object.keys(content), ['oa-test-1']);
+        await page.waitForFunction(() => /✓/.test(document.getElementById('owned-export-btn').textContent));
+    });
+
+    await step('second export le même jour → suffixe -1', async () => {
+        await Promise.all([page.waitForEvent('download'), page.click('#owned-export-btn')]);
+        await page.waitForFunction(() => Object.keys(window.__store.archives).length === 2, null, { timeout: 4000 });
+        assert.ok(await page.evaluate(() => Object.keys(window.__store.archives).some(n => /-1\.json$/.test(n))));
+    });
+
+    await step('Import : la liste montre les archives ; une archive sans nouveau bien → rien écrit', async () => {
+        await page.click('#owned-import-btn');
+        await page.waitForSelector('#owned-import-modal:not([hidden])');
+        await page.waitForSelector('.owned-import-file-item');
+        assert.equal(await page.$$eval('.owned-import-file-item', l => l.length), 2);
+        await page.click(`.owned-import-file-item[data-filename="${archiveName}"]`);
+        const before = await page.evaluate(() => Object.keys(window.__stub.assets).length);
+        await page.click('#owned-import-modal-confirm');
+        await page.waitForFunction(() => /déjà présents/.test(document.getElementById('owned-import-modal-confirm').textContent));
+        assert.equal(await page.evaluate(() => Object.keys(window.__stub.assets).length), before);
+    });
+
+    await step('Import depuis un fichier : nouveau bien ajouté, bien existant non écrasé', async () => {
+        await page.click('#owned-import-btn');
+        await page.waitForSelector('#owned-import-modal:not([hidden])');
+        const asset2 = { 'oa-test-1': { id: 'oa-test-1', nom: 'ÉCRASÉ ?' }, 'oa-import-9': { id: 'oa-import-9', nom: 'Importé', ville: 'Tours', acquisition: { prix: 50000, credit: {} }, postAchat: { travaux: [], notes: [] }, scenarios: [] } };
+        await page.setInputFiles('#owned-import-file-input', { name: 'sauvegarde.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(asset2)) });
+        await page.waitForFunction(() => !document.getElementById('owned-import-modal-confirm').disabled);
+        await page.click('#owned-import-modal-confirm');
+        await page.waitForFunction(() => Object.keys(window.__stub.assets).length === 2, null, { timeout: 4000 });
+        assert.equal(await page.evaluate(() => window.__stub.assets['oa-test-1'].nom), 'Rue des Lilas');
+        assert.equal(await page.evaluate(() => window.__stub.assets['oa-import-9'].nom), 'Importé');
+        await shot(page, 'import-PC');
+    });
+
+    await step('fichier invalide (tableau) → message, rien écrit', async () => {
+        await page.click('#owned-import-btn');
+        await page.waitForSelector('#owned-import-modal:not([hidden])');
+        await page.setInputFiles('#owned-import-file-input', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('[1,2,3]') });
+        await page.waitForFunction(() => !document.getElementById('owned-import-modal-confirm').disabled);
+        await page.click('#owned-import-modal-confirm');
+        await page.waitForSelector('#app-toast.app-toast--negative');
+        assert.equal(await page.evaluate(() => Object.keys(window.__stub.assets).length), 2);
+        await page.click('#owned-import-modal-cancel');
+    });
+
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+
+    console.log('\nExport avec Storage en panne — PC');
+    const k = await openPage(browser, '/index.html', { viewport: PC, spyStorage: false, seedStore: { failUploadArchive: true } });
+    await waitAppStarted(k.page);
+    await k.page.click('.workspace-tab[data-target="collection-panel"]');
+    await step('le téléchargement a lieu quand même + toast négatif', async () => {
+        const [download] = await Promise.all([k.page.waitForEvent('download'), k.page.click('#owned-export-btn')]);
+        assert.match(download.suggestedFilename(), /\.json$/);
+        await k.page.waitForSelector('#app-toast.app-toast--negative', { timeout: 4000 });
+    });
+    await step('aucune erreur JS', () => assert.deepEqual(k.errors, []));
+    await k.context.close();
+}
+
 const browser = await chromium.launch();
 try {
     await scenarioDeuxFenetres(browser);
@@ -352,6 +429,7 @@ try {
     await scenarioImpression(browser, PC, 'PC');
     await scenarioImpression(browser, IPHONE, 'iPhone');
     await scenarioPrefsPortefeuille(browser);
+    await scenarioExportImport(browser);
 } finally {
     await browser.close();
 }

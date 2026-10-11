@@ -29,7 +29,8 @@ import {
     cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
     cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword
 } from './owned-cloud.js';
-import { watchPrefs, savePref } from './cloud-store.js';
+import { watchPrefs, savePref, cloudListArchives, cloudUploadArchive, cloudReadArchive } from './cloud-store.js';
+import { nomArchiveUnique } from './migration-regles.js';
 
 let state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
 
@@ -2281,29 +2282,23 @@ function renderOwnedDashboard(list, profileData, regime) {
 }
 
 function initOwnedPortfolioEvents() {
+    // Export JSON : téléchargement (feuille de partage sur écran tactile) PUIS copie dans Storage
+    // users/{uid}/archives/ — remplace le dossier exports/ de l'ancien serveur local. Le fichier part
+    // d'abord : navigator.share doit rester dans le geste utilisateur, l'upload peut attendre.
     const exportBtn = document.getElementById('owned-export-btn');
     if (exportBtn) {
         exportBtn.addEventListener('click', async () => {
-            const data = loadOwnedAssets();
+            const json = JSON.stringify(loadOwnedAssets(), null, 2);
+            const base = `portefeuille-${new Date().toISOString().slice(0, 10)}`;
+            await _downloadOrShareFile(new File([json], `${base}.json`, { type: 'application/json' }), 'Portefeuille Spark');
             try {
-                const res = await fetch('/api/portfolio/export', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ portfolio: data })
-                });
-                const json = await res.json();
-                if (json.filename) {
-                    exportBtn.textContent = `✓ ${json.filename}`;
-                    setTimeout(() => { exportBtn.textContent = '↓ Export'; }, 3000);
-                }
+                const existants = (await cloudListArchives()).map(a => a.name);
+                const archiveName = nomArchiveUnique(base, existants);
+                await cloudUploadArchive(archiveName, json);
+                exportBtn.textContent = `✓ ${archiveName}`;
+                setTimeout(() => { exportBtn.textContent = '↓ Export'; }, 3000);
             } catch {
-                // fallback client-side
-                const json = JSON.stringify(data, null, 2);
-                const blob = new Blob([json], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = `portefeuille-${new Date().toISOString().slice(0, 10)}.json`;
-                a.click(); URL.revokeObjectURL(url);
+                showToast('Archive cloud non enregistrée — le fichier a tout de même été téléchargé', 'negative');
             }
         });
     }
@@ -2327,34 +2322,37 @@ function initOwnedPortfolioEvents() {
     const importConfirm = document.getElementById('owned-import-modal-confirm');
     if (importCancel) importCancel.addEventListener('click', () => { if (importModal) importModal.hidden = true; });
     if (importModal) importModal.addEventListener('click', e => { if (e.target === importModal) importModal.hidden = true; });
+    const importFileInput = document.getElementById('owned-import-file-input');
+    if (importFileInput) {
+        // Un fichier choisi devient la sélection courante (désélectionne l'archive cloud éventuelle).
+        importFileInput.addEventListener('change', () => {
+            const file = importFileInput.files?.[0];
+            if (!file || !importModal) return;
+            importModal.querySelectorAll('.owned-import-file-item--selected').forEach(i => i.classList.remove('owned-import-file-item--selected'));
+            importModal._pendingFile = file;
+            const list = document.getElementById('owned-import-file-list');
+            const row = document.createElement('div');
+            row.className = 'owned-import-file-item owned-import-file-item--selected';
+            row.innerHTML = `<span class="owned-import-file-item__name">${escapeHtml(file.name)}</span><span class="owned-import-note">fichier local</span>`;
+            list?.prepend(row);
+            if (importConfirm) importConfirm.disabled = false;
+        });
+    }
     if (importConfirm) {
         importConfirm.addEventListener('click', async () => {
             const selected = importModal?.querySelector('.owned-import-file-item--selected');
             if (!selected) return;
-            const filename = selected.dataset.filename;
             try {
-                const res = await fetch('/api/portfolio/import', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filename })
-                });
-                const json = await res.json();
-                if (json.portfolio) {
-                    const existing = loadOwnedAssets();
-                    let added = 0;
-                    for (const [id, asset] of Object.entries(json.portfolio)) {
-                        if (!existing[id]) { existing[id] = asset; added++; }
-                    }
-                    saveOwnedAssets(existing);
-                    importModal.hidden = true;
-                    renderOwnedPortfolioList();
-                    importConfirm.textContent = added > 0
-                        ? `✓ ${added} bien(s) importé(s)`
-                        : '⚠ Tous les biens sont déjà présents';
-                    if (added > 0) setTimeout(() => { importConfirm.textContent = 'Importer'; }, 3000);
-                }
+                const portfolio = importModal._pendingFile && !selected.dataset.filename
+                    ? JSON.parse(await importModal._pendingFile.text())
+                    : await cloudReadArchive(selected.dataset.filename);
+                const added = _importPortfolioObject(portfolio);
+                importModal.hidden = true;
+                renderOwnedPortfolioList();
+                importConfirm.textContent = added > 0 ? `✓ ${added} bien(s) importé(s)` : '⚠ Tous les biens sont déjà présents';
+                if (added > 0) setTimeout(() => { importConfirm.textContent = 'Importer'; }, 3000);
             } catch (err) {
-                console.error('Import error', err);
+                showToast(`Import impossible : ${err?.message || 'fichier illisible'}`, 'negative');
             }
         });
     }
@@ -2469,31 +2467,52 @@ async function openOwnedImportModal() {
     const modal = document.getElementById('owned-import-modal');
     const list = document.getElementById('owned-import-file-list');
     const confirm = document.getElementById('owned-import-modal-confirm');
+    const fileInput = document.getElementById('owned-import-file-input');
     if (!modal || !list) return;
     list.innerHTML = '<div class="owned-import-empty">Chargement…</div>';
-    if (confirm) confirm.disabled = true;
+    if (confirm) { confirm.disabled = true; confirm.textContent = 'Importer'; }
+    if (fileInput) fileInput.value = '';
+    modal._pendingFile = null;
     modal.hidden = false;
     try {
-        const res = await fetch('/api/portfolio/import/list');
-        const { files } = await res.json();
-        if (!files || !files.length) {
-            list.innerHTML = '<div class="owned-import-empty">Aucun fichier dans le dossier exports/.</div>';
+        const archives = await cloudListArchives();
+        if (!archives.length) {
+            list.innerHTML = '<div class="owned-import-empty">Aucune archive dans le cloud — utilisez « Export », ou choisissez un fichier.</div>';
             return;
         }
-        list.innerHTML = files.map(f => `
-            <div class="owned-import-file-item" data-filename="${escapeHtml(f)}">
-                <span class="owned-import-file-item__name">${escapeHtml(f)}</span>
+        list.innerHTML = archives.map(a => `
+            <div class="owned-import-file-item" data-filename="${escapeHtml(a.name)}">
+                <span class="owned-import-file-item__name">${escapeHtml(a.name)}</span>
+                <span class="owned-import-note">${a.size != null ? escapeHtml(`${Math.round(a.size / 1024)} Ko`) : ''}</span>
             </div>`).join('');
         list.querySelectorAll('.owned-import-file-item').forEach(item => {
             item.addEventListener('click', () => {
                 list.querySelectorAll('.owned-import-file-item').forEach(i => i.classList.remove('owned-import-file-item--selected'));
                 item.classList.add('owned-import-file-item--selected');
+                modal._pendingFile = null;
                 if (confirm) confirm.disabled = false;
             });
         });
     } catch {
-        list.innerHTML = '<div class="owned-import-empty">Erreur lors du chargement des fichiers.</div>';
+        list.innerHTML = '<div class="owned-import-empty">Erreur lors du chargement des archives.</div>';
     }
+}
+
+// Fusionne un export { id: bien } dans le portefeuille sans écraser les biens existants (même règle
+// qu'avant). Un contenu qui n'est pas un objet de biens est refusé avant toute écriture.
+function _importPortfolioObject(portfolio) {
+    if (!portfolio || typeof portfolio !== 'object' || Array.isArray(portfolio)) {
+        throw new Error('ce fichier ne contient pas un portefeuille Spark');
+    }
+    const entries = Object.entries(portfolio).filter(([, asset]) => asset && typeof asset === 'object' && !Array.isArray(asset));
+    if (!entries.length) throw new Error('aucun bien dans ce fichier');
+    const existing = loadOwnedAssets();
+    let added = 0;
+    for (const [id, asset] of entries) {
+        if (!existing[id]) { existing[id] = { ...asset, id }; added++; }
+    }
+    if (added) saveOwnedAssets(existing);
+    return added;
 }
 
 // TMI "taux courant" (année en cours) — pour les fonctions qui répondent à « si ma situation
