@@ -400,6 +400,47 @@ async function scenarioExportImport(browser) {
         await page.click('#owned-import-modal-cancel');
     });
 
+    const bienFichier = (id, nom) => ({ [id]: { id, nom, ville: 'Tours', acquisition: { prix: 50000, credit: {} }, postAchat: { travaux: [], notes: [] }, scenarios: [] } });
+
+    await step('fichier choisi, archive cliquée, puis ligne fichier recliquée → le FICHIER est importé', async () => {
+        await page.click('#owned-import-btn');
+        await page.waitForSelector('.owned-import-file-item[data-filename]');
+        await page.setInputFiles('#owned-import-file-input', { name: 'second.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bienFichier('oa-import-10', 'Du fichier'))) });
+        await page.click(`.owned-import-file-item[data-filename="${archiveName}"]`);
+        await page.click('.owned-import-file-item:not([data-filename])');
+        await page.waitForSelector('.owned-import-file-item--selected:not([data-filename])');
+        await page.click('#owned-import-modal-confirm');
+        await page.waitForFunction(() => Object.keys(window.__stub.assets).length === 3, null, { timeout: 4000 });
+        assert.equal(await page.evaluate(() => window.__stub.assets['oa-import-10'].nom), 'Du fichier');
+    });
+
+    await step('fichier sans `acquisition` → toast négatif, rien écrit', async () => {
+        await page.click('#owned-import-btn');
+        await page.waitForSelector('#owned-import-modal:not([hidden])');
+        await page.setInputFiles('#owned-import-file-input', { name: 'sans-acq.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ x: { id: 'x', nom: 'sans acquisition' } })) });
+        await page.click('#owned-import-modal-confirm');
+        await page.waitForFunction(() => /aucun bien dans ce fichier/.test(document.getElementById('app-toast')?.textContent || ''), null, { timeout: 4000 });
+        assert.equal(await page.evaluate(() => Object.keys(window.__stub.assets).length), 3);
+        await page.click('#owned-import-modal-cancel');
+    });
+
+    await step('fichier choisi pendant « Chargement… » → la ligne survit au rendu des archives et s importe', async () => {
+        // Clic + sélection de fichier dans le même tick synchrone, avant que cloudListArchives ne résolve.
+        await page.evaluate(([name, content]) => {
+            document.getElementById('owned-import-btn').click();
+            const dt = new DataTransfer();
+            dt.items.add(new File([content], name, { type: 'application/json' }));
+            const input = document.getElementById('owned-import-file-input');
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }, ['course.json', JSON.stringify(bienFichier('oa-import-11', 'Pendant le chargement'))]);
+        await page.waitForSelector('.owned-import-file-item[data-filename]');
+        assert.equal(await page.$$eval('.owned-import-file-item--selected:not([data-filename])', l => l.length), 1);
+        await page.click('#owned-import-modal-confirm');
+        await page.waitForFunction(() => Object.keys(window.__stub.assets).length === 4, null, { timeout: 4000 });
+        assert.equal(await page.evaluate(() => window.__stub.assets['oa-import-11'].nom), 'Pendant le chargement');
+    });
+
     await step('aucune erreur JS', () => assert.deepEqual(errors, []));
     await context.close();
 

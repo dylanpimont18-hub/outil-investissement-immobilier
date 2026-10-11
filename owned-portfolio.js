@@ -2328,24 +2328,37 @@ function initOwnedPortfolioEvents() {
         importFileInput.addEventListener('change', () => {
             const file = importFileInput.files?.[0];
             if (!file || !importModal) return;
+            const list = document.getElementById('owned-import-file-list');
+            // Un seul fichier local à la fois : l'ancienne ligne disparaît, la nouvelle est cliquable
+            // (pour revenir au fichier après avoir cliqué une archive).
+            importModal._fileRow?.remove();
             importModal.querySelectorAll('.owned-import-file-item--selected').forEach(i => i.classList.remove('owned-import-file-item--selected'));
             importModal._pendingFile = file;
-            const list = document.getElementById('owned-import-file-list');
             const row = document.createElement('div');
             row.className = 'owned-import-file-item owned-import-file-item--selected';
             row.innerHTML = `<span class="owned-import-file-item__name">${escapeHtml(file.name)}</span><span class="owned-import-note">fichier local</span>`;
+            row.addEventListener('click', () => {
+                importModal.querySelectorAll('.owned-import-file-item--selected').forEach(i => i.classList.remove('owned-import-file-item--selected'));
+                row.classList.add('owned-import-file-item--selected');
+                importModal._pendingFile = file;
+                if (importConfirm) importConfirm.disabled = false;
+            });
+            importModal._fileRow = row;
             list?.prepend(row);
+            // Vide l'input : rechoisir le même fichier redéclenchera `change`.
+            importFileInput.value = '';
             if (importConfirm) importConfirm.disabled = false;
         });
     }
     if (importConfirm) {
         importConfirm.addEventListener('click', async () => {
             const selected = importModal?.querySelector('.owned-import-file-item--selected');
-            if (!selected) return;
+            const filename = selected?.dataset.filename;
+            if (!filename && !importModal?._pendingFile) return;
             try {
-                const portfolio = importModal._pendingFile && !selected.dataset.filename
+                const portfolio = !filename
                     ? JSON.parse(await importModal._pendingFile.text())
-                    : await cloudReadArchive(selected.dataset.filename);
+                    : await cloudReadArchive(filename);
                 const added = _importPortfolioObject(portfolio);
                 importModal.hidden = true;
                 renderOwnedPortfolioList();
@@ -2473,11 +2486,15 @@ async function openOwnedImportModal() {
     if (confirm) { confirm.disabled = true; confirm.textContent = 'Importer'; }
     if (fileInput) fileInput.value = '';
     modal._pendingFile = null;
+    modal._fileRow = null;
     modal.hidden = false;
+    // Un fichier local choisi pendant le chargement ne doit pas être effacé par la réécriture de la liste.
+    const keepFileRow = () => { if (modal._fileRow) list.prepend(modal._fileRow); };
     try {
         const archives = await cloudListArchives();
         if (!archives.length) {
             list.innerHTML = '<div class="owned-import-empty">Aucune archive dans le cloud — utilisez « Export », ou choisissez un fichier.</div>';
+            keepFileRow();
             return;
         }
         list.innerHTML = archives.map(a => `
@@ -2493,8 +2510,10 @@ async function openOwnedImportModal() {
                 if (confirm) confirm.disabled = false;
             });
         });
+        keepFileRow();
     } catch {
         list.innerHTML = '<div class="owned-import-empty">Erreur lors du chargement des archives.</div>';
+        keepFileRow();
     }
 }
 
@@ -2504,7 +2523,10 @@ function _importPortfolioObject(portfolio) {
     if (!portfolio || typeof portfolio !== 'object' || Array.isArray(portfolio)) {
         throw new Error('ce fichier ne contient pas un portefeuille Spark');
     }
-    const entries = Object.entries(portfolio).filter(([, asset]) => asset && typeof asset === 'object' && !Array.isArray(asset));
+    // Forme minimale d'un bien Spark : `acquisition` objet (createOwnedAsset la pose toujours) — sans elle
+    // les rendus ultérieurs planteraient.
+    const entries = Object.entries(portfolio).filter(([, asset]) => asset && typeof asset === 'object' && !Array.isArray(asset)
+        && asset.acquisition && typeof asset.acquisition === 'object');
     if (!entries.length) throw new Error('aucun bien dans ce fichier');
     const existing = loadOwnedAssets();
     let added = 0;
