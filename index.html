@@ -14,6 +14,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
+    <!-- Connexion obligatoire pour toute l'app (main.js) : recouvre tout tant que Firebase Auth n'a pas de session -->
+    <div id="app-auth-gate" class="app-auth-gate" hidden></div>
+    <!-- Premier chargement des données cloud (≈ 0,5 s) : visible dès le HTML pour ne jamais montrer de valeurs par défaut.
+         L'attribut hidden est retiré par l'amorçage cloud de main.js (jusque-là, l'ancien main.js ne le masquerait jamais). -->
+    <div id="app-cloud-loading" class="app-cloud-loading" role="status" aria-live="polite" hidden>
+        <div class="app-cloud-loading__box">Chargement de vos données…</div>
+    </div>
     <div class="shell">
         <header class="topbar">
             <div class="topbar-brand">
@@ -684,8 +691,8 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center">
                 <button id="owned-density-btn" class="btn btn--ghost btn--sm" type="button" title="Densité de la liste"></button>
-                <button id="owned-import-btn" class="btn btn--ghost btn--sm" type="button" title="Importer depuis le dossier exports/">↑ Import</button>
-                <button id="owned-export-btn" class="btn btn--ghost btn--sm" type="button" title="Exporter le portefeuille en JSON">↓ Export</button>
+                <button id="owned-import-btn" class="btn btn--ghost btn--sm" type="button" title="Importer une archive (cloud ou fichier .json)">↑ Import</button>
+                <button id="owned-export-btn" class="btn btn--ghost btn--sm" type="button" title="Exporter le portefeuille en JSON (téléchargement + archive cloud)">↓ Export</button>
             </div>
         </div>
         <!-- Navigation onglets portefeuille -->
@@ -696,7 +703,6 @@
         </div>
 
         <div id="owned-list-tab-overview" class="owned-tab-panel" role="tabpanel">
-            <div id="owned-migration-banner" hidden></div>
             <div id="owned-dashboard-wrap"></div>
             <div id="owned-kpi-banner" class="owned-kpi-banner"></div>
             <!-- Carte des biens détenus (géocodés depuis leur adresse) -->
@@ -829,12 +835,15 @@
         </div>
     </div>
 
-    <!-- Modal import portefeuille -->
+    <!-- Modal import portefeuille : archives Storage (bouton Export) ou fichier local -->
     <div id="owned-import-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
         <div class="owned-delete-modal__box">
             <h3>Importer un portefeuille</h3>
-            <p>Fichiers disponibles dans le dossier <code>exports/</code> :</p>
+            <p>Archives enregistrées dans le cloud par le bouton « Export » :</p>
             <div id="owned-import-file-list" class="owned-import-file-list"></div>
+            <label class="btn btn--ghost btn--sm owned-import-file-btn">Choisir un fichier…
+                <input id="owned-import-file-input" type="file" accept=".json,application/json" hidden>
+            </label>
             <p class="owned-import-note">Les biens importés seront ajoutés à votre portefeuille. Les biens existants avec le même identifiant ne seront pas écrasés.</p>
             <div class="owned-delete-modal__actions">
                 <button id="owned-import-modal-cancel" class="btn btn--ghost" type="button">Annuler</button>

@@ -25,7 +25,7 @@ import { buildBankDossierPrintDocument } from './pdf.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
 import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
-    watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudUploadDocumentAs, cloudDocumentUrl,
+    watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudDocumentUrl,
     cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
     cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword
 } from './owned-cloud.js';
@@ -6265,14 +6265,16 @@ async function callOwnedDiagnosticIA(assetId) {
 
 // ─── CONNEXION (compte unique PC + iPhone) ───────────────────────────────────
 
-let _authGateWired = false;
-function _renderAuthGate() {
-    const gate = document.getElementById('owned-auth-gate');
+// Formulaire de connexion (compte unique PC + iPhone). Sert deux conteneurs : #owned-auth-gate dans
+// le panneau Portefeuille (owned.html, et index.html hors onglet actif) et #app-auth-gate, le gate
+// plein écran d'index.html géré par main.js — connexion obligatoire pour toute l'app depuis le
+// passage au tout-web. Câblé une seule fois par conteneur (data-wired).
+export function renderAuthGateInto(gate, { title = 'Connexion' } = {}) {
     if (!gate) return;
     if (!gate.innerHTML.trim()) {
         gate.innerHTML = `
             <div class="owned-auth-gate">
-                <h2>Portefeuille — Connexion</h2>
+                <h2>${escapeHtml(title)}</h2>
                 <p class="owned-auth-gate__hint">Un seul compte, partagé entre le PC et l'iPhone.</p>
                 <form id="owned-auth-form" novalidate>
                     <label class="variables-field">
@@ -6288,8 +6290,8 @@ function _renderAuthGate() {
                 </form>
             </div>`;
     }
-    if (_authGateWired) return;
-    _authGateWired = true;
+    if (gate.dataset.wired) return;
+    gate.dataset.wired = '1';
     gate.querySelector('#owned-auth-form')?.addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target);
@@ -6307,53 +6309,8 @@ function _renderAuthGate() {
     });
 }
 
-// ─── MIGRATION PONCTUELLE (ancien portefeuille localStorage → Firestore) ─────
-// Ne s'affiche que si le portefeuille cloud est vide et qu'un ancien portefeuille local existe sur
-// cet appareil — se masque tout seul une fois l'un des deux devenu faux, pas besoin de la retirer.
-
-function _renderMigrationBanner() {
-    const el = document.getElementById('owned-migration-banner');
-    if (!el) return;
-    if (Object.keys(_assetsCache).length > 0) { el.hidden = true; return; }
-    let legacy = {};
-    try { legacy = JSON.parse(localStorage.getItem('investissementWebOwnedAssets')) || {}; } catch { /* pas de portefeuille local */ }
-    const count = Object.keys(legacy).length;
-    if (!count) { el.hidden = true; return; }
-
-    el.hidden = false;
-    el.innerHTML = `
-        <div class="owned-alert owned-alert--info">
-            ${count} bien(s) trouvé(s) dans l'ancien stockage local de cet appareil.
-            <button type="button" class="btn btn--primary btn--sm" id="owned-migrate-btn">Importer vers le cloud</button>
-        </div>`;
-    el.querySelector('#owned-migrate-btn')?.addEventListener('click', async e => {
-        const btn = e.target;
-        btn.disabled = true;
-        btn.textContent = 'Import en cours…';
-        try {
-            for (const [id, asset] of Object.entries(legacy)) {
-                await cloudSetAsset(id, asset);
-                for (const t of (asset.postAchat?.travaux || [])) {
-                    if (!t.pdfFilename) continue;
-                    try {
-                        const res = await fetch(`/api/documents/${encodeURIComponent(id)}/${encodeURIComponent(t.pdfFilename)}`);
-                        if (!res.ok) continue;
-                        await cloudUploadDocumentAs(id, t.pdfFilename, await res.blob());
-                    } catch { /* PDF illisible localement — ignoré, les autres biens continuent */ }
-                }
-            }
-            let goals = {}, order = [];
-            try { goals = JSON.parse(localStorage.getItem('investissementWebPortfolioGoals')) || {}; } catch { /* rien à migrer */ }
-            try { order = JSON.parse(localStorage.getItem(STORAGE_KEYS.ownedOrder)) || []; } catch { /* rien à migrer */ }
-            const regime = localStorage.getItem('investissementWebOwnedRegime');
-            await cloudSaveMeta({ goals, order, ...(regime ? { regime } : {}) });
-            showToast(`${count} bien(s) importé(s) dans le cloud`, 'success');
-        } catch {
-            showToast(`Erreur pendant l'import — réessayez`, 'negative');
-            btn.disabled = false;
-            btn.textContent = 'Importer vers le cloud';
-        }
-    });
+function _renderAuthGate() {
+    renderAuthGateInto(document.getElementById('owned-auth-gate'), { title: 'Portefeuille — Connexion' });
 }
 
 function renderCollections() {
@@ -6392,7 +6349,6 @@ function renderCollections() {
     } else {
         if (nodes.ownedListView) nodes.ownedListView.hidden = false;
         if (nodes.ownedDetailView) nodes.ownedDetailView.hidden = true;
-        _renderMigrationBanner();
         renderOwnedPortfolioList();
     }
 }

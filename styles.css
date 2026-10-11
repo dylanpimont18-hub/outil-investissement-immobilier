@@ -7506,6 +7506,19 @@ body.asset-report-open .owned-quickfab { display: none; }
 .owned-auth-gate__hint { margin: 0; font-size: .82rem; color: var(--text-tertiary, var(--muted)); }
 .owned-auth-gate form { display: flex; flex-direction: column; gap: 12px; }
 .owned-auth-gate__error { font-size: .82rem; color: var(--danger); }
+
+/* Connexion obligatoire (index.html) et premier chargement cloud : recouvrent toute l'app. Au-dessus
+   des modales (.owned-modal-overlay 1200, .document-preview-overlay 1300). */
+.app-auth-gate, .app-cloud-loading {
+    position: fixed; inset: 0; z-index: 1500;
+    background: var(--bg);
+    display: flex; justify-content: center; align-items: flex-start;
+    overflow: auto; padding: 24px 16px;
+}
+.app-auth-gate[hidden], .app-cloud-loading[hidden] { display: none; }
+.app-cloud-loading { align-items: center; }
+.app-cloud-loading__box { font-size: .9rem; color: var(--text-secondary); letter-spacing: .02em; }
+.owned-import-file-btn { align-self: flex-start; cursor: pointer; }
 .owned-password-form__error { grid-column: 1 / -1; }
 
 /* Badge régime optimal */

@@ -82,8 +82,52 @@ async function scenarioImpression(browser, viewport, label) {
     await context.close();
 }
 
+async function scenarioConnexion(browser, viewport, label) {
+    console.log(`\nConnexion — ${label}`);
+    const { page, context, errors } = await openPage(browser, '/index.html', { viewport, seedCloud: { user: null }, spyStorage: false });
+
+    await step('non connecté : gate plein écran sur index.html, rien d autre cliquable', async () => {
+        await page.waitForSelector('#app-auth-gate:not([hidden]) form#owned-auth-form', { timeout: 8000 });
+        assert.equal(await page.isVisible('#app-cloud-loading'), false, 'indicateur de chargement masqué tant que non connecté');
+        const gateTitle = await page.$eval('#app-auth-gate h2', h => h.textContent);
+        assert.match(gateTitle, /Connexion/);
+        await shot(page, `gate-${label}`);
+    });
+
+    await step('mot de passe refusé → message, toujours sur le gate', async () => {
+        await page.fill('#app-auth-gate [name="email"]', 'test@example.com');
+        await page.fill('#app-auth-gate [name="password"]', 'mauvais');
+        await page.click('#app-auth-gate button[type="submit"]');
+        await page.waitForSelector('#app-auth-gate #owned-auth-error:not([hidden])');
+        assert.equal(await page.isVisible('#app-auth-gate'), true);
+    });
+
+    await step('connexion → gate masqué, chargement puis application', async () => {
+        await page.fill('#app-auth-gate [name="password"]', 'secret');
+        await page.click('#app-auth-gate button[type="submit"]');
+        await page.waitForSelector('#app-auth-gate[hidden]', { timeout: 8000 });
+        // Temporaire (Tâche 5 restaure waitAppStarted) : main.js n est pas encore migré.
+        await page.waitForSelector('#owned-quickfab:not([hidden])');
+        assert.deepEqual(await page.evaluate(() => window.__stub.signIns.map(s => s.email)), ['test@example.com', 'test@example.com']);
+    });
+
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+
+    console.log(`\nConnexion owned.html — ${label}`);
+    const o = await openPage(browser, '/owned.html', { viewport, seedCloud: { user: null }, spyStorage: false });
+    await step('owned.html non connecté → #owned-auth-gate visible', async () => {
+        await o.page.waitForSelector('#owned-auth-gate:not([hidden]) form#owned-auth-form', { timeout: 8000 });
+        assert.equal(await o.page.isVisible('#owned-list-view'), false);
+    });
+    await step('aucune erreur JS', () => assert.deepEqual(o.errors, []));
+    await o.context.close();
+}
+
 const browser = await chromium.launch();
 try {
+    await scenarioConnexion(browser, PC, 'PC');
+    await scenarioConnexion(browser, IPHONE, 'iPhone');
     await scenarioImpression(browser, PC, 'PC');
     await scenarioImpression(browser, IPHONE, 'iPhone');
 } finally {
