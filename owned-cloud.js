@@ -6,10 +6,10 @@ import {
     onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import {
-    collection, doc, onSnapshot, setDoc, deleteDoc, getDoc
+    collection, doc, onSnapshot, setDoc, deleteDoc, getDoc, getDocs
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {
-    ref, uploadBytes, getDownloadURL, deleteObject, listAll
+    ref, uploadBytes, getDownloadURL, deleteObject, listAll, getMetadata
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 import { httpsCallable } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
@@ -87,6 +87,20 @@ export function cloudSaveMeta(patch) {
     return setDoc(doc(db, 'users', requireUid(), 'portfolioMeta', 'main'), patch, { merge: true });
 }
 
+// Lectures ponctuelles réservées à la migration locale → cloud (migration-locale.js) : état cloud
+// avant fusion, et liste des biens pour retrouver les justificatifs à téléverser.
+export async function cloudGetMeta() {
+    const snap = await getDoc(doc(db, 'users', requireUid(), 'portfolioMeta', 'main'));
+    return snap.exists() ? snap.data() : {};
+}
+
+export async function cloudGetAllAssets() {
+    const snap = await getDocs(collection(db, 'users', requireUid(), 'ownedAssets'));
+    const map = {};
+    snap.forEach(d => { map[d.id] = d.data(); });
+    return map;
+}
+
 // ─── Documents (PDF justificatifs) : Firebase Storage ────────────────────────
 
 export async function cloudUploadDocument(assetId, file) {
@@ -99,6 +113,16 @@ export async function cloudUploadDocument(assetId, file) {
 
 export function cloudDocumentUrl(assetId, filename) {
     return getDownloadURL(ref(storage, `users/${requireUid()}/documents/${assetId}/${filename}`));
+}
+
+export async function cloudDocumentExists(assetId, filename) {
+    try {
+        await getMetadata(ref(storage, `users/${requireUid()}/documents/${assetId}/${filename}`));
+        return true;
+    } catch (err) {
+        if (err?.code === 'storage/object-not-found') return false;
+        throw err;
+    }
 }
 
 // Reservee a la migration depuis l'ancien stockage local : conserve le nom de fichier d'origine

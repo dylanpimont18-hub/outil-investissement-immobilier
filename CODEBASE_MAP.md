@@ -186,15 +186,17 @@ Cloud Functions Firebase (Node 22 + `firebase-functions` 7 / `firebase-admin` 14
 ---
 
 ## owned-cloud.js
-Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le portefeuille biens détenus — aucune logique métier (cache, diff, rendu), tout ça reste dans `owned-portfolio.js`, seul importeur de ce module.
+Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le portefeuille biens détenus — aucune logique métier (cache, diff, rendu), tout ça reste dans `owned-portfolio.js`. Importé par `owned-portfolio.js`, `main.js` (`watchAuth`, `watchPortfolioMeta`) et `migration-locale.js`.
 - `watchAuth(onChange)` / `cloudSignIn(email, password)` / `cloudSignOut()` — session (compte unique PC + iPhone, persistée par défaut par le SDK)
 - `cloudChangePassword(newPassword)` — appelle la Cloud Function `changerMotDePasse` puis reconnecte aussitôt cet appareil avec le nouveau mot de passe (sinon déconnexion à l'expiration du jeton) ; renvoie `{relogged}` — un échec de reconnexion n'est pas une erreur, le mot de passe est déjà changé
 - `watchOwnedAssets(onChange, onError)` — écoute temps réel de la collection `users/{uid}/ownedAssets` (un doc par bien)
 - `cloudSetAsset(id, data)` / `cloudDeleteAssetDoc(id)` — écriture/suppression d'un bien
 - `watchPortfolioMeta(onChange, onError)` / `cloudSaveMeta(patch)` — doc unique `users/{uid}/portfolioMeta/main` (`goals`, `order`, `regime`, `profile` — voir `syncProfileToCloud` dans `owned-portfolio.js`), écriture en `merge: true`
+- `cloudGetMeta()` / `cloudGetAllAssets()` — lectures ponctuelles (`getDoc` / `getDocs`, pas d'abonnement) réservées à la migration locale → cloud : état de `portfolioMeta/main` avant fusion, et liste de `ownedAssets` pour retrouver les justificatifs à téléverser
 - `cloudUploadDocument(assetId, file)` — upload un justificatif (PDF, JPEG ou PNG) vers `users/{uid}/documents/{assetId}/` (Storage), nom de fichier généré en conservant la vraie extension/`contentType` du fichier (corrigé le 2026-08-04 : forçait auparavant `.pdf`/`application/pdf` sur toute photo, rendant les justificatifs image illisibles à la relecture), retourne le `filename`
 - `cloudUploadDocumentAs(assetId, filename, blob)` — variante réservée à la migration : conserve le nom de fichier d'origine (déjà référencé par `pdfFilename`)
 - `cloudDocumentUrl(assetId, filename)` / `cloudDeleteDocument(assetId, filename)` / `cloudDeleteAllDocuments(assetId)` — lecture/suppression Storage
+- `cloudDocumentExists(assetId, filename)` — `getMetadata` sur un justificatif : `true`/`false` (`storage/object-not-found` → `false`, autre erreur relancée)
 - `cloudGeocode(adresse)` — remplace l'ancien proxy serveur `/api/geocode/address` (indisponible sans serveur local sur iPhone) : appel direct Nominatim (respecte la limite 1 req/s) + cache dans `users/{uid}/geocodesAdresse`
 - `cloudExtraireFraisFacture(base64, mimeType)` — appelle la Cloud Function `extraireFraisFacture` (`httpsCallable`), voir `functions/index.js`
 - `cloudExtraireDossierBien(base64, mimeType)` — appelle la Cloud Function `extraireDossierBien` (2026-09-22, import de dossier bien), un appel par document ; voir `functions/index.js`
@@ -213,6 +215,20 @@ Règles pures de la migration unique stockage local → cloud (aucun DOM, `getIt
 - `lirePrefsLocales(getItem)` — préférences d'interface, clés absentes omises
 - `lireProfilLocal(getItem)` — profil household + indicateur configuré
 - `lireMetaLocale(getItem)` — régime, ordre, objectifs du portefeuille
+
+---
+
+## cloud-store.js
+Couche cloud des données hors portefeuille (Firestore + Storage) : études du comparateur, réglages (`settings/{analysis|prefs|migration}`, `prefs`) et archives JSON du portefeuille (Storage `users/{uid}/archives/`). Wrapper fin, aucune logique métier. Importé par `main.js`, `owned-portfolio.js` et `migration-locale.js`. Tout vit sous `users/{uid}/`.
+- `watchStudies(onChange, onError)` / `cloudSetStudy(id, record)` / `cloudDeleteStudy(id)` — une étude du comparateur par document (`users/{uid}/studies`)
+- `cloudGetAllStudies()` — lecture ponctuelle de toutes les études (migration), pas un abonnement
+- `watchAnalysis(onChange, onError)` / `cloudSaveAnalysis(patch)` — `settings/analysis` (étude en cours) ; `onChange(null)` tant que le document n'existe pas
+- `watchPrefs(onChange, onError)` / `savePref(patch)` — `settings/prefs` (préférences d'interface) ; `{}` tant que le document n'existe pas, écriture en `merge: true`
+- `cloudGetSetting(name)` / `cloudSetSetting(name, data, { merge })` — lecture/écriture ponctuelle d'un `settings/{name}` (ex. marqueur `migration`), `merge` par défaut `true`
+- `cloudUploadArchive(filename, blobOrText)` — téléverse une archive JSON (Blob ou texte) dans `users/{uid}/archives/` (remplace le dossier `exports/` de l'ancien `server.py`)
+- `cloudListArchives()` — liste les archives avec taille et date, triées du plus récent au plus ancien
+- `cloudReadArchive(filename)` — télécharge une archive et renvoie son contenu parsé (JSON)
+- `cloudArchiveMeta(filename)` — `{size, updated}` d'une archive, ou `null` si elle n'existe pas
 
 ---
 
