@@ -1431,13 +1431,11 @@ async function _generateBankDossierPdf(selectedAssetIds, sections, highlights) {
 
 // ─── RAPPORT D'UN BIEN (aperçu → PDF / .md) ──────────────────────────────────
 // Contenu construit par rapport-bien.js (module pur). Aperçu plein écran dans une iframe, puis :
-//  - PDF : logiciel PC (serveur local) → /api/generate-pdf (enregistré dans Téléchargements) ;
-//          version web/iPhone → impression de la page avec le seul rapport visible (feuille iOS :
-//          Partager → Enregistrer dans Fichiers ; PC : « Enregistrer en PDF »).
-//  - .md : logiciel PC → /api/save-markdown ; écran tactile → feuille de partage iOS (un lien de
-//          téléchargement blob ne marche pas en mode « écran d'accueil ») ; sinon téléchargement.
+//  - PDF : openPrintDocument (utils.js) — impression de la page avec le seul rapport visible
+//          (PC : « Enregistrer en PDF » ; iPhone : Partager → Enregistrer dans Fichiers) ;
+//  - .md : téléchargement (PC) ou feuille de partage iOS (écran tactile — un lien blob ne marche
+//          pas en mode « écran d'accueil ») via _downloadOrShareFile ;
 //  - Copier : presse-papiers, pour coller directement dans une IA.
-const IS_LOCAL_APP = ['127.0.0.1', 'localhost'].includes(location.hostname);
 
 function openAssetReportPreview(assetId) {
     const asset = getOwnedAsset(assetId);
@@ -1471,7 +1469,6 @@ function openAssetReportPreview(assetId) {
 
     const close = () => {
         overlay.remove();
-        _cleanupAssetReportPrint?.();
         document.body.classList.remove('asset-report-open');
         document.removeEventListener('keydown', onKey);
     };
@@ -1480,8 +1477,7 @@ function openAssetReportPreview(assetId) {
     overlay.querySelector('#asset-report-close').addEventListener('click', close);
 
     overlay.querySelector('#asset-report-pdf').addEventListener('click', () => {
-        if (IS_LOCAL_APP) openPrintDocument(report.documentHTML, report.filename, 'asset-report-pdf');
-        else printAssetReportInPage(report);
+        openPrintDocument(report.documentHTML, report.filename, 'asset-report-pdf');
     });
     overlay.querySelector('#asset-report-md').addEventListener('click', () => exportAssetReportMarkdown(markdown, mdFilename, data.bien.nom));
     overlay.querySelector('#asset-report-copy').addEventListener('click', async () => {
@@ -1490,54 +1486,17 @@ function openAssetReportPreview(assetId) {
     });
 }
 
-// Impression de la page elle-même, rapport seul visible (Shadow DOM : son CSS reste isolé de
-// styles.css). Évite iframe.print(), qui sur Safari iOS imprime la page parente.
-function printAssetReportInPage(report) {
-    _cleanupAssetReportPrint?.();
-    const host = document.createElement('div');
-    host.id = 'asset-report-print-root';
-    host.attachShadow({ mode: 'open' }).innerHTML = `<style>${report.css}</style><div class="report-root">${report.bodyHTML}</div>`;
-    document.body.appendChild(host);
-    document.body.classList.add('asset-report-printing');
-    const previousTitle = document.title;
-    document.title = report.filename.replace(/\.pdf$/, ''); // nom proposé pour « Enregistrer en PDF »
-    // Pas de nettoyage sur minuteur : selon les navigateurs mobiles, window.print() peut rendre la
-    // main avant que la feuille d'impression ait fini de lire la page — retirer le rapport trop tôt
-    // donnerait un PDF vide. L'hôte est invisible à l'écran (styles.css), on le retire donc sans
-    // risque à afterprint ou à la fermeture de l'aperçu (_cleanupAssetReportPrint).
-    _cleanupAssetReportPrint = () => {
-        document.body.classList.remove('asset-report-printing');
-        host.remove();
-        document.title = previousTitle;
-        window.removeEventListener('afterprint', _cleanupAssetReportPrint);
-        _cleanupAssetReportPrint = null;
-    };
-    window.addEventListener('afterprint', _cleanupAssetReportPrint);
-    // Laisse le navigateur peindre le contenu avant d'ouvrir la boîte d'impression
-    requestAnimationFrame(() => setTimeout(() => window.print(), 50));
-}
-let _cleanupAssetReportPrint = null;
-
 async function exportAssetReportMarkdown(markdown, filename, nomBien) {
-    if (IS_LOCAL_APP) {
-        try {
-            const resp = await fetch('/api/save-markdown', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: markdown, filename })
-            });
-            const json = await resp.json().catch(() => null);
-            if (!resp.ok) throw new Error(json?.error || resp.statusText);
-            showToast(`Enregistré dans Téléchargements : ${json.filename}`, 'positive');
-        } catch (err) {
-            showToast(`Export impossible : ${err.message}`, 'negative');
-        }
-        return;
-    }
-    const file = new File([markdown], filename, { type: 'text/markdown' });
+    await _downloadOrShareFile(new File([markdown], filename, { type: 'text/markdown' }), `Rapport — ${nomBien}`);
+}
+
+// Remet un fichier à l'utilisateur : feuille de partage sur écran tactile (iOS, où un lien blob ne
+// télécharge rien en mode écran d'accueil), téléchargement classique sinon. Partagé avec l'export
+// JSON du portefeuille. À appeler dans le geste utilisateur (navigator.share l'exige).
+async function _downloadOrShareFile(file, title) {
     if (window.matchMedia?.('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
         try {
-            await navigator.share({ files: [file], title: `Rapport — ${nomBien}` });
+            await navigator.share({ files: [file], title });
         } catch (err) {
             if (err?.name !== 'AbortError') showToast('Partage impossible, utilisez Copier', 'negative');
         }
@@ -1546,7 +1505,7 @@ async function exportAssetReportMarkdown(markdown, filename, nomBien) {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    a.download = file.name;
     document.body.appendChild(a);
     a.click();
     a.remove();

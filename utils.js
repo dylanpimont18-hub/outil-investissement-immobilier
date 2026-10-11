@@ -148,29 +148,61 @@ export function getChecklistLabel(status) {
     return 'Bloquant';
 }
 
-// Poste le HTML d'un document imprimable à /api/generate-pdf (server.py, Edge headless) et
-// alerte le résultat. `triggerBtnId` (optionnel) : bouton dont le libellé bascule sur
-// "Génération…" pendant l'appel — chaque appelant a son propre bouton (export-decision-pdf,
-// owned-bank-dossier-generate…), passé explicitement plutôt que codé en dur ici.
+// Impression d'un document HTML autonome (PDF décision, dossier bancaire, rapport d'un bien) sans
+// serveur : le document est injecté dans la page elle-même, dans un Shadow DOM (son CSS reste isolé
+// de styles.css), puis window.print() avec document.title = nom de fichier — c'est le nom proposé
+// par « Enregistrer en PDF » sur PC et par la feuille de partage sur iPhone. Une iframe cachée
+// aurait été plus directe, mais sur Safari iOS imprimer une iframe imprime la page parente
+// (constaté sur le rapport d'un bien, dont on généralise ici la logique). Les <script> du document
+// (auto-impression héritée de l'ancienne version popup) sont retirés : c'est nous qui imprimons.
+// `triggerBtnId` (optionnel) : bouton dont le libellé bascule pendant la préparation.
+const PRINT_ROOT_ID = 'spark-print-root';
+let _printCleanup = null;
+
+// Dans un Shadow DOM, les sélecteurs html/body ne matchent rien : rabattus sur le conteneur .print-root.
+export function cssPourShadow(css) {
+    return String(css)
+        .replace(/(^|[^\w.#-])html\s*,\s*body(?![\w-])/g, '$1.print-root')
+        .replace(/(^|[^\w.#-])(?:html|body)(?![\w-])/g, '$1.print-root');
+}
+
 export async function openPrintDocument(documentHTML, filename, triggerBtnId = null) {
     const btn = triggerBtnId ? document.getElementById(triggerBtnId) : null;
     const originalLabel = btn ? btn.textContent : null;
-    if (btn) { btn.textContent = 'Génération…'; btn.disabled = true; }
+    if (btn) { btn.textContent = 'Préparation…'; btn.disabled = true; }
     try {
-        const resp = await fetch('/api/generate-pdf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: documentHTML, filename }),
-        });
-        const json = await resp.json().catch(() => null);
-        if (!resp.ok) {
-            window.alert('Erreur lors de la génération du PDF : ' + ((json && json.error) || resp.statusText));
-            return;
-        }
-        const savedTo = json && json.saved_to ? json.saved_to : '';
-        window.alert('PDF sauvegardé dans le dossier Téléchargements :\n' + (savedTo || filename));
+        _printCleanup?.(); // un hôte précédent sans afterprint (navigateurs mobiles) ne doit pas s'accumuler
+        const parsed = new DOMParser().parseFromString(documentHTML, 'text/html');
+        parsed.querySelectorAll('script').forEach(s => s.remove());
+        const css = Array.from(parsed.querySelectorAll('style')).map(s => s.textContent).join('\n');
+        // @page ne s'applique pas depuis un Shadow DOM : hissé dans le document le temps de l'impression.
+        const pageStyle = document.createElement('style');
+        pageStyle.id = 'spark-print-page';
+        pageStyle.textContent = (css.match(/@page[^{]*\{[^}]*\}/g) || []).join('\n');
+        const host = document.createElement('div');
+        host.id = PRINT_ROOT_ID;
+        host.attachShadow({ mode: 'open' }).innerHTML =
+            `<style>${cssPourShadow(css)}</style><div class="print-root ${parsed.body.className}">${parsed.body.innerHTML}</div>`;
+        document.head.appendChild(pageStyle);
+        document.body.appendChild(host);
+        document.body.classList.add('spark-printing');
+        const previousTitle = document.title;
+        document.title = String(filename || 'document').replace(/\.pdf$/i, '');
+        _printCleanup = () => {
+            document.body.classList.remove('spark-printing');
+            host.remove();
+            pageStyle.remove();
+            document.title = previousTitle;
+            window.removeEventListener('afterprint', _printCleanup);
+            _printCleanup = null;
+        };
+        // Pas de nettoyage sur minuteur : certains navigateurs mobiles rendent la main avant que la
+        // feuille d'impression ait lu la page — retirer l'hôte trop tôt donnerait un PDF vide.
+        window.addEventListener('afterprint', _printCleanup);
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 50)));
+        window.print();
     } catch (err) {
-        window.alert('Erreur lors de la génération du PDF : ' + err.message);
+        showToast(`Impression impossible : ${err.message}`, 'negative');
     } finally {
         if (btn) { btn.textContent = originalLabel; btn.disabled = false; }
     }
