@@ -45,7 +45,6 @@
       "CHANGELOG.md",
       "CLAUDE.md",
       "CODEBASE_MAP.md",
-      "vendor/fonts/**",
       "graphify-out/**"
     ],
     "rewrites": [

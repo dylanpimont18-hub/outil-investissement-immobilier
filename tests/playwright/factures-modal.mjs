@@ -15,7 +15,7 @@ import { chromium } from 'playwright';
 import { CLOUD_STORE_STUB_SOURCE } from './_harness.mjs';
 
 // Port configurable : l'exe Spark de bureau occupe souvent 8080 avec ses PROPRES fichiers (figés
-// au build) — pour tester le code courant, lancer server.py sur un autre port et passer
+// au build) — pour tester le code courant, lancer le serveur statique sur un autre port et passer
 // SPARK_TEST_BASE=http://127.0.0.1:8090.
 const BASE = process.env.SPARK_TEST_BASE || 'http://127.0.0.1:8090';
 

@@ -109,7 +109,7 @@ async function _migrer({ sanitizeAssetRecord, normaliserVariables }, modale) {
             if (!t.pdfFilename) continue;
             if (!(await cloudDocumentExists(assetId, t.pdfFilename))) {
                 const blob = await _lireFichierLocal(`/api/documents/${encodeURIComponent(assetId)}/${encodeURIComponent(t.pdfFilename)}`);
-                if (!blob) { avertissements.push(`${bien.nom || assetId} : ${t.pdfFilename} introuvable localement et absent du cloud`); continue; }
+                if (!blob) { ecarts.push(`document ${t.pdfFilename} du bien ${bien.nom || assetId} introuvable localement (/api/documents/${assetId}/${t.pdfFilename}) et absent du cloud`); continue; }
                 await cloudUploadDocumentAs(assetId, t.pdfFilename, blob);
             }
             attendu.documents.push({ assetId, filename: t.pdfFilename });

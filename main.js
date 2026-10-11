@@ -3012,6 +3012,10 @@ function _showAuthGate(show) {
 
 function _initCloud() {
     watchAuth(async user => {
+        // Déconnexion : vider d'abord l'écriture d'étude en attente (jusqu'à 1,5 s de frappe) tant que
+        // _authUser vaut encore l'ancien utilisateur, sinon _stopCloud l'abandonne. Au mieux : si le jeton
+        // est déjà révoqué, Firestore rejettera l'écriture (toast d'échec), on n'a rien de mieux à faire.
+        if (!user && _authUser) _flushAnalysisSave();
         _authUser = user;
         const loading = document.getElementById('app-cloud-loading');
         if (!user) {

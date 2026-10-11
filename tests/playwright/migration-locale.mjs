@@ -24,13 +24,16 @@ const LOCAL = {
 };
 const CLOUD_STUDY_A = { id: 'asset-A', variablesData: { 'nom-bien': 'A cloud (plus récente)', prix: 110000, loyer: 520 }, createdAt: 1000, updatedAt: 5000 };
 
+let documentIntrouvable = false; // la route des justificatifs répond 404 tant qu'elle est vraie
 let listeEnPanne = false; // bascule côté Node : la route de liste répond 500 tant qu'elle est vraie
 const routes = [
     ['**/api/portfolio/import/list', r => (listeEnPanne
         ? r.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' })
         : r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ files: ['portefeuille-2026-06-14.json'] }) }))],
     ['**/exports/portefeuille-2026-06-14.json', r => r.fulfill({ status: 200, contentType: 'application/json', body: EXPORT_RAW })],
-    ['**/api/documents/oa-test-1/facture-1.pdf', r => r.fulfill({ status: 200, contentType: 'application/pdf', body: PDF_BYTES })]
+    ['**/api/documents/oa-test-1/facture-1.pdf', r => (documentIntrouvable
+        ? r.fulfill({ status: 404, contentType: 'text/plain', body: 'absent' })
+        : r.fulfill({ status: 200, contentType: 'application/pdf', body: PDF_BYTES }))]
 ];
 
 // L'ancien stockage est pré-rempli AVANT la première navigation (initScripts du harnais) : une première
@@ -176,6 +179,34 @@ async function scenarioListePanne(browser) {
     }
 }
 
+async function scenarioDocumentManquant(browser) {
+    console.log('\nMigration — justificatif absent en local ET dans le cloud → écart bloquant, Réessayer');
+    documentIntrouvable = true;
+    const { page, context, errors } = await ouvrir(browser, { seedStore: {}, seedCloud: { documents: {}, meta: { profile: { income: 1 } } } });
+    try {
+        await step('écart « document … introuvable localement … absent du cloud », marqueur absent, Réessayer visible', async () => {
+            await page.waitForSelector('#migration-locale-modal [data-migration-retry]', { timeout: 15000 });
+            const b = await lireBilan(page);
+            assert.match(b.texte, /document facture-1\.pdf du bien Rue des Lilas introuvable localement \(\/api\/documents\/oa-test-1\/facture-1\.pdf\) et absent du cloud/);
+            assert.equal(b.retry, true);
+            assert.equal(await page.evaluate(() => window.__store.settings.migration), undefined);
+            assert.deepEqual(await page.evaluate(() => window.__stub.uploadsAs), []);
+        });
+        await step('route rétablie (PDF servi) + Réessayer → document téléversé, marqueur écrit', async () => {
+            documentIntrouvable = false;
+            await page.click('#migration-locale-modal [data-migration-retry]');
+            await page.waitForSelector('#migration-locale-modal [data-migration-close]', { timeout: 15000 });
+            assert.deepEqual(await page.evaluate(() => window.__stub.uploadsAs.map(u => u.filename)), ['facture-1.pdf']);
+            assert.ok(await page.evaluate(() => window.__store.settings.migration));
+        });
+        // Le 404 volontaire de la route apparaît comme erreur de chargement de ressource : seul bruit toléré.
+        await step('aucune erreur JS', () => assert.deepEqual(errors.filter(e => !/status of 404|^404: .*api\/documents/.test(e)), []));
+    } finally {
+        documentIntrouvable = false;
+        await context.close();
+    }
+}
+
 async function scenarioExceptionPendantRun(browser) {
     console.log('\nMigration — exception pendant le run (Storage en panne) → bilan avec Réessayer, modale jamais bloquée');
     const pageErrors = [];
@@ -206,6 +237,7 @@ try {
     await scenarioEcart(browser);
     await scenarioRelance(browser);
     await scenarioListePanne(browser);
+    await scenarioDocumentManquant(browser);
     await scenarioExceptionPendantRun(browser);
 } finally {
     await browser.close();

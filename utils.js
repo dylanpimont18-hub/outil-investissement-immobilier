@@ -180,7 +180,9 @@ export async function openPrintDocument(documentHTML, filename, triggerBtnId = n
         // @page ne s'applique pas depuis un Shadow DOM : hissé dans le document le temps de l'impression.
         const pageStyle = document.createElement('style');
         pageStyle.id = 'spark-print-page';
-        pageStyle.textContent = (css.match(/@page[^{]*\{[^}]*\}/g) || []).join('\n');
+        // Idem pour @font-face : Chromium ignore les polices déclarées dans un arbre fantôme, elles doivent être
+        // au niveau document (polices du PDF de décision / dossier bancaire, sinon repli sur les polices système).
+        pageStyle.textContent = (css.match(/(?:@page[^{]*|@font-face\s*)\{[^}]*\}/g) || []).join('\n');
         const host = document.createElement('div');
         host.id = PRINT_ROOT_ID;
         host.attachShadow({ mode: 'open' }).innerHTML =

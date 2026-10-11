@@ -68,12 +68,12 @@ export async function cloudGeocode() { return { lat: null, lng: null }; }
 `;
 
 // Stub de cloud-store.js. Seed via window.__seedStore = { studies, settings, archives, failUploadArchive,
-// corruptStudiesRead }. window.__store.writes journalise chaque écriture (règle « rien n'est écrit au chargement »).
+// failListArchives, corruptStudiesRead }. window.__store.writes journalise chaque écriture (règle « rien n'est écrit au chargement »).
 export const CLOUD_STORE_STUB_SOURCE = `
 const seed = window.__seedStore || {};
 const S = window.__store = {
     studies: seed.studies || {}, settings: seed.settings || {}, archives: seed.archives || {},
-    failUploadArchive: !!seed.failUploadArchive, corruptStudiesRead: !!seed.corruptStudiesRead,
+    failUploadArchive: !!seed.failUploadArchive, failListArchives: !!seed.failListArchives, corruptStudiesRead: !!seed.corruptStudiesRead,
     listeners: { studies: [], analysis: [], prefs: [] }, writes: [],
     dump() { return JSON.parse(JSON.stringify({ studies: this.studies, settings: this.settings, archives: this.archives })); }
 };
@@ -90,7 +90,7 @@ export function savePref(patch) { S.writes.push(['prefs', Object.keys(patch).joi
 export async function cloudGetSetting(name) { return S.settings[name] ? clone(S.settings[name]) : null; }
 export async function cloudSetSetting(name, data, { merge = true } = {}) { S.writes.push(['setting', name]); S.settings[name] = merge ? { ...(S.settings[name] || {}), ...clone(data) } : clone(data); if (S.listeners[name]) notify(name, S.settings[name]); }
 export async function cloudUploadArchive(name, blobOrText) { if (S.failUploadArchive) { const e = new Error('storage/retry-limit-exceeded'); e.code = 'storage/retry-limit-exceeded'; throw e; } S.writes.push(['archive', name]); S.archives[name] = typeof blobOrText === 'string' ? blobOrText : await blobOrText.text(); }
-export async function cloudListArchives() { return Object.keys(S.archives).sort().reverse().map(name => ({ name, size: S.archives[name].length, updated: '2026-10-11T10:00:00.000Z' })); }
+export async function cloudListArchives() { if (S.failListArchives) { const e = new Error('storage/unknown'); e.code = 'storage/unknown'; throw e; } return Object.keys(S.archives).sort().reverse().map(name => ({ name, size: S.archives[name].length, updated: '2026-10-11T10:00:00.000Z' })); }
 export async function cloudReadArchive(name) { if (!(name in S.archives)) { const e = new Error('storage/object-not-found'); e.code = 'storage/object-not-found'; throw e; } return JSON.parse(S.archives[name]); }
 export async function cloudArchiveMeta(name) { return name in S.archives ? { size: S.archives[name].length, updated: '2026-10-11T10:00:00.000Z' } : null; }
 `;
@@ -120,7 +120,9 @@ window.print = () => {
         text: (host?.shadowRoot?.querySelector('.print-root')?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 400),
         // Fond du conteneur .print-root (html/body/:root réécrits) : couleur ou dégradé issus des variables --paper.
         bg: (() => { const el = host?.shadowRoot?.querySelector('.print-root'); if (!el) return ''; const cs = getComputedStyle(el); return cs.backgroundColor !== 'rgba(0, 0, 0, 0)' ? cs.backgroundColor : (cs.backgroundImage !== 'none' ? cs.backgroundImage : ''); })(),
-        hasPageRule: !!document.getElementById('spark-print-page')
+        hasPageRule: !!document.getElementById('spark-print-page'),
+        // @font-face hissés au niveau document (Chromium les ignore dans un Shadow DOM).
+        fontFaces: ((document.getElementById('spark-print-page')?.textContent || '').match(/@font-face/g) || []).length
     });
     setTimeout(() => window.dispatchEvent(new Event('afterprint')), 0);
 };`;
@@ -146,7 +148,14 @@ export async function openPage(browser, path, { viewport, seedCloud = {}, seedSt
 }
 
 // Rechargement « persistant » : le stub vit en mémoire de page, on réinjecte son état comme seed.
+// Les accès storage faits avant un rechargement seraient perdus avec window.__storageHits : on les contrôle d'abord.
+export async function assertNoStorageHits(page, contexte = 'rechargement') {
+    const hits = await page.evaluate(() => (Array.isArray(window.__storageHits) ? window.__storageHits : null));
+    if (hits) assert.deepEqual(hits, [], 'accès storage avant ' + contexte);
+}
+
 export async function reloadWithStore(page, context) {
+    await assertNoStorageHits(page, 'rechargement');
     const dump = await page.evaluate(() => window.__store.dump());
     await context.addInitScript(`window.__seedStore = ${JSON.stringify(dump)};`);
     await page.reload({ waitUntil: 'load' });

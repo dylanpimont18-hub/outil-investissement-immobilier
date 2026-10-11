@@ -4,7 +4,7 @@
 // Lancer : SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/tout-web.mjs
 // TW_SCREENSHOTS=<dir> enregistre des captures PNG. Hors `npm test` volontairement (serveur + navigateur).
 import { chromium } from 'playwright';
-import { BASE, assert, openPage, reloadWithStore, waitAppStarted, step, getFailures } from './_harness.mjs';
+import { BASE, assert, openPage, reloadWithStore, assertNoStorageHits, waitAppStarted, step, getFailures } from './_harness.mjs';
 
 const SHOTS = process.env.TW_SCREENSHOTS || '';
 const shot = (page, name) => SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false }) : Promise.resolve();
@@ -29,6 +29,7 @@ async function scenarioImpression(browser, viewport, label) {
         assert.match(p.text, /Rapport d.analyse/);
         assert.ok(p.bg, 'fond non défini (variables :root perdues ?)');
         assert.equal(p.hasPageRule, true, '@page hissé dans le document');
+        assert.ok(p.fontFaces > 0, '@font-face hissés dans le document (sinon polices de repli à l\'impression)');
         await page.waitForFunction(() => !document.getElementById('spark-print-root'));
         assert.equal(await page.title(), 'Spark Investissement | Analyse locative', 'titre restauré après afterprint');
     });
@@ -48,7 +49,7 @@ async function scenarioImpression(browser, viewport, label) {
     await step('dossier bancaire (PC) et rapport d un bien → print avec le bon titre', async () => {
         if (viewport.width > 600) await page.click('.workspace-tab[data-target="collection-panel"]');
         // Sur iPhone le portefeuille vit dans owned.html (index.html n y affiche pas le détail d un bien).
-        else { await page.goto(BASE + '/owned.html', { waitUntil: 'load' }); await page.waitForSelector('#owned-quickfab:not([hidden])'); }
+        else { await assertNoStorageHits(page, 'navigation'); await page.goto(BASE + '/owned.html', { waitUntil: 'load' }); await page.waitForSelector('#owned-quickfab:not([hidden])'); }
         await page.locator('[data-open-asset="oa-test-1"], [data-asset-id="oa-test-1"]').first().click();
         await page.waitForSelector('#owned-detail-view:not([hidden])');
         const before = await page.evaluate(() => window.__prints.length);
@@ -156,6 +157,7 @@ async function scenarioPreferences(browser, viewport, label) {
     await step('prefs seedées appliquées sans flash : vue analyse complète, saisie guidée', async () => {
         // guidedMode (tuto) n'a pas de DOM dédié dans index.html (#guided-toggle absent) : on vérifie sparkMode.
         await context.addInitScript(`window.__seedStore = ${JSON.stringify({ settings: { prefs: { theme: 'light', analysisView: 'full', sparkMode: 'guided', screens: 1 } } })};`);
+        await assertNoStorageHits(page, 'rechargement');
         await page.reload({ waitUntil: 'load' });
         await waitAppStarted(page);
         assert.equal(await page.getAttribute('#analysis-panel', 'data-analysis-view'), 'full');
@@ -489,6 +491,26 @@ async function scenarioExportImport(browser) {
     });
     await step('aucune erreur JS', () => assert.deepEqual(k.errors, []));
     await k.context.close();
+
+    console.log('\nExport avec liste des archives en panne — PC');
+    const l = await openPage(browser, '/index.html', { viewport: PC, seedStore: { failListArchives: true, archives: { 'portefeuille-2020-01-01.json': '{}' } } });
+    await waitAppStarted(l.page);
+    await l.page.click('.workspace-tab[data-target="collection-panel"]');
+    await step('liste impossible : téléchargement oui, toast négatif, aucune archive écrite (pas d écrasement)', async () => {
+        const [download] = await Promise.all([l.page.waitForEvent('download'), l.page.click('#owned-export-btn')]);
+        assert.match(download.suggestedFilename(), /\.json$/);
+        await l.page.waitForSelector('#app-toast.app-toast--negative', { timeout: 4000 });
+        assert.deepEqual(await l.page.evaluate(() => window.__store.writes.filter(w => w[0] === 'archive')), []);
+    });
+    await step('import : message d erreur de chargement des archives', async () => {
+        await l.page.click('#owned-import-btn');
+        await l.page.waitForFunction(() => /Erreur lors du chargement des archives/.test(document.getElementById('owned-import-modal')?.textContent || ''), null, { timeout: 4000 });
+    });
+    await step('zéro accès localStorage/sessionStorage', async () => {
+        assert.deepEqual(await l.page.evaluate(() => window.__storageHits), []);
+    });
+    await step('aucune erreur JS', () => assert.deepEqual(l.errors, []));
+    await l.context.close();
 }
 
 const browser = await chromium.launch();

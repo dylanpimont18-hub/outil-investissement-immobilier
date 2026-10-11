@@ -17,6 +17,8 @@ function requireUid() {
     return user.uid;
 }
 
+// Les écrivains sont async : hors connexion ils REJETTENT (un .catch() d'appelant les rattrape) au lieu de lever en synchrone.
+
 // ─── studies : une étude du comparateur par document ─────────────────────────
 // Forme : { id, variablesData, createdAt, updatedAt } (sanitizeAssetRecord, main.js).
 
@@ -29,11 +31,11 @@ export function watchStudies(onChange, onError) {
     }, onError);
 }
 
-export function cloudSetStudy(id, record) {
+export async function cloudSetStudy(id, record) {
     return setDoc(doc(db, 'users', requireUid(), 'studies', id), record);
 }
 
-export function cloudDeleteStudy(id) {
+export async function cloudDeleteStudy(id) {
     return deleteDoc(doc(db, 'users', requireUid(), 'studies', id));
 }
 
@@ -54,7 +56,7 @@ export function watchAnalysis(onChange, onError) {
     }, onError);
 }
 
-export function cloudSaveAnalysis(patch) {
+export async function cloudSaveAnalysis(patch) {
     return setDoc(doc(db, 'users', requireUid(), 'settings', 'analysis'), patch, { merge: true });
 }
 
@@ -67,7 +69,7 @@ export function watchPrefs(onChange, onError) {
     }, onError);
 }
 
-export function savePref(patch) {
+export async function savePref(patch) {
     return setDoc(doc(db, 'users', requireUid(), 'settings', 'prefs'), patch, { merge: true });
 }
 
@@ -76,7 +78,7 @@ export async function cloudGetSetting(name) {
     return snap.exists() ? snap.data() : null;
 }
 
-export function cloudSetSetting(name, data, { merge = true } = {}) {
+export async function cloudSetSetting(name, data, { merge = true } = {}) {
     return setDoc(doc(db, 'users', requireUid(), 'settings', name), data, { merge });
 }
 
@@ -93,7 +95,7 @@ export async function cloudUploadArchive(filename, blobOrText) {
 }
 
 export async function cloudListArchives() {
-    const { items } = await listAll(ref(storage, `users/${requireUid()}/archives`)).catch(() => ({ items: [] }));
+    const { items } = await listAll(ref(storage, `users/${requireUid()}/archives`));
     const metas = await Promise.all(items.map(item => getMetadata(item).catch(() => null)));
     return items
         .map((item, i) => ({ name: item.name, size: metas[i]?.size ?? null, updated: metas[i]?.updated ?? null }))
