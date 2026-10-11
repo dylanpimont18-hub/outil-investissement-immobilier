@@ -202,6 +202,20 @@ Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le 
 
 ---
 
+## migration-regles.js
+Règles pures de la migration unique stockage local → cloud (aucun DOM, `getItem` injecté, testable sous Node).
+- `choisirEtude(locale, cloud)` — étude la plus récente gagne
+- `comparerProfond(a, b)` — égalité profonde, ordre des clés ignoré
+- `normaliserPourFirestore(obj)` — clone JSON, retire undefined/fonctions
+- `nomArchiveUnique(base, existants)` — nom portefeuille-AAAA-MM-JJ, suffixe -1, -2
+- `lireEtudesLocales(getItem)` — études du comparateur, entrées non-objet ignorées
+- `lireAnalyseLocale(getItem)` — variables de l'analyse + étude active
+- `lirePrefsLocales(getItem)` — préférences d'interface, clés absentes omises
+- `lireProfilLocal(getItem)` — profil household + indicateur configuré
+- `lireMetaLocale(getItem)` — régime, ordre, objectifs du portefeuille
+
+---
+
 ## owned.html
 Page statique autonome pour l'iPhone — sous-ensemble de `index.html` ne contenant que le panneau `#collection-panel` (portefeuille biens détenus), sans outil d'analyse. Ajoutable à l'écran d'accueil Safari (meta `apple-mobile-web-app-capable`) pour un rendu plein écran. Servie par Firebase Hosting (voir `firebase.json`, rewrite `/portefeuille` → `/owned.html`). `<div class="shell shell--owned">` (au lieu de `.shell` seul) : padding-top mobile réduit (topbar une seule ligne, contrairement au topbar multi-lignes d'`index.html`) et variante empilée de `.owned-travaux-row` — voir `styles.css`. Rendu minimal depuis le 2026-07-28 (`IS_MOBILE_PAGE`, voir `owned-portfolio.js`) pour le dashboard portefeuille/carte/bloc Verdict, qui restent PC uniquement. Depuis le 2026-10-01 : bouton **Diagnostic IA** + Historique dans la fiche d'un bien, et bouton flottant **✦** `#owned-chatfab` (à gauche du bouton facture) qui ouvre l'Assistant IA en feuille plein écran `#owned-chat-sheet` par-dessus la vue courante (même module `assistant-chat.js` qu'`index.html`, conversation conservée entre ouvertures, boutons flottants masqués tant que la feuille est ouverte via `body.owned-chat-open`). Depuis le 2026-08-04 en revanche, la fiche détail d'un bien (onglets Acquisition/Exploitation/Travaux/**Calcul**) est **identique à `index.html`** : l'onglet Calcul (indicateurs clés, détail CF, flux de trésorerie annuel, comparatif régimes) et les alertes au-dessus des onglets s'affichent désormais aussi sur mobile — voir `docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md`. Vue liste à onglets (`.owned-list-tabs`, "Vue d'ensemble"/"Profil" — pas "Impôt", resté PC uniquement, ajouté le 2026-08-04), pour permettre l'édition du profil du foyer (revenus historisés notamment) depuis le téléphone. Bouton flottant 📄 `#owned-quickfab` (2026-08-04, refondu le 2026-10-02 : plus de modale-formulaire `#owned-quickfab-modal`, ouvre la modale globale `openAjoutFacturesModal` — voir `initOwnedQuickFab` owned-portfolio.js) visible partout sur la page dès que le portefeuille cloud est chargé. `#app-reload-btn` (topbar, câblé dans `owned-entry.js`) — ajouté le 2026-07-29 : en mode standalone (ajouté à l'écran d'accueil), iOS reprend souvent la page depuis la mémoire au lieu de la recharger après un déploiement, ce bouton évite d'avoir à supprimer/réinstaller l'icône pour récupérer une mise à jour.
 
