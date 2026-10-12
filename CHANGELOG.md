@@ -7,6 +7,10 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [1.0.25] - 2026-10-12
+
+Corrections du bilan d'usage et d'ergonomie du 2026-10-12 (`docs/audits/2026-10-12-bilan-ergonomie.md`) : 12 bugs confirmés (B1-B12) et 3 erreurs factuelles.
+
 ### Fixed
 - B1 : les modales Import et Suppression d'un bien ont de nouveau un fond (variable `--surface-1` jamais définie) ; les 20 variables CSS utilisées sans définition sont remplacées par les tokens du thème (accent or via `--accent-color`) ; leurs couleurs de repli codées en dur disparaissent, d'où un rouge, un vert et un ambre légèrement adoucis en thème sombre.
 - B2 : une seule vacance locative. Les chiffres « au rythme actuel » (dashboard, liste, cartes de la fiche, alertes, régime optimal, rapport du bien, dossier bancaire) utilisent la vacance de l'onglet Exploitation, et non plus les 5 % du scénario « réaliste » dont l'éditeur est masqué. Le simulateur de scénarios est inchangé.
