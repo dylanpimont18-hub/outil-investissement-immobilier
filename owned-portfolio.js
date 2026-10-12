@@ -281,13 +281,15 @@ function natureFraisOptionsHtml(selected = 'a-classifier') {
 // La Cloud Function de lecture des factures ne connaît que 3 natures (deductible, non-deductible,
 // a-classifier) : les deux natures B9 sont déduites ici des mots du fournisseur et du résumé.
 const RE_TAXE_FONCIERE = /taxe\s+fonci|\btf\b/i;
-const RE_FRAIS_EMPRUNT = /courtage|garantie|frais\s+de\s+dossier|caution/i;
+// Volontairement étroit : « garantie » seul capterait la garantie loyers impayés (assurance du
+// bailleur, case 223), le dépôt de garantie ou la garantie décennale.
+const RE_FRAIS_EMPRUNT = /courtage|frais\s+de\s+(dossier|garantie)|cr[ée]dit\s+logement|garantie\s+(du\s+pr[êe]t|hypoth|bancaire)|caution\s+(bancaire|du\s+pr[êe]t)|hypoth[èe]que/i;
+const RE_PAS_FRAIS_EMPRUNT = /loyers?\s+impay|d[ée]p[ôo]t|d[ée]cennale/i;
 
 function suggererNatureFrais({ fournisseur = '', description = '', tagSuggestion = '' } = {}) {
     const texte = `${fournisseur || ''} ${description || ''}`;
     if (RE_TAXE_FONCIERE.test(texte)) return 'taxe-fonciere';
-    // « garantie décennale » est une assurance de chantier, pas un frais d'emprunt.
-    if (RE_FRAIS_EMPRUNT.test(texte) && !/d[ée]cennale/i.test(texte)) return 'frais-emprunt';
+    if (RE_FRAIS_EMPRUNT.test(texte) && !RE_PAS_FRAIS_EMPRUNT.test(texte)) return 'frais-emprunt';
     return NATURES_FRAIS_VALUES.includes(tagSuggestion) ? tagSuggestion : 'a-classifier';
 }
 

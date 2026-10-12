@@ -69,7 +69,9 @@ const opts = { profileData, regime: 'reel', tmi: 30 };
     const texte = buildRapportAnnuelTexte(data);
     assert.ok(!/--\d/.test(texte) && !/-\s?-/.test(texte.replace(/[═─]/g, '')), 'aucun double signe');
     assert.ok(!/-0 €/.test(texte), 'jamais « -0 € »');
-    assert.match(texte, /Impôt estimé.*\+[\d  ]+ € \(économie\)/, 'économie d\'impôt affichée en positif');
+    // Séparateur de milliers fr-FR = espace fine insécable (U+202F) : l'économie dépasse 1 000 € depuis
+    // la règle de priorité des intérêts (10 071 € imputables × TMI 11 % = 1 108 €).
+    assert.match(texte, /Impôt estimé.*\+[\d\s ]+ € \(économie\)/, 'économie d\'impôt affichée en positif');
     console.log('Test 3 OK — signes : pas de « -- », économie d\'impôt en +');
 }
 

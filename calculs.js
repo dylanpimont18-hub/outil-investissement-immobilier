@@ -147,19 +147,18 @@ function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationA
             return { tax: assiette * tauxGlobalImpot, newCarryForward: remainingCarry };
         }
 
-        const soldeHorsInterets = loyersEncaisses - chargesAnnuelles;
-        if (soldeHorsInterets < 0) {
-            // Déficit hors intérêts : imputable sur revenu global (plafond 10 700 €), excès reportable
-            // Déficit dû aux intérêts : non imputable sur revenu global, mais reportable sur revenus fonciers (art. 156 I CGI)
-            const deductibleNow = Math.min(10700, Math.abs(soldeHorsInterets));
-            const addedCarry = Math.max(0, Math.abs(soldeHorsInterets) - 10700) + interestYear;
-            return {
-                tax: -(deductibleNow * (tmi / 100)),
-                newCarryForward: carryForwardDeficit + addedCarry
-            };
-        }
-        // soldeHorsInterets >= 0 mais revenusNets <= 0 : déficit entièrement dû aux intérêts — reportable
-        return { tax: 0, newCarryForward: carryForwardDeficit + Math.abs(revenusNets) };
+        // Déficit : même répartition que la déclaration 2044 (repartirDeficitFoncier, art. 156 I 3°
+        // CGI). Case 250 = intérêts (interestYear, qui inclut chez les appelants du portefeuille les
+        // frais classés « frais d'emprunt ») + assurance emprunteur + frais bancaires de l'année 1 :
+        // imputée d'abord sur les loyers, seule sa part non couverte est reportée ; le reste du
+        // déficit s'impute sur le revenu global jusqu'à 10 700 €, l'excédent est reporté.
+        const fraisBancaires = year === 1 ? (inputs['frais-bancaires'] || 0) : 0;
+        const case250 = interestYear + insuranceYear + fraisBancaires;
+        const rep = repartirDeficitFoncier(loyersEncaisses, chargesAnnuelles + interestYear - case250, case250);
+        return {
+            tax: -(rep.imputableRevenuGlobal * (tmi / 100)),
+            newCarryForward: carryForwardDeficit + rep.reportable
+        };
     }
 
     if (inputs['regime'] === 'sci-is') {
@@ -1744,13 +1743,15 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
     const travauxAnnee = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === currentYear);
     const travauxDeductiblesAnnee = travauxAnnee.filter(t => estFraisDeductible(t.tag)).reduce((s, t) => s + t.montant, 0);
     const travauxCashAnnee = travauxAnnee.filter(t => !t.financeParCredit).reduce((s, t) => s + t.montant, 0);
+    // Frais d'emprunt (B9) : case 250 avec les intérêts pour la répartition d'un déficit.
+    const fraisEmpruntAnnee = travauxAnnee.filter(t => t.tag === 'frais-emprunt').reduce((s, t) => s + t.montant, 0);
 
     const regime = regimeOverride || scenario.regime || 'micro-foncier';
     const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
     const yearsElapsed = currentYear - anneeAchat;
     const impotsAnnee = computeAnnualTaxEstimate(
-        prixAcquisition, loyersEncaisses, chargesExploitationAnnuelles + travauxDeductiblesAnnee,
-        { travaux: 0, 'frais-bancaires': 0, regime }, tmi, interetsAnnee, assuranceMensCredit * 12, yearsElapsed + 1
+        prixAcquisition, loyersEncaisses, chargesExploitationAnnuelles + travauxDeductiblesAnnee - fraisEmpruntAnnee,
+        { travaux: 0, 'frais-bancaires': 0, regime }, tmi, interetsAnnee + fraisEmpruntAnnee, assuranceMensCredit * 12, yearsElapsed + 1
     ).tax;
 
     const investissementTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
@@ -1821,12 +1822,14 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
     // doit plus être retranché une seconde fois du cash-flow comme une dépense ponctuelle.
     const travauxDeductiblesParAnnee = {}; // assiette fiscale : tous les déductibles, financés ou non
     const travauxCashParAnnee = {}; // trésorerie : seulement les frais payés cash (déductibles ou non)
+    const fraisEmpruntParAnnee = {}; // frais d'emprunt (B9) : case 250, avec les intérêts
     for (const t of (post.travaux || [])) {
         if (!t.date || !t.montant) continue;
         const y = new Date(t.date).getFullYear();
         if (estFraisDeductible(t.tag)) { // travaux, taxe foncière et frais d'emprunt (B9)
             travauxDeductiblesParAnnee[y] = (travauxDeductiblesParAnnee[y] || 0) + t.montant;
         }
+        if (t.tag === 'frais-emprunt') fraisEmpruntParAnnee[y] = (fraisEmpruntParAnnee[y] || 0) + t.montant;
         if (!t.financeParCredit) {
             travauxCashParAnnee[y] = (travauxCashParAnnee[y] || 0) + t.montant;
         }
@@ -1917,9 +1920,12 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
         // Au-delà de la dernière entrée connue, resolveRevenuFoyer retombe naturellement sur le
         // dernier revenu connu (comportement de projection identique à avant pour les années futures).
         const tmiAnnee = resolveTmiFoyer(profileData, y);
+        // Les frais d'emprunt passent avec les intérêts (case 250) : même répartition du déficit
+        // que la 2044 ; la somme imposable est inchangée.
+        const fraisEmpruntAnnee = fraisEmpruntParAnnee[y] || 0;
         const taxResult = computeAnnualTaxEstimate(
-            prixAcquisition, loyersAnnuels, chargesAnneeTax, inputs, tmiAnnee,
-            interetsAnnee, assuranceAnnee, yearsElapsed + 1, carryForwardDeficit
+            prixAcquisition, loyersAnnuels, chargesAnneeTax - fraisEmpruntAnnee, inputs, tmiAnnee,
+            interetsAnnee + fraisEmpruntAnnee, assuranceAnnee, yearsElapsed + 1, carryForwardDeficit
         );
         carryForwardDeficit = taxResult.newCarryForward;
         const impotsAnnee = taxResult.tax;
@@ -2481,7 +2487,9 @@ function lignes2044Bien(asset, annee, profileData) {
     const nbLocaux = (asset.lots && asset.lots.length) ? asset.lots.length : 1;
     const case211 = cr.recettesBrutes;
     const case221 = cr.gestionLocative;
-    const case222 = FORFAIT_FRAIS_GESTION_PAR_LOCAL * nbLocaux;
+    // Forfait de 20 €/local seulement pour un bien qui a produit des loyers dans l'année : sans
+    // recette, pas de frais de gestion à forfaitiser (évite un déficit fictif de 20 €).
+    const case222 = case211 > 0 ? FORFAIT_FRAIS_GESTION_PAR_LOCAL * nbLocaux : 0;
     const case223 = cr.assurancePNO;
     const case224 = cr.travauxDed;
     // Taxe foncière des charges + frais classés « taxe foncière » dans l'onglet Travaux (B9).

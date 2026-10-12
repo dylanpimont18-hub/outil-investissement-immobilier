@@ -143,9 +143,9 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
 }
 
 // --- Test 5 : expiration à 10 ans d'un déficit jamais absorbé ---
-// Bien sans loyer acheté il y a 10 ans avec 20 000 € de travaux : déficit 20 020 € hors intérêts
-// (forfait 20 € compris), 10 700 € imputés sur les salaires cette année-là, 9 320 € reportables
-// jamais consommés (aucun loyer). L'année de départ (10 ans plus tard) ils expirent : stock 0, perte signalée.
+// Bien sans loyer acheté il y a 10 ans avec 20 000 € de travaux : déficit 20 000 € (pas de forfait
+// de 20 € sans loyer), 10 700 € imputés sur les salaires cette année-là, 9 300 € reportables jamais
+// consommés (aucun loyer). L'année de départ (10 ans plus tard) ils expirent : stock 0, perte signalée.
 {
     const anneeTravaux = currentYear - 10;
     const asset = makeAsset({
@@ -153,9 +153,9 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
         travaux: [{ date: `${anneeTravaux}-06-01`, montant: 20000, tag: 'deductible' }]
     });
     const proj = computeProjectionImpotsFoyer([asset], profileData, { anneeDebut: currentYear, horizon: 2 });
-    assert.equal(proj.stockInitial, 9320, 'au 1er janvier de l\'année de départ, le report existe encore');
+    assert.equal(proj.stockInitial, 9300, 'au 1er janvier de l\'année de départ, le report existe encore');
     const y0 = row(proj, currentYear);
-    assert.equal(y0.deficitPerdu, 9320, 'il expire cette année-là sans avoir servi');
+    assert.equal(y0.deficitPerdu, 9300, 'il expire cette année-là sans avoir servi');
     assert.equal(y0.stockFin, 0);
     assert.equal(y0.reportUtilise, 0);
     console.log('Test 5 OK — un report non consommé expire au bout de 10 ans et la perte est exposée');

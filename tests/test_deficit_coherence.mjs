@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
     computeDeclaration2044, computeDeficitFoncierHistorique, computeProjectionImpotsFoyer,
-    computeProjectionRegimesFoyer,
+    computeProjectionRegimesFoyer, computeOwnedAssetTimeline, resolveTmiFoyer,
 } from '../calculs.js';
 
 // B8 (bilan 2026-10-12) : pour un même bien et une même année, la déclaration 2044, le tableau
@@ -139,6 +139,61 @@ function attendre(r, { total, imputable, reportable }, nom) {
     const chargesReelles = l.chargesHorsInterets - l.case222 + l.case250;
     assert.equal(y0.sciIs.resultat, Math.round(l.case211 - chargesReelles - y0.sciIs.amortissement));
     console.log('Test 5 OK — SCI-IS : charges réelles + intérêts, sans le forfait 20 € des revenus fonciers');
+}
+
+// --- Test 6 : la timeline (rapport annuel, projections de CF, dossier bancaire) suit la même règle ---
+// Cas du reviewer : loyers 6 000, taxe foncière 10 000, case 250 = 2 720, TMI 30 %. 2044 : intérêts
+// couverts par les loyers → déficit 10 000 + 20 + 2 720 − 6 000 = 6 740 entièrement imputable.
+// L'ancien computeAnnualTaxEstimate n'imputait que 10 000 − 6 000 = 4 000 et reportait 2 720 en silence.
+// La timeline ne déduit pas le forfait de 20 € de la 2044 (comme le compte de résultat) : 6 720.
+{
+    const annee = currentYear - 1;
+    const profil = { income: 60000, adults: 1, children: 0 };
+    const tmi = resolveTmiFoyer(profil, annee);
+    assert.equal(tmi, 30, 'précondition : TMI 30 %');
+    const avecFrais = {
+        id: 'tf', nom: 'TF', dateAchat: `${currentYear - 2}-01`,
+        acquisition: { prix: 100000, fraisAgence: 0, fraisNotaire: 0, loyerInitial: 500, credit: { montant: 0, duree: 0, taux: 0, assurance: 0 } },
+        postAchat: {
+            taxeFonciere: 10000, chargesCopro: 0, gestionLocative: 0, assurancePNO: 0, vacance: 0,
+            travaux: [{ id: 'e', date: `${annee}-03-01`, montant: 2720, tag: 'frais-emprunt', description: 'Frais de garantie' }],
+            chargesAnnuelles: [], notes: [],
+        },
+    };
+    const decl = computeDeclaration2044([avecFrais], annee, profil);
+    assert.deepEqual([decl.deficit.imputableRevenuGlobal, decl.deficit.reportFoncier10ans], [6740, 0]);
+    const row = computeOwnedAssetTimeline(avecFrais, profil, 'reel').years.find(r => r.year === annee);
+    const imputeTimeline = -row.impotsAnnee / (tmi / 100);
+    assert.ok(Math.abs(imputeTimeline - (decl.deficit.imputableRevenuGlobal - 20)) < 0.01,
+        `timeline : ${imputeTimeline} € imputés, 2044 : ${decl.deficit.imputableRevenuGlobal} € (forfait 20 € compris)`);
+
+    // Même chose avec de vrais intérêts d'emprunt (crédit) : intérêts + assurance < loyers.
+    const avecCredit = JSON.parse(JSON.stringify(avecFrais));
+    avecCredit.postAchat.travaux = [];
+    avecCredit.acquisition.credit = { montant: 90000, duree: 20, taux: 3, assurance: 0.3, assuranceMode: 'initial' };
+    const d2 = computeDeclaration2044([avecCredit], annee, profil);
+    const r2 = computeOwnedAssetTimeline(avecCredit, profil, 'reel').years.find(r => r.year === annee);
+    assert.equal(d2.deficit.reportFoncier10ans, 0, 'case 250 couverte par les loyers : rien de reporté');
+    assert.ok(Math.abs(-r2.impotsAnnee / (tmi / 100) - (d2.deficit.imputableRevenuGlobal - 20)) <= 2,
+        `timeline ${-r2.impotsAnnee / (tmi / 100)} vs 2044 ${d2.deficit.imputableRevenuGlobal} − 20 (arrondis par case)`);
+    console.log(`Test 6 OK — timeline : ${Math.round(imputeTimeline)} € imputés = 2044 ${decl.deficit.imputableRevenuGlobal} € − forfait 20 €`);
+}
+
+// --- Test 7 : pas de forfait de 20 € sans loyer (pas de déficit fictif) ---
+{
+    const annee = currentYear - 1;
+    const vide = {
+        id: 'vide', nom: 'Vide', dateAchat: `${currentYear - 2}-01`,
+        acquisition: { prix: 100000, fraisAgence: 0, fraisNotaire: 0, loyerInitial: 0, credit: { montant: 0, duree: 0, taux: 0, assurance: 0 } },
+        postAchat: { taxeFonciere: 0, chargesCopro: 0, gestionLocative: 0, assurancePNO: 0, vacance: 0, travaux: [], chargesAnnuelles: [], notes: [] },
+    };
+    const decl = computeDeclaration2044([vide], annee, profileData);
+    assert.equal(decl.lignes[0].case211, 0);
+    assert.equal(decl.lignes[0].case222, 0, 'aucun loyer : pas de forfait de frais de gestion');
+    assert.equal(decl.case420, 0);
+    assert.equal(decl.deficit, null);
+    assert.equal(computeDeficitFoncierHistorique(vide, profileData).lignes.length, 0, 'aucun report fictif de 20 €');
+    console.log('Test 7 OK — pas de forfait de 20 € pour un bien sans loyer');
 }
 
 console.log('\nTous les tests de cohérence du déficit foncier passent.');

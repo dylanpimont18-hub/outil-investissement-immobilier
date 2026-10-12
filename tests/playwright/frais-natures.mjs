@@ -19,10 +19,14 @@ const REPONSES_IA = [
     { fournisseur: 'SIP Bourges', description: 'Taxe foncière 2026', montant: 334, date: '2026-10-01', tagSuggestion: 'deductible', confiance: 'haute' },
     { fournisseur: 'Crédit Logement', description: 'Frais de garantie du prêt', montant: 750, date: '2026-08-20', tagSuggestion: 'deductible', confiance: 'haute' },
     { fournisseur: 'Cafpi', description: 'Frais de courtage', montant: 1250, date: '2026-08-20', tagSuggestion: 'non-deductible', confiance: 'haute' },
+    // Faux amis de « garantie » / « caution » : ne doivent PAS devenir des frais d'emprunt.
+    { fournisseur: 'Hiscox', description: 'Garantie loyers impayés', montant: 210, date: '2026-09-01', tagSuggestion: 'deductible', confiance: 'haute' },
+    { fournisseur: 'Agence Martin', description: 'Dépôt de garantie restitué', montant: 650, date: '2026-09-02', tagSuggestion: 'non-deductible', confiance: 'haute' },
+    { fournisseur: 'Banque Populaire', description: 'Frais de garantie Crédit Logement', montant: 480, date: '2026-08-21', tagSuggestion: 'deductible', confiance: 'haute' },
 ];
 const STUB = OWNED_CLOUD_STUB_SOURCE.replace(
     /export async function cloudExtraireFraisFacture\(\) \{[^\n]*\n/,
-    `export async function cloudExtraireFraisFacture() { const i = S.extractCount = (S.extractCount || 0) + 1; await new Promise(r => setTimeout(r, 30 * i)); return ${JSON.stringify(REPONSES_IA)}[(i - 1) % 3]; }\n`
+    `export async function cloudExtraireFraisFacture() { const i = S.extractCount = (S.extractCount || 0) + 1; await new Promise(r => setTimeout(r, 30 * i)); return ${JSON.stringify(REPONSES_IA)}[(i - 1) % ${REPONSES_IA.length}]; }\n`
 );
 assert.notEqual(STUB, OWNED_CLOUD_STUB_SOURCE, 'stub d\'extraction remplacé');
 
@@ -49,14 +53,17 @@ async function scenarioPC(browser) {
         await page.click('#owned-quickfab');
         await page.waitForSelector('#owned-factures-modal:not([hidden])');
         const options = await page.$$eval('[data-fm-row] [data-fm-field="tag"] option, #owned-factures-modal select[data-fm-field="tag"] option', o => o.map(x => x.value));
-        await page.setInputFiles('[data-fm-file-input]', [fichier('avis-tf.png'), fichier('garantie.png'), fichier('courtage.png')]);
-        await page.waitForFunction(() => document.querySelectorAll('[data-fm-row]').length === 3
+        await page.setInputFiles('[data-fm-file-input]', [fichier('avis-tf.png'), fichier('garantie.png'), fichier('courtage.png'), fichier('gli.png'), fichier('depot.png'), fichier('garantie-cl.png')]);
+        await page.waitForFunction(() => document.querySelectorAll('[data-fm-row]').length === 6
             && [...document.querySelectorAll('[data-fm-status]')].every(s => !/Lecture…/.test(s.textContent)), null, { timeout: 15000 });
         const rows = await readRows(page);
         const parFournisseur = Object.fromEntries(rows.map(r => [r.fournisseur, r]));
         assert.equal(parFournisseur['SIP Bourges'].tag, 'taxe-fonciere');
         assert.equal(parFournisseur['Crédit Logement'].tag, 'frais-emprunt');
         assert.equal(parFournisseur['Cafpi'].tag, 'frais-emprunt', 'courtage : frais d\'emprunt même si l\'IA dit non déductible');
+        assert.equal(parFournisseur['Hiscox'].tag, 'deductible', 'garantie loyers impayés : assurance du bailleur, pas un frais d\'emprunt');
+        assert.equal(parFournisseur['Agence Martin'].tag, 'non-deductible', 'dépôt de garantie : pas un frais d\'emprunt');
+        assert.equal(parFournisseur['Banque Populaire'].tag, 'frais-emprunt', 'frais de garantie Crédit Logement');
         assert.equal(options.length, 0, 'aucune ligne avant le dépôt');
     });
 
