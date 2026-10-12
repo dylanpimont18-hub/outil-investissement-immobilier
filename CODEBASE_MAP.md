@@ -467,6 +467,12 @@ Lance en séquence tous les `tests/*.mjs` (Node), s'arrête au premier échec (e
 Serveur statique de développement sans dépendance, lié à 127.0.0.1 (jamais 8080). Sert l'app et les tests Playwright avec MIME explicites et les mêmes réécritures que `firebase.json` (`/` → `index.html`, `/portefeuille` → `owned.html`). Point d'entrée de `npm run serve`.
 - `[port]` (argument 1) — port d'écoute, défaut 8090 (ou variable `PORT`)
 
+## scripts/controle-migration.mjs
+Contrôle post-migration en lecture seule : relit `settings/migration`, compte les études, liste les archives dans un vrai Chromium (SDK Firebase réel), sortie JSON.
+- `SPARK_TEST_BASE` — serveur statique local (défaut `http://127.0.0.1:8090`) ; sans autre option, fenêtre visible où l'utilisateur se connecte lui-même
+- `SPARK_USER_DATA_DIR` / `SPARK_ORIGIN` — profil Chromium persistant (session déjà ouverte, headless) ; l'origine (défaut `http://127.0.0.1:8080`) est interceptée et servie depuis `SPARK_TEST_BASE`
+- `SPARK_LOGIN_TIMEOUT_MS` — délai d'attente de la connexion en ms (défaut 300000)
+
 ---
 
 ## verify.bat
