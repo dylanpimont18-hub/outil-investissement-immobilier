@@ -1742,7 +1742,7 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
     // contrairement à l'onglet Exploitation qui les affiche (écart constaté : plusieurs centaines
     // d'euros/mois dès qu'un frais est enregistré dans l'année en cours).
     const travauxAnnee = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === currentYear);
-    const travauxDeductiblesAnnee = travauxAnnee.filter(t => t.tag === 'deductible').reduce((s, t) => s + t.montant, 0);
+    const travauxDeductiblesAnnee = travauxAnnee.filter(t => estFraisDeductible(t.tag)).reduce((s, t) => s + t.montant, 0);
     const travauxCashAnnee = travauxAnnee.filter(t => !t.financeParCredit).reduce((s, t) => s + t.montant, 0);
 
     const regime = regimeOverride || scenario.regime || 'micro-foncier';
@@ -1824,7 +1824,7 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
     for (const t of (post.travaux || [])) {
         if (!t.date || !t.montant) continue;
         const y = new Date(t.date).getFullYear();
-        if (t.tag === 'deductible') {
+        if (estFraisDeductible(t.tag)) { // travaux, taxe foncière et frais d'emprunt (B9)
             travauxDeductiblesParAnnee[y] = (travauxDeductiblesParAnnee[y] || 0) + t.montant;
         }
         if (!t.financeParCredit) {
@@ -1940,11 +1940,10 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
         recettesCum += recettesAnnee;
         depensesCum += depensesAnnee;
 
-        // loyersAnnuels/chargesAnneeTax/interetsAnnee/assuranceAnnee : composantes brutes de
-        // l'année, réutilisées telles quelles par computeDeficitFoncierHistorique pour rejouer le
-        // calcul du régime réel sans dupliquer la résolution loyer/charges/travaux ci-dessus.
-        // travauxDeductiblesAnnee (déjà inclus dans chargesAnneeTax) est exposé à part pour que
-        // computeProjectionImpotsFoyer puisse isoler l'effet des travaux sur l'impôt.
+        // loyersAnnuels/chargesAnneeTax/interetsAnnee/assuranceAnnee/travauxDeductiblesAnnee
+        // (frais déductibles, déjà inclus dans chargesAnneeTax) : composantes brutes de l'année.
+        // Le déficit foncier (fiche, Impôts à venir) ne les lit plus depuis B8 : il passe par
+        // lignes2044Bien, la même source que la déclaration 2044.
         // chargesAnneeBase/debtService/impotsAnnee/travauxCashAnnee : composantes de trésorerie de
         // cfAnnuel (loyersAnnuels - debtService - chargesAnneeBase - impotsAnnee - travauxCashAnnee),
         // exposées pour le bloc « Trésorerie » du rapport annuel (rapport-annuel.js).
@@ -2336,6 +2335,17 @@ export function computeRevenusLocatifsBruts(assets) {
 // computeTresorerieReelle a été retiré avec le suivi mensuel des loyers encaissés
 // (spec 2026-07-27) : il ne se calculait qu'à partir de postAchat.loyersReels.
 
+// Natures d'un frais de l'onglet Travaux (champ `tag`) déductibles au foncier réel (bilan
+// 2026-10-12, B9) : 'deductible' = travaux et autres charges (case 224 de la 2044) ;
+// 'taxe-fonciere' = taxe foncière payée à part (case 227, avec celle des charges) ; 'frais-emprunt'
+// = garantie, courtage, frais de dossier (case 250, avec les intérêts : seulement reportables en
+// cas de déficit). Les trois réduisent l'assiette imposable ; le flux de trésorerie les traite tous
+// comme des frais payés (financés par le crédit ou non). Ignorées en micro-foncier (abattement 30 %).
+export const NATURES_FRAIS_DEDUCTIBLES = ['deductible', 'taxe-fonciere', 'frais-emprunt'];
+export function estFraisDeductible(tag) {
+    return NATURES_FRAIS_DEDUCTIBLES.includes(tag);
+}
+
 export function computeCompteResultat(asset, annee, profileData, regime) {
     // TMI de l'année déclarée (pas le revenu actuel) : un revenu qui évolue ne doit pas retaxer
     // une année fiscale déjà passée avec le revenu d'aujourd'hui.
@@ -2375,15 +2385,20 @@ export function computeCompteResultat(asset, annee, profileData, regime) {
     const chargesCopro = (ce ? (ce.chargesCopro ?? post.chargesCopro ?? 0) : (post.chargesCopro ?? 0)) * moisPossedeAnnee;
     const gestionLocative = recettesBrutes * (gestionPct / 100);
     const travauxAnneeAll = (post.travaux || []).filter(t => t.date && t.montant && new Date(t.date).getFullYear() === annee);
-    const travauxDed = travauxAnneeAll.filter(t => t.tag === 'deductible').reduce((s, t) => s + (t.montant || 0), 0);
-    // Part de travauxDed financée par le crédit principal (déjà remboursée via capitalRembourse
-    // ci-dessous, pas une dépense cash cette année) et frais non déductibles payés cash (aucun
-    // effet fiscal, mais un vrai décaissement absent des cases ci-dessus) — utilisés uniquement
-    // pour corriger cfReel plus bas, chargesDeductibles reste inchangé pour le calcul de l'impôt.
-    const travauxDedFinance = travauxAnneeAll.filter(t => t.tag === 'deductible' && t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
-    const travauxCashNonDed = travauxAnneeAll.filter(t => t.tag !== 'deductible' && !t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
+    const sommeNature = tag => travauxAnneeAll.filter(t => t.tag === tag).reduce((s, t) => s + (t.montant || 0), 0);
+    // Case 224 : seulement la nature 'deductible'. Les frais classés « taxe foncière » (case 227)
+    // et « frais d'emprunt » (case 250) sont déductibles aussi, mais pas comme des travaux (B9).
+    const travauxDed = sommeNature('deductible');
+    const taxeFonciereFrais = sommeNature('taxe-fonciere');
+    const fraisEmprunt = sommeNature('frais-emprunt');
+    // Part des frais déductibles financée par le crédit principal (déjà remboursée via
+    // capitalRembourse ci-dessous, pas une dépense cash cette année) et frais non déductibles payés
+    // cash (aucun effet fiscal, mais un vrai décaissement absent des cases ci-dessus) — utilisés
+    // uniquement pour corriger cfReel plus bas, chargesDeductibles reste inchangé pour l'impôt.
+    const travauxDedFinance = travauxAnneeAll.filter(t => estFraisDeductible(t.tag) && t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
+    const travauxCashNonDed = travauxAnneeAll.filter(t => !estFraisDeductible(t.tag) && !t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
 
-    const chargesDeductibles = interetsAnnee + assuranceAnnee + taxeFonciere + chargesCopro + assurancePNO + gestionLocative + travauxDed;
+    const chargesDeductibles = interetsAnnee + assuranceAnnee + fraisEmprunt + taxeFonciere + taxeFonciereFrais + chargesCopro + assurancePNO + gestionLocative + travauxDed;
     const tauxGlobal = (tmi / 100) + CSG_CRDS_RATE;
 
     let resultatFoncier, baseImposable, impots;
@@ -2398,7 +2413,9 @@ export function computeCompteResultat(asset, annee, profileData, regime) {
             impots = resultatFoncier * tauxGlobal;
         } else {
             baseImposable = 0;
-            const defHorsInt = Math.min(0, recettesBrutes - (chargesDeductibles - interetsAnnee));
+            // Seule la part hors case 250 (intérêts + assurance emprunteur + frais d'emprunt)
+            // s'impute sur le revenu global (art. 156 I 3° CGI, même règle que la 2044).
+            const defHorsInt = Math.min(0, recettesBrutes - (chargesDeductibles - interetsAnnee - assuranceAnnee - fraisEmprunt));
             impots = -(Math.min(10700, Math.abs(defHorsInt)) * (tmi / 100));
         }
     } else {
@@ -2424,6 +2441,8 @@ export function computeCompteResultat(asset, annee, profileData, regime) {
         interetsAnnee: Math.round(interetsAnnee),
         assuranceAnnee: Math.round(assuranceAnnee),
         taxeFonciere: Math.round(taxeFonciere),
+        taxeFonciereFrais: Math.round(taxeFonciereFrais),
+        fraisEmprunt: Math.round(fraisEmprunt),
         chargesCopro: Math.round(chargesCopro),
         assurancePNO: Math.round(assurancePNO),
         gestionLocative: Math.round(gestionLocative),
@@ -2447,26 +2466,50 @@ export function computeCompteResultat(asset, annee, profileData, regime) {
 const PLAFOND_DEFICIT_REVENU_GLOBAL = 10700;
 const FORFAIT_FRAIS_GESTION_PAR_LOCAL = 20;
 
+// SOURCE UNIQUE du résultat foncier réel d'un bien pour une année civile (bilan 2026-10-12, B8) :
+// les cases de la 2044, lues sur computeCompteResultat. Réutilisée telle quelle par la déclaration
+// 2044, le tableau des déficits reportables de la fiche (computeDeficitFoncierHistorique) et la
+// projection « Impôts à venir » (creerContexteFoyer) — avant, les deux derniers relisaient
+// computeOwnedAssetTimeline avec deux écarts : assurance emprunteur rangée hors intérêts (donc
+// imputée sur les salaires) et forfait de 20 € (case 222) oublié.
+function lignes2044Bien(asset, annee, profileData) {
+    const cr = computeCompteResultat(asset, annee, profileData, 'reel');
+    const nbLocaux = (asset.lots && asset.lots.length) ? asset.lots.length : 1;
+    const case211 = cr.recettesBrutes;
+    const case221 = cr.gestionLocative;
+    const case222 = FORFAIT_FRAIS_GESTION_PAR_LOCAL * nbLocaux;
+    const case223 = cr.assurancePNO;
+    const case224 = cr.travauxDed;
+    // Taxe foncière des charges + frais classés « taxe foncière » dans l'onglet Travaux (B9).
+    const case227 = cr.taxeFonciere + cr.taxeFonciereFrais;
+    const case229 = cr.chargesCopro;
+    // Intérêts + assurance emprunteur + frais d'emprunt (garantie, courtage, dossier) : notice
+    // 2044, ligne 250.
+    const case250 = cr.interetsAnnee + cr.assuranceAnnee + cr.fraisEmprunt;
+    const chargesHorsInterets = case221 + case222 + case223 + case224 + case227 + case229;
+    const case263 = case211 - chargesHorsInterets - case250;
+    return {
+        assetId: asset.id, nom: asset.nom,
+        case211, case221, case222, case223, case224, case227, case229, case250,
+        chargesHorsInterets, case263: Math.round(case263),
+    };
+}
+
+// Répartition d'un déficit foncier (art. 156 I 3° CGI) : la part hors intérêts (case 250 exclue)
+// s'impute sur le revenu global dans la limite de 10 700 € ; l'excédent et la part due aux
+// intérêts d'emprunt ne s'imputent que sur les revenus fonciers des 10 années suivantes.
+// Retourne des zéros si le résultat n'est pas déficitaire.
+function repartirDeficitFoncier(resultatAvantInterets, interets) {
+    const resultat = resultatAvantInterets - interets;
+    if (!(resultat < 0)) return { deficit: 0, imputableRevenuGlobal: 0, reportable: 0 };
+    const imputableRevenuGlobal = resultatAvantInterets < 0
+        ? Math.min(PLAFOND_DEFICIT_REVENU_GLOBAL, -resultatAvantInterets)
+        : 0;
+    return { deficit: -resultat, imputableRevenuGlobal, reportable: -resultat - imputableRevenuGlobal };
+}
+
 export function computeDeclaration2044(assets, annee, profileData) {
-    const lignes = assets.map(asset => {
-        const cr = computeCompteResultat(asset, annee, profileData, 'reel');
-        const nbLocaux = (asset.lots && asset.lots.length) ? asset.lots.length : 1;
-        const case211 = cr.recettesBrutes;
-        const case221 = cr.gestionLocative;
-        const case222 = FORFAIT_FRAIS_GESTION_PAR_LOCAL * nbLocaux;
-        const case223 = cr.assurancePNO;
-        const case224 = cr.travauxDed;
-        const case227 = cr.taxeFonciere;
-        const case229 = cr.chargesCopro;
-        const case250 = cr.interetsAnnee + cr.assuranceAnnee;
-        const chargesHorsInterets = case221 + case222 + case223 + case224 + case227 + case229;
-        const case263 = case211 - chargesHorsInterets - case250;
-        return {
-            assetId: asset.id, nom: asset.nom,
-            case211, case221, case222, case223, case224, case227, case229, case250,
-            chargesHorsInterets, case263: Math.round(case263),
-        };
-    });
+    const lignes = assets.map(asset => lignes2044Bien(asset, annee, profileData));
 
     const totalRecettes = lignes.reduce((s, l) => s + l.case211, 0);
     const totalInterets = lignes.reduce((s, l) => s + l.case250, 0);
@@ -2475,20 +2518,11 @@ export function computeDeclaration2044(assets, annee, profileData) {
 
     let deficit = null;
     if (case420 < 0) {
-        const resultatAvantInterets = totalRecettes - totalChargesHorsInterets;
-        let imputableRevenuGlobal = 0, reportHorsInterets = 0, reportInterets = 0;
-        if (resultatAvantInterets < 0) {
-            const deficitHorsInterets = -resultatAvantInterets;
-            imputableRevenuGlobal = Math.min(PLAFOND_DEFICIT_REVENU_GLOBAL, deficitHorsInterets);
-            reportHorsInterets = Math.max(0, deficitHorsInterets - PLAFOND_DEFICIT_REVENU_GLOBAL);
-            reportInterets = totalInterets;
-        } else {
-            reportInterets = Math.max(0, totalInterets - resultatAvantInterets);
-        }
+        const rep = repartirDeficitFoncier(totalRecettes - totalChargesHorsInterets, totalInterets);
         deficit = {
             totalDeficit: Math.round(-case420),
-            imputableRevenuGlobal: Math.round(imputableRevenuGlobal),
-            reportFoncier10ans: Math.round(reportHorsInterets + reportInterets),
+            imputableRevenuGlobal: Math.round(rep.imputableRevenuGlobal),
+            reportFoncier10ans: Math.round(rep.reportable),
             plafond: PLAFOND_DEFICIT_REVENU_GLOBAL,
         };
     }
@@ -2547,22 +2581,22 @@ export function computeRevenuFoncierPortefeuille(assets, annee, profileData, reg
 // n'est pas repris. Affiché comme avertissement dans l'UI (owned-portfolio.js).
 export function computeDeficitFoncierHistorique(asset, profileData) {
     const currentYear = new Date().getFullYear();
-    const { years } = computeOwnedAssetTimeline(asset, profileData, 'reel');
-    const PLAFOND = PLAFOND_DEFICIT_REVENU_GLOBAL;
+    const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
     const EXPIRATION_ANS = 10;
 
     const lignes = []; // { annee, montantInitial, utilise } — ordre chronologique = ordre FIFO
-    for (const row of years) {
-        if (row.year > currentYear) break; // pas d'années projetées, seulement le vécu
-
-        const chargesAnnuelles = row.chargesAnneeTax + row.assuranceAnnee;
-        const revenusNets = row.loyersAnnuels - chargesAnnuelles - row.interetsAnnee;
+    // Pas d'années projetées, seulement le vécu. Résultat de chaque année = celui de la 2044
+    // (lignes2044Bien), réparti par la même règle (repartirDeficitFoncier) : le reportable créé ici
+    // est celui de la case 439 de la déclaration.
+    for (let y = anneeAchat; y <= currentYear; y++) {
+        const l = lignes2044Bien(asset, y, profileData);
+        const revenusNets = l.case263;
 
         if (revenusNets > 0) {
             let restantAAbsorber = revenusNets;
             for (const ligne of lignes) {
                 if (restantAAbsorber <= 0) break;
-                if (row.year - ligne.annee >= EXPIRATION_ANS) continue; // déficit déjà expiré cette année-là
+                if (y - ligne.annee >= EXPIRATION_ANS) continue; // déficit déjà expiré cette année-là
                 const disponible = ligne.montantInitial - ligne.utilise;
                 if (disponible <= 0) continue;
                 const absorbe = Math.min(disponible, restantAAbsorber);
@@ -2570,11 +2604,8 @@ export function computeDeficitFoncierHistorique(asset, profileData) {
                 restantAAbsorber -= absorbe;
             }
         } else {
-            const soldeHorsInterets = row.loyersAnnuels - chargesAnnuelles;
-            const montantCree = soldeHorsInterets < 0
-                ? Math.max(0, Math.abs(soldeHorsInterets) - PLAFOND) + row.interetsAnnee
-                : Math.abs(revenusNets);
-            if (montantCree > 0) lignes.push({ annee: row.year, montantInitial: montantCree, utilise: 0 });
+            const { reportable } = repartirDeficitFoncier(l.case211 - l.chargesHorsInterets, l.case250);
+            if (reportable > 0) lignes.push({ annee: y, montantInitial: reportable, utilise: 0 });
         }
     }
 
@@ -2761,26 +2792,30 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
 const DEFICIT_FONCIER_EXPIRATION_ANS = 10;
 
 
-const composantesVides = () => ({ loyers: 0, chargesHorsTravaux: 0, interets: 0, travaux: 0 });
+const composantesVides = () => ({ loyers: 0, chargesHorsTravaux: 0, forfaitGestion: 0, interets: 0, travaux: 0 });
 
 // Composantes brutes agrégées par année civile, tous biens confondus (régime réel simulé). Factorisé
 // pour que computeOptimisationTravaux / computeProjectionRegimesFoyer rejouent plusieurs scénarios
-// sur les mêmes données sans recalculer la timeline (coûteuse, mois par mois) de chaque bien.
+// sur les mêmes données sans recalculer chaque bien. Chaque année d'un bien vient de
+// lignes2044Bien (source unique, B8) : loyers = case 211, charges hors travaux = cases 221 à 229
+// sauf 224 (forfait 20 € de la case 222 compris, isolé dans forfaitGestion pour la SCI à l'IS),
+// travaux = case 224, intérêts = case 250 (intérêts + assurance emprunteur + frais d'emprunt).
 function creerContexteFoyer(assets, profileData, anneeDebut, anneeFin) {
     const list = (assets || []).filter(a => a && (a.acquisition?.prix || 0) > 0);
     const parAnnee = new Map();
     let anneeMin = anneeDebut;
     for (const asset of list) {
-        const { years, anneeAchat } = computeOwnedAssetTimeline(asset, profileData, 'reel', { horizonYear: anneeFin });
+        const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
         anneeMin = Math.min(anneeMin, anneeAchat);
-        for (const r of years) {
-            if (r.year > anneeFin) break;
-            const agg = parAnnee.get(r.year) || composantesVides();
-            agg.loyers += r.loyersAnnuels;
-            agg.chargesHorsTravaux += (r.chargesAnneeTax - r.travauxDeductiblesAnnee) + r.assuranceAnnee;
-            agg.interets += r.interetsAnnee;
-            agg.travaux += r.travauxDeductiblesAnnee;
-            parAnnee.set(r.year, agg);
+        for (let y = anneeAchat; y <= anneeFin; y++) {
+            const l = lignes2044Bien(asset, y, profileData);
+            const agg = parAnnee.get(y) || composantesVides();
+            agg.loyers += l.case211;
+            agg.chargesHorsTravaux += l.chargesHorsInterets - l.case224;
+            agg.forfaitGestion += l.case222;
+            agg.interets += l.case250;
+            agg.travaux += l.case224;
+            parAnnee.set(y, agg);
         }
     }
     const foyer = { adults: profileData?.adults || 2, children: profileData?.children || 0 };
@@ -2841,11 +2876,9 @@ function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map
             }
             revenuFoncierImposable = reste;
         } else if (resultatFoncier < 0) {
-            const deficit = -resultatFoncier;
-            if (resultatAvantInterets < 0) {
-                imputeRevenuGlobal = Math.min(PLAFOND_DEFICIT_REVENU_GLOBAL, -resultatAvantInterets);
-            }
-            deficitReporte = deficit - imputeRevenuGlobal;
+            const rep = repartirDeficitFoncier(resultatAvantInterets, agg.interets);
+            imputeRevenuGlobal = rep.imputableRevenuGlobal;
+            deficitReporte = rep.reportable;
             if (deficitReporte > 0) stock.push({ annee: y, restant: deficitReporte });
         }
         const stockFin = stock
@@ -2858,7 +2891,7 @@ function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map
 
         rows.push({
             annee: y,
-            loyers: agg.loyers, chargesHorsTravaux: agg.chargesHorsTravaux, interets: agg.interets,
+            loyers: agg.loyers, chargesHorsTravaux: agg.chargesHorsTravaux, forfaitGestion: agg.forfaitGestion, interets: agg.interets,
             travaux, travauxSaisis, travauxSimules,
             resultatFoncier, imputeRevenuGlobal, reportUtilise, deficitReporte, deficitPerdu, stockFin,
             revenuFoncierImposable, revenuSalarial,
@@ -3046,7 +3079,9 @@ export function computeProjectionRegimesFoyer(assets, profileData, options = {})
     let reportIS = 0;
     for (const r of reelRows) {
         const amortissement = amortParAnnee.get(r.annee) || 0;
-        const resultat = r.loyers - r.chargesHorsTravaux - r.interets - r.travaux - amortissement;
+        // Charges réelles seulement : le forfait de 20 €/local (case 222) est propre aux revenus
+        // fonciers, une SCI à l'IS déduit ses frais réels.
+        const resultat = r.loyers - (r.chargesHorsTravaux - r.forfaitGestion) - r.interets - r.travaux - amortissement;
         let is = 0;
         if (resultat > 0) {
             const absorbe = Math.min(reportIS, resultat);

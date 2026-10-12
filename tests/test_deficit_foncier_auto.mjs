@@ -26,8 +26,9 @@ function makeAsset({ dateAchat, loyer = 500, travaux = [] } = {}) {
 
 // --- Test 1 : gros travaux l'année d'achat créent un déficit reportable, absorbé l'année suivante ---
 {
-    // loyer 500×12=6000€, travaux déductibles 20000€ → déficit hors intérêts 14000€, dont 10700€
-    // imputables immédiatement sur le revenu global (pas dans ce tableau) et 3300€ reportables.
+    // loyer 500×12=6000€, travaux déductibles 20000€, forfait de gestion 20€ (case 222 de la 2044,
+    // même source que la déclaration depuis B8) → déficit hors intérêts 14020€, dont 10700€
+    // imputables immédiatement sur le revenu global (pas dans ce tableau) et 3320€ reportables.
     const asset = makeAsset({
         dateAchat: '2020-01',
         loyer: 500,
@@ -36,20 +37,21 @@ function makeAsset({ dateAchat, loyer = 500, travaux = [] } = {}) {
     const { lignes, stockTotal } = computeDeficitFoncierHistorique(asset, profileData);
     const ligne2020 = lignes.find(l => l.annee === 2020);
     assert.ok(ligne2020, 'une ligne 2020 doit exister');
-    assert.equal(ligne2020.montantInitial, 3300, `déficit reportable créé doit être 3300€ (14000-10700), trouvé ${ligne2020.montantInitial}`);
+    assert.equal(ligne2020.montantInitial, 3320, `déficit reportable créé doit être 3320€ (14020-10700), trouvé ${ligne2020.montantInitial}`);
     // Les années suivantes (6000€/an, pas de nouvelle charge) absorbent rapidement ce reliquat.
-    assert.equal(ligne2020.utilise, 3300, `le déficit doit être entièrement absorbé par les années bénéficiaires suivantes, utilisé=${ligne2020.utilise}`);
+    assert.equal(ligne2020.utilise, 3320, `le déficit doit être entièrement absorbé par les années bénéficiaires suivantes, utilisé=${ligne2020.utilise}`);
     assert.equal(ligne2020.restant, 0, 'plus rien ne doit rester à imputer');
     assert.equal(stockTotal, 0, 'le stock total reportable doit être nul, tout est déjà absorbé');
-    console.log('Test 1 OK — déficit créé en 2020 (3300€), entièrement absorbé, stock restant =', stockTotal, '€');
+    console.log('Test 1 OK — déficit créé en 2020 (3320€), entièrement absorbé, stock restant =', stockTotal, '€');
 }
 
 // --- Test 2 : deux déficits d'années différentes, consommation FIFO (le plus ancien en premier) ---
 {
-    // Deux années de travaux consécutives créent chacune 3300€ reportable, suivies d'une seule
+    // Deux années de travaux consécutives créent chacune 3320€ reportable, suivies d'une seule
     // année bénéficiaire (relatif à aujourd'hui, pour rester déterministe quelle que soit la date
-    // d'exécution du test) : 6000€ de loyer ne suffisent à éponger que le plus ancien déficit en
-    // entier (3300€) + une partie du second (2700€ sur 3300€, il doit rester 600€).
+    // d'exécution du test) : 5980€ de résultat (6000€ de loyer − forfait 20€) ne suffisent à éponger
+    // que le plus ancien déficit en entier (3320€) + une partie du second (2660€ sur 3320€, il doit
+    // rester 660€).
     const currentYear = new Date().getFullYear();
     const anneeA = currentYear - 2;
     const anneeB = currentYear - 1;
@@ -66,7 +68,7 @@ function makeAsset({ dateAchat, loyer = 500, travaux = [] } = {}) {
     const lB = lignes.find(l => l.annee === anneeB);
     assert.ok(lA && lB, `les deux lignes ${anneeA} et ${anneeB} doivent exister`);
     assert.equal(lA.restant, 0, `le déficit ${anneeA} (le plus ancien) doit être intégralement consommé en premier`);
-    assert.equal(lB.restant, 600, `le déficit ${anneeB} (le plus récent) ne doit recevoir que le reliquat après ${anneeA}, trouvé ${lB.restant}`);
+    assert.equal(lB.restant, 660, `le déficit ${anneeB} (le plus récent) ne doit recevoir que le reliquat après ${anneeA}, trouvé ${lB.restant}`);
     console.log(`Test 2 OK — FIFO respecté : ${anneeA} (le plus ancien) épuisé avant ${anneeB}, restant ${anneeB} =`, lB.restant, '€');
 }
 
