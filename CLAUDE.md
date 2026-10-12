@@ -10,39 +10,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A desktop application for real estate investment analysis (French language). The app is packaged as a Windows `.exe` via PyInstaller. It uses a local Flask server + PyWebView window — no external server, no internet required for the UI.
+Application web d'analyse d'investissement immobilier (en français), hébergée sur Firebase Hosting (https://spark-investissement.web.app, PC et iPhone). Toutes les données vivent dans Firestore/Storage sous `users/{uid}/`, connexion obligatoire (Firebase Auth). Il n'y a plus d'exe de bureau, de serveur Flask ni de chaîne de build (supprimés le 2026-10-12, passage au tout-web) : les fichiers de la racine sont servis tels quels.
 
-To run in development: `python app.py` (starts Flask + opens a native window).
-To build the distributable: run `build.bat`.
+Pour lancer en développement : `npm run serve` puis ouvrir http://127.0.0.1:8090/index.html (ou `/owned.html` pour la page iPhone).
+Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les Cloud Functions de `functions/`).
 
 ## Architecture
 
-| File | Role |
+| Fichier | Rôle |
 |---|---|
-| `app.py` | Desktop entry point: starts Flask thread, opens PyWebView window, manages system tray icon |
-| `server.py` | Flask server: serves static files + portfolio AI diagnostic, PDF export, portfolio import/export |
-| `spark.spec` | PyInstaller build config |
-| `build.bat` | Build script → `dist/Spark/Spark.exe` |
-| `index.html` | Complete HTML structure with all panels and forms pre-declared |
-| `main.js` | App shell: state management, DOM wiring, cross-window sync, Analyse tab + comparator. Delegates the owned-portfolio module to `owned-portfolio.js` |
-| `owned-portfolio.js` | Owned-assets portfolio module (CRUD, list/detail rendering, dashboard, modals). Receives `state`/`nodes` from `main.js` by reference via `initOwnedPortfolio(deps)`, called before the first `render()` |
-| `utils.js` | Shared formatting/escaping/toast helpers, no `state`/`nodes` dependency — imported by `main.js` and `owned-portfolio.js` |
-| `calculs.js` | Pure financial engine — all calculations, zero DOM access |
-| `pdf.js` | Generates the printable decision PDF as a standalone HTML string |
-| `rapport-bien.js` | Pure module: one owned-asset report model rendered as printable HTML (preview/PDF, SVG curves) and as Markdown (AI export) |
-| `styles.css` | Full design system (light/dark themes, all component classes) |
-| `ui.js` | Supplementary UI helpers (charts, table markup) |
+| `index.html` | Structure HTML complète, tous les panneaux et formulaires pré-déclarés |
+| `owned.html` / `owned-entry.js` | Page iPhone : sous-ensemble portefeuille, bootstrap dédié (`IS_MOBILE_PAGE`) |
+| `main.js` | Shell de l'app : état, câblage DOM, synchro entre fenêtres, onglet Analyse + comparateur, démarrage cloud (`_initCloud`). Délègue le portefeuille à `owned-portfolio.js` |
+| `owned-portfolio.js` | Module portefeuille biens détenus (CRUD, liste/détail, dashboard, modales). Reçoit `state`/`nodes` de `main.js` par référence via `initOwnedPortfolio(deps)`, appelée avant le premier `render()` |
+| `owned-cloud.js` | Wrapper Firebase du portefeuille (Auth, `ownedAssets`, `portfolioMeta`, justificatifs Storage, appels aux Cloud Functions IA) |
+| `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
+| `firebase-init.js` | Initialisation du SDK Firebase (auth, db, storage, functions) |
+| `archives-regles.js` | Règle pure de nommage des archives d'export (`nomArchiveUnique`) |
+| `utils.js` | Helpers partagés formatage/échappement/toast, sans dépendance à `state`/`nodes` |
+| `calculs.js` | Moteur financier pur — tous les calculs, zéro accès DOM |
+| `pdf.js` | Génère le PDF de décision comme une page HTML autonome (imprimée depuis la page) |
+| `rapport-bien.js` | Module pur : rapport d'un bien détenu en HTML imprimable (courbes SVG) et en Markdown (export IA) |
+| `assistant-chat.js` | Onglet Assistant IA (chat), via la Cloud Function `chatPortefeuille` |
+| `styles.css` | Design system complet (thèmes clair/sombre, toutes les classes de composants) |
+| `ui.js` | Helpers d'interface (graphiques, tableaux) |
+| `functions/` | Cloud Functions (IA, extraction de factures, changement de mot de passe), secret `MAMMOUTH_API_KEY` |
+| `scripts/` | Outillage Node de dev : `run-tests.mjs` (`npm test` / `npm run verify`), `serve-static.mjs` (`npm run serve`, port 8090), `controle-migration.mjs` (relecture post-migration, lecture seule) |
+| `firebase.json` | Config Hosting (fichiers exclus du déploiement, en-têtes `Cache-Control`), Firestore, Storage, Functions |
 
 ### Data flow — analysis tool
 
 1. User edits the form in `index.html`
-2. `main.js` reads form values → calls `sanitizeVariablesData()` → writes to `state.variablesData` and `localStorage`
+2. `main.js` reads form values → calls `sanitizeVariablesData()` → writes to `state.variablesData`, then saves to Firestore (`settings/analysis`) with a 1.5 s debounce
 3. On any change, `main.js` calls `computeAnalysisViewModel()` from `calculs.js`, which returns a fully computed view model
 4. `main.js` renders that view model into the pre-declared DOM containers via `innerHTML` injection
 
 ### Two-window mode
 
-The app supports a split-screen mode where the analysis panel opens in a second popup window (`?panel=analysis`). State synchronizes between windows via `BroadcastChannel` (with `localStorage` as fallback). The `IS_ANALYSIS_WINDOW` flag in `main.js` controls which panels are shown.
+The app supports a split-screen mode where the analysis panel opens in a second popup window (`?panel=analysis`). State synchronizes between windows via `BroadcastChannel`. The `IS_ANALYSIS_WINDOW` flag in `main.js` controls which panels are shown.
 
 ### Key state shape (`state` object in `main.js`, passed by reference into `owned-portfolio.js`)
 
@@ -77,14 +82,14 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
 
 ## Testing
 
-- **`calculs.js` unit tests** (`tests/*.mjs`) — pure functions, run individually with `node tests/xxx.mjs`, or all at once with `npm test`. No test framework, just `node:assert/strict` + plain `console.log`. Always run the full suite before claiming a `calculs.js` change is correct.
-- **Browser testing (Playwright)** — installed 2026-08-04 (`npm install`, browser via `npx playwright install chromium`) specifically to verify UI changes *actually work* in a real browser instead of relying on static code reading, which previously missed a real bug (a pre-existing `if (IS_MOBILE_PAGE) { ...; return; }` early-exit silently skipped newly-added code placed after it in the same function — invisible from reading the diff alone, only surfaced by actually clicking in a rendered page).
-  - The owned-portfolio pages require Firebase Auth + a real Firestore account, which a test run doesn't have. **Don't try to log in for real** — instead intercept the `owned-cloud.js` module request (`page.route('**/owned-cloud.js', route => route.fulfill({...}))`) and serve a stub that calls back `watchAuth`/`watchOwnedAssets`/`watchPortfolioMeta` synchronously (or via `setTimeout`) with fake data shaped like the real thing. This drives the real `owned-portfolio.js`/`calculs.js` app code in a real Chromium page without ever touching the real Firebase project or the user's real data.
-  - Start `python server.py` first (serves on `http://127.0.0.1:8080`), point Playwright at `http://127.0.0.1:8080/index.html` or `/owned.html`, and use `page.on('pageerror', ...)`/`page.on('console', ...)` to catch anything a human wouldn't necessarily report precisely.
-  - **Port trap (found 2026-10-02):** if the desktop app `Spark-x.y.z.exe` is running, *it* owns port 8080 and serves its own files, frozen at build time — a test pointed there silently exercises old code and every new selector times out with no JS error. Check `curl -s http://127.0.0.1:8080/index.html | grep <new-id>` first; if stale, start the Flask app on another port (`python -c "import server; server.app.run(host='127.0.0.1', port=8090)"`) and never kill the user's exe.
-  - Reference test: `tests/playwright/factures-modal.mjs` (PC + iPhone viewport, full `owned-cloud.js` stub, generated PNG/PDF fixtures). Run with `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/factures-modal.mjs`; `FM_SCREENSHOTS=<dir>` also saves PNG captures to eyeball the real render. It is deliberately outside `npm test` (needs a server + Chromium).
-  - Use `newPage({ viewport: { width: 393, height: 852 } })` to approximate an iPhone when testing `owned.html`/mobile-only behavior (`IS_MOBILE_PAGE`).
-  - This is local dev tooling only — `node_modules/` is gitignored and already excluded from `firebase deploy` (see `firebase.json`); never rely on it being present in production.
+- **Tests unitaires** (`tests/*.mjs`) — fonctions pures (`calculs.js`, `rapport-bien.js`, `archives-regles.js`), sans framework : `node:assert/strict` + `console.log`. Un fichier : `node tests/xxx.mjs` ; tous : `npm test` ; syntaxe des modules racine + tous les tests : `npm run verify`. Les deux passent par `scripts/run-tests.mjs` et fonctionnent sous Windows (cmd.exe, PowerShell, Git Bash). Toujours lancer la suite complète avant d'affirmer qu'une modification de `calculs.js` est correcte.
+- **Tests navigateur (Playwright)** — installé le 2026-08-04 (`npm install`, navigateur via `npx playwright install chromium`) pour vérifier qu'un changement d'interface marche *réellement* dans un vrai navigateur : la relecture statique a déjà laissé passer un vrai bug (un `if (IS_MOBILE_PAGE) { ...; return; }` préexistant sautait silencieusement le code ajouté après lui, invisible dans le diff, révélé seulement en cliquant dans la page rendue).
+  - Serveur : `npm run serve` (serveur statique `scripts/serve-static.mjs`, http://127.0.0.1:8090, mêmes réécritures que Hosting). **Jamais sur le port 8080.** Vérifier qu'il sert bien le code courant (`curl -s http://127.0.0.1:8090/VERSION`).
+  - L'app exige Firebase Auth + un vrai compte Firestore, qu'un test n'a pas. **Ne jamais se connecter pour de vrai** : `tests/playwright/_harness.mjs` intercepte les DEUX modules cloud, `owned-cloud.js` (`OWNED_CLOUD_STUB_SOURCE`) et `cloud-store.js` (`CLOUD_STORE_STUB_SOURCE`), et sert des stubs alimentés par `seedCloud`/`seedStore`. Un stub doit exporter exactement les fonctions du module réel (un export manquant casse l'import sans erreur claire). Le code réel de l'app (`main.js`, `owned-portfolio.js`, `calculs.js`…) tourne ainsi dans un vrai Chromium sans toucher au vrai projet Firebase ni aux vraies données.
+  - Le harnais fournit `openPage(browser, path, { viewport, seedCloud, seedStore, spyStorage, routes, initScripts })`, `waitAppStarted`, `step`, `getFailures` ; l'espion `localStorage`/`sessionStorage` vérifie qu'aucun accès n'a lieu ; `page.on('pageerror'/'console')` collecte les erreurs JS.
+  - Tests de référence (hors `npm test`, ils demandent le serveur + Chromium) : `tests/playwright/tout-web.mjs`, `factures-modal.mjs`, `change-password.mjs`, `projection-impots.mjs`. Lancer avec `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/<fichier>.mjs` ; `FM_SCREENSHOTS=<dir>` / `PI_SCREENSHOTS=<dir>` enregistrent des captures PNG pour contrôler le rendu.
+  - Viewport `{ width: 393, height: 852 }` pour approcher un iPhone (`owned.html`, comportement `IS_MOBILE_PAGE`).
+  - Outillage de dev local uniquement — `node_modules/`, `tests/` et `scripts/` sont gitignorés ou exclus du déploiement (`firebase.json`) ; ne jamais compter dessus en production.
 
 ## Important conventions
 
@@ -93,4 +98,5 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
 - New form fields require entries in: `VARIABLE_DEFAULTS`, `VARIABLE_KEYS` (derived), `sanitizeVariablesData()`, and the corresponding `<fieldset>` in `index.html`.
 - `calculs.js` exports are pure functions — keep them free of DOM, `localStorage`, and `window` references.
 - `computeAnalysisViewModel` is called on every keystroke; keep it synchronous and fast.
-- `config.py` (root, gitignored) must never be committed. The AI features (portfolio diagnostic, Assistant chat, invoice extraction) no longer use it: they run as Firebase Cloud Functions (`functions/index.js`) reading the `MAMMOUTH_API_KEY` Firebase secret, so they work identically in the desktop app, on the hosted web version and on iPhone.
+- Aucun `localStorage`/`sessionStorage` : tout passe par `cloud-store.js`/`owned-cloud.js`, écriture uniquement sur action utilisateur (rien n'est écrit dans le cloud au chargement).
+- Les fonctions IA (diagnostic du portefeuille, Assistant chat, extraction de factures et de dossiers) tournent en Cloud Functions Firebase (`functions/index.js`) qui lisent le secret `MAMMOUTH_API_KEY` ; aucune configuration locale n'est nécessaire (l'ancien `config.py` n'est plus lu par aucun code et ne doit jamais être versionné).

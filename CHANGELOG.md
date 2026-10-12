@@ -36,7 +36,7 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 - `owned.html` (page iPhone) simplifié : ne garde plus que la saisie/édition d'un bien (onglets Acquisition/Exploitation/Travaux) et le détail du calcul du CF net-net après impôt. Dashboard dirigeant, carte, graphiques, comparaison des 3 régimes fiscaux, tuiles de verdict An1/3/5/10, simulateur de scénarios, tableau des flux annuels et diagnostic IA n'y sont plus rendus — `index.html` (PC) n'est pas concerné (nouveau flag `IS_MOBILE_PAGE`). La vue liste devient une liste de cartes tap-to-open au lieu du tableau desktop.
 
 ### Removed
-- Annoncé pour la Phase 6 du passage au tout-web : exe de bureau, serveur Flask et chaîne de build (`build.bat`, `spark.spec`).
+- Passage au tout-web, nettoyage : exe de bureau et serveur Flask (`app.py`, `server.py`), chaîne de build (`build.bat`, `spark.spec`, `requirements.txt`, `verify.bat` remplacé par `npm run verify`, `Lancer.bat`, `update-and-run.bat`, `spark.ico`, `config.example.py`), `tests/test_server_api.py`, module de migration `migration-locale.js` et son test Playwright (migration effectuée le 2026-10-12) avec les lectures cloud qui ne servaient qu'à elle (`cloudGetMeta`, `cloudGetAllAssets`, `cloudDocumentExists`, `cloudUploadDocumentAs`). `migration-regles.js` devient `archives-regles.js` (seul `nomArchiveUnique`, utilisé par l'export du portefeuille, est conservé).
 - Suivi mensuel des loyers encaissés (tableau mois/statut encaissé-impayé-vacant-partiel, `postAchat.loyersReels`), remplacé par l'historique de loyer. Sont retirés avec lui la carte "Trésorerie réelle" de la synthèse d'un bien (`computeTresorerieReelle`, qui n'en dérivait) et l'alerte "Loyer du mois non saisi", devenue sans objet.
 
 ### Fixed

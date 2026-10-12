@@ -4,27 +4,6 @@
 
 ---
 
-## app.py
-Entrée desktop : lance Flask en thread (`threaded=True`) + fenêtre PyWebView + icône barre système.
-- `__version__` — lu depuis le fichier `VERSION` à la racine (source de vérité unique, aussi lue par `server.py`/`spark.spec`/`build.bat`), `'dev'` si absent.
-Pas de fonctions exportées — exécuté directement par `python app.py` ou PyInstaller.
-
----
-
-## server.py
-Serveur Flask : sert les fichiers statiques + export PDF + import/export portefeuille. Écoute sur `127.0.0.1` uniquement (audit sécurité 2026-09-22 : corrigé de `0.0.0.0`, qui exposait toutes les routes `/api/*` — zéro authentification — à tout le réseau local si `server.py` était lancé seul hors du packaging desktop normal, où `app.py` forçait déjà `127.0.0.1`). Module Scanner (scraper multi-sites + son API) supprimé entièrement le 2026-09-22, jugé non fonctionnel — voir `scanner.js`/`scraper/` retirés du dépôt. Diagnostic IA et Assistant chat retirés le 2026-10-01 (déplacés en Cloud Functions `diagnosticPortefeuille`/`chatPortefeuille`, voir `functions/index.js`) pour fonctionner aussi sur la version web.
-- `ALLOWED_ORIGINS` / `_add_cors(response)` — CORS restreint à `http://127.0.0.1:8080`/`http://localhost:8080` (corrigé le 2026-09-22 : `Access-Control-Allow-Origin: *` permettait à n'importe quel onglet de navigateur ouvert en parallèle de piloter l'app via `fetch()` — DNS rebinding/localhost CSRF)
-- `api_version` GET `/api/version` — lit le fichier `VERSION` à la racine, retourne `{version}` (`'dev'` si absent)
-- `api_generate_pdf` POST `/api/generate-pdf` — génère un PDF via Edge headless, sauvegarde dans ~/Downloads, retourne `{saved_to, filename}` ; `filename` passé par `secure_filename()` depuis le 2026-09-22 (audit sécurité : le nom venait du JSON POST tel quel, un `../../` aurait permis d'écrire hors de ~/Downloads)
-- `api_save_markdown` POST `/api/save-markdown` (2026-10-01) — export `.md` du rapport d'un bien depuis le logiciel PC (PyWebView n'autorise pas les téléchargements) : écrit `{content}` dans `~/Downloads` via `secure_filename`, extension `.md` forcée, jamais d'écrasement (`nom (1).md`), 2 Mo max
-- `pdf_preview` GET `/api/pdf-preview/<token>` — sert le HTML une seule fois pour la capture Edge headless
-- `api_documents_get` GET `/api/documents/<bien_id>/<filename>` — lecture seule, sert le PDF (`Content-Type: application/pdf`) ; ne sert plus qu'à la migration ponctuelle vers Firebase Storage (upload/suppression/aperçu PDF se font désormais côté client, voir `owned-cloud.js`) — routes `upload`/`delete`/`delete_all` retirées le 2026-07-27 (sync cloud portefeuille)
-- `api_portfolio_export` POST — sauvegarde `{portfolio}` dans `exports/portefeuille-YYYY-MM-DD.json`
-- `api_portfolio_import_list` GET — liste les `.json` dans `exports/`
-- `api_portfolio_import` POST — lit `{filename}` dans `exports/` et retourne le JSON
-
----
-
 ## assistant-chat.js
 Module Assistant IA — chat libre dédié à l'investissement immobilier locatif (2026-09-23, ex. rédiger un email à un banquier). Onglet dédié `#assistant-panel` dans `index.html` (pas sur `owned.html`/mobile). Contexte = résumé de **tout** le portefeuille (`buildPortfolioSummaryForAI`, owned-portfolio.js — inclut `id` par bien depuis l'ajout function-calling), envoyé à chaque message pour rester à jour même si l'utilisateur modifie ses biens entre deux messages. Historique de conversation volontairement **non persisté** (perdu à la fermeture/rechargement) — choix produit assumé, contrairement à l'historique des diagnostics IA (`diagnosticHistory`, owned-portfolio.js) qui est sauvegardé par bien.
 - `initAssistantChat(deps)` — point d'entrée, appelée depuis `main.js` (pas si `IS_ANALYSIS_WINDOW`) et depuis `owned-entry.js` (onglet Assistant mobile, 2026-10-01) avec `{state, nodes}` ; affiche l'état vide dès l'init. Entrée envoie (sauf `isComposing`, saisie prédictive iOS)
@@ -32,7 +11,7 @@ Module Assistant IA — chat libre dédié à l'investissement immobilier locati
 - `_autoGrow(input)` — la zone de saisie grandit avec le texte jusqu'à `INPUT_MAX_HEIGHT` (160px), utile au doigt sur téléphone
 - `_renderMessages()` — rendu des bulles (`.assistant-chat__bubble--user`/`--assistant`) + cartes d'action (`_renderActionCard`) dans `#assistant-chat-messages`, scroll auto en bas ; met aussi à jour l'état `disabled` de `#assistant-chat-new` selon `_messages.length`
 - `#assistant-chat-new` (bouton "Nouvelle conversation", 2026-09-23) — vide `_messages` (pas de confirmation supplémentaire, cohérent avec l'historique déjà non persisté), désactivé tant que la conversation est vide. **Corrige au passage** un bug pré-existant : `#assistant-panel > .panel-head` héritait de la règle générique `.workspace-panel > .panel-head { display:none; }` (qui masque le head par défaut, réactivé seulement pour `#variables-panel`/`#analysis-panel`/`#collection-panel` avec un style "hero" dédié) — le titre "Assistant IA" et son sous-titre étaient donc invisibles depuis la création de l'onglet, jamais remarqué en testant car le reste du panneau (messages/formulaire) s'affichait normalement. Nouvel override sobre `#assistant-panel > .panel-head` (flex, titre à gauche/bouton à droite) plutôt que de réutiliser le style hero de `#collection-panel`.
-- **Actions confirmables (2026-09-23)** : le serveur (`server.py`, `ASSISTANT_TOOLS`) expose 4 outils OpenAI-compatibles à Mammouth AI (`ajouter_credit_hors_immo`, `ajouter_note_bien`, `modifier_profil_foyer`, `ajouter_frais_bien`). Quand le modèle choisit d'en appeler un, le serveur relaie le `tool_call` brut tel quel (jamais exécuté côté serveur — c'est `assistant-chat.js` seul qui décide) ; ce module l'affiche comme une carte de confirmation inline (`.assistant-chat__action-card`, boutons Confirmer/Annuler) dans le fil, et n'exécute la mutation réelle qu'au clic explicite sur Confirmer.
+- **Actions confirmables (2026-09-23)** : la Cloud Function `chatPortefeuille` (`functions/index.js`, `ASSISTANT_TOOLS`) expose 4 outils OpenAI-compatibles à Mammouth AI (`ajouter_credit_hors_immo`, `ajouter_note_bien`, `modifier_profil_foyer`, `ajouter_frais_bien`). Quand le modèle choisit d'en appeler un, le serveur relaie le `tool_call` brut tel quel (jamais exécuté côté serveur — c'est `assistant-chat.js` seul qui décide) ; ce module l'affiche comme une carte de confirmation inline (`.assistant-chat__action-card`, boutons Confirmer/Annuler) dans le fil, et n'exécute la mutation réelle qu'au clic explicite sur Confirmer.
   - `ACTION_HANDLERS` — registre nom d'outil → `{describe(args, ctx), validate(args, ctx)?, warn(args, ctx)?, run(args)}`. `describe` produit le résumé lisible affiché sur la carte avant confirmation ; `validate` (seulement sur les actions à `assetId`) vérifie que le bien existe encore dans le contexte envoyé — nécessaire car `addOwnedNote`/`addOwnedTravail` échouent **silencieusement** sur un id inconnu (pas d'exception), donc sans cette garde l'utilisateur verrait "Confirmé" alors que rien n'a été écrit (ex. bien supprimé entre l'envoi du message et le clic sur Confirmer, ou id halluciné par le modèle) ; `warn` (2026-09-23, `ajouter_frais_bien` uniquement pour l'instant) affiche un avertissement **non-bloquant** sur la carte (`.assistant-chat__action-warning`) sans empêcher la confirmation — utilisé pour la détection de doublon (`findSimilarTravail`, owned-portfolio.js), volontairement pas un blocage dur comme `validate` : un vrai doublon existe parfois (deux factures distinctes du même montant) ; `run` exécute la mutation réelle et retourne le texte de succès affiché sur la carte.
   - `_executeToolCall(message, callIdx)` — appelée au clic Confirmer : valide, exécute `run()`, appelle `renderCollections()` (déjà exportée par owned-portfolio.js, re-rendu générique — pas de re-rendu ciblé par bien depuis ce module, cohérent avec le fait qu'il ne connaît pas l'état interne accordéon/onglet de la fiche détail) et `showToast(...)`.
   - Fonctions mutatrices exportées spécifiquement pour cet usage (owned-portfolio.js) : `addOwnedNote`, `addOwnedTravail`, `addOwnedAutreCredit` (déjà existantes, juste passées `export`) + `patchProfileData(patch)` (nouvelle, patch générique des champs scalaires `income`/`objectifCF` — pas de fonction réutilisable équivalente n'existait avant, chaque call site répliquait le pattern spread+`saveOwnedProfileData()` localement).
@@ -49,7 +28,7 @@ le Comparateur, le profil, le shell (thème, onglets, sync cross-fenêtres) et l
 - `renderRatioCredit()` — (2026-10-04) remplit `#ratio-credit-readout` (sous Taux/Durée du fieldset Financement) avec « Pour 1 € emprunté : X,XXX € remboursés, soit Y % d'intérêts » via `ratioRemboursement(state.variablesData['taux-input'], state.variablesData['duree'])` ; signale un bornage ; masqué si saisie illisible
 - `initCalculette()` — (2026-10-04, reprise de Spark Cash Flow) calculette autonome « ce que coûte un euro emprunté » : bouton `#calculette-btn` (barre latérale, à côté du glossaire) → `<dialog id="calculette">` natif (`showModal`, Échap et retour du focus natifs, clic sur le fond ferme), champs `#calc-taux`/`#calc-duree` pré-remplis avec l'étude active, résultat `#calc-ratio`/`#calc-interets`, alerte `#calc-alerte` si hors bornes ou saisie illisible (`validity.badInput`), région live `#calc-annonce` débouncée 450 ms
 - `initWorkspaceTabs()` — bascule entre les 3 onglets (`#workspace-panel`/`#collection-panel`/`#assistant-panel`) via une map `data-target` → élément (réécrite le 2026-09-23 pour être générique face à un if/else binaire qui ne gérait que 2 panneaux). Le HTML de `#collection-panel` a une fermeture non standard (`</section>` manquant, remplacé par un `</div>` — corrigé le 2026-09-23 : tout contenu placé après elle dans le fichier, dont les modales suppression/import, se retrouvait accidentellement imbriqué dedans et invisible dès que l'onglet Portefeuille n'était pas actif, un bug latent jamais remarqué car ces modales ne sont déclenchées que depuis cet onglet). Toute nouvelle section/modale ajoutée après `#collection-panel` dans `index.html` doit vérifier qu'elle est bien un sibling, pas un descendant accidentel (`document.getElementById('collection-panel').children` pour vérifier)
-- Démarrage cloud (2026-10-11, plus aucun `localStorage` côté main.js) : `_initCloud()` écoute `watchAuth` — déconnecté : `_stopCloud()` + `#app-auth-gate` (`_showAuthGate`, `renderAuthGateInto`) ; connecté : affiche `#app-cloud-loading`, lance au besoin la migration locale (`MIGRATION_LOCALE_ACTIVE` : origine 127.0.0.1:8080 ou `?migration-locale=1`, module `migration-locale.js` importé dynamiquement, à supprimer en fin de chantier) puis `_startCloud()`. `_startCloud()` s'abonne à `watchPrefs` (→ `_applyPrefs`) et `watchPortfolioMeta` (→ `_applyMeta`) + `_startStudiesAndAnalysis()` (`watchStudies` → `_applyStudies`, `watchAnalysis` → `_applyAnalysis`, `_reconcileActiveAsset` repasse à « nouvelle étude » si l'étude active a disparu) ; `_cloudReady` suit les 4 premiers snapshots, `_startApp()` (premier `render()`, vue analyse, mode guidé, modale profil si pas de profil, 2e écran) ne tourne qu'une fois tous reçus puis masque `#app-cloud-loading`. `state` démarre avec des valeurs par défaut (`theme`, `screens`, `guidedMode`, `tutoStep`, `analysisView`, `facturesLastAsset`…) jamais réécrites : **aucune écriture cloud au chargement**, seules les actions de l'utilisateur appellent `savePref`/`syncProfileToCloud`. `_applyMeta(meta)` : `profileConfigured = Boolean(meta.profile)` (plus de clé dédiée).
+- Démarrage cloud (2026-10-11, plus aucun `localStorage` côté main.js) : `_initCloud()` écoute `watchAuth` — déconnecté : `_stopCloud()` + `#app-auth-gate` (`_showAuthGate`, `renderAuthGateInto`) ; connecté : affiche `#app-cloud-loading` puis `_startCloud()` (chargement de la migration locale retiré le 2026-10-12, migration effectuée). `_startCloud()` s'abonne à `watchPrefs` (→ `_applyPrefs`) et `watchPortfolioMeta` (→ `_applyMeta`) + `_startStudiesAndAnalysis()` (`watchStudies` → `_applyStudies`, `watchAnalysis` → `_applyAnalysis`, `_reconcileActiveAsset` repasse à « nouvelle étude » si l'étude active a disparu) ; `_cloudReady` suit les 4 premiers snapshots, `_startApp()` (premier `render()`, vue analyse, mode guidé, modale profil si pas de profil, 2e écran) ne tourne qu'une fois tous reçus puis masque `#app-cloud-loading`. `state` démarre avec des valeurs par défaut (`theme`, `screens`, `guidedMode`, `tutoStep`, `analysisView`, `facturesLastAsset`…) jamais réécrites : **aucune écriture cloud au chargement**, seules les actions de l'utilisateur appellent `savePref`/`syncProfileToCloud`. `_applyMeta(meta)` : `profileConfigured = Boolean(meta.profile)` (plus de clé dédiée).
 - `emitStateUpdate()` — poste le payload complet (thème, profil, variables, études) sur BroadcastChannel
 - `applyRemoteState(payload)` — applique l'état reçu (validé champ par champ) et re-rend, sans écriture cloud ; ignoré avant `_appStarted`
 - `setupCrossWindowSync()` — écoute BroadcastChannel et appelle `applyRemoteState` (plus d'événement `storage`)
@@ -191,17 +170,14 @@ Cloud Functions Firebase (Node 22 + `firebase-functions` 7 / `firebase-admin` 14
 ---
 
 ## owned-cloud.js
-Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le portefeuille biens détenus — aucune logique métier (cache, diff, rendu), tout ça reste dans `owned-portfolio.js`. Importé par `owned-portfolio.js`, `main.js` (`watchAuth`, `watchPortfolioMeta`) et `migration-locale.js`.
+Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le portefeuille biens détenus — aucune logique métier (cache, diff, rendu), tout ça reste dans `owned-portfolio.js`. Importé par `owned-portfolio.js` et `main.js` (`watchAuth`, `watchPortfolioMeta`). `cloudGetMeta`/`cloudGetAllAssets`/`cloudDocumentExists`/`cloudUploadDocumentAs` (réservées à la migration) retirées le 2026-10-12.
 - `watchAuth(onChange)` / `cloudSignIn(email, password)` / `cloudSignOut()` — session (compte unique PC + iPhone, persistée par défaut par le SDK)
 - `cloudChangePassword(newPassword)` — appelle la Cloud Function `changerMotDePasse` puis reconnecte aussitôt cet appareil avec le nouveau mot de passe (sinon déconnexion à l'expiration du jeton) ; renvoie `{relogged}` — un échec de reconnexion n'est pas une erreur, le mot de passe est déjà changé
 - `watchOwnedAssets(onChange, onError)` — écoute temps réel de la collection `users/{uid}/ownedAssets` (un doc par bien)
 - `cloudSetAsset(id, data)` / `cloudDeleteAssetDoc(id)` — écriture/suppression d'un bien
 - `watchPortfolioMeta(onChange, onError)` / `cloudSaveMeta(patch)` — doc unique `users/{uid}/portfolioMeta/main` (`goals`, `order`, `regime`, `profile` — voir `syncProfileToCloud` dans `owned-portfolio.js`), écriture en `merge: true`
-- `cloudGetMeta()` / `cloudGetAllAssets()` — lectures ponctuelles (`getDoc` / `getDocs`, pas d'abonnement) réservées à la migration locale → cloud : état de `portfolioMeta/main` avant fusion, et liste de `ownedAssets` pour retrouver les justificatifs à téléverser
 - `cloudUploadDocument(assetId, file)` — upload un justificatif (PDF, JPEG ou PNG) vers `users/{uid}/documents/{assetId}/` (Storage), nom de fichier généré en conservant la vraie extension/`contentType` du fichier (corrigé le 2026-08-04 : forçait auparavant `.pdf`/`application/pdf` sur toute photo, rendant les justificatifs image illisibles à la relecture), retourne le `filename`
-- `cloudUploadDocumentAs(assetId, filename, blob)` — variante réservée à la migration : conserve le nom de fichier d'origine (déjà référencé par `pdfFilename`)
 - `cloudDocumentUrl(assetId, filename)` / `cloudDeleteDocument(assetId, filename)` / `cloudDeleteAllDocuments(assetId)` — lecture/suppression Storage
-- `cloudDocumentExists(assetId, filename)` — `getMetadata` sur un justificatif : `true`/`false` (`storage/object-not-found` → `false`, autre erreur relancée)
 - `cloudGeocode(adresse)` — remplace l'ancien proxy serveur `/api/geocode/address` (indisponible sans serveur local sur iPhone) : appel direct Nominatim (respecte la limite 1 req/s) + cache dans `users/{uid}/geocodesAdresse`
 - `cloudExtraireFraisFacture(base64, mimeType)` — appelle la Cloud Function `extraireFraisFacture` (`httpsCallable`), voir `functions/index.js`
 - `cloudExtraireDossierBien(base64, mimeType)` — appelle la Cloud Function `extraireDossierBien` (2026-09-22, import de dossier bien), un appel par document ; voir `functions/index.js`
@@ -209,32 +185,14 @@ Wrapper fin autour de Firebase (Firestore + Storage + Auth + Functions) pour le 
 
 ---
 
-## migration-regles.js
-Règles pures de la migration unique stockage local → cloud (aucun DOM, `getItem` injecté, testable sous Node).
-- `choisirEtude(locale, cloud)` — étude la plus récente gagne
-- `comparerProfond(a, b)` — égalité profonde, ordre des clés ignoré
-- `normaliserPourFirestore(obj)` — clone JSON, retire undefined/fonctions
+## archives-regles.js
+Règle pure de nommage des archives de l'export du portefeuille (aucun DOM, testable sous Node : `tests/test_archives_regles.mjs`). Importé par `owned-portfolio.js`. Renommé depuis `migration-regles.js` le 2026-10-12 (lecteurs du stockage local de l'exe retirés avec la migration, effectuée).
 - `nomArchiveUnique(base, existants)` — nom portefeuille-AAAA-MM-JJ, suffixe -1, -2
-- `lireEtudesLocales(getItem)` — études du comparateur, entrées non-objet ignorées
-- `lireAnalyseLocale(getItem)` — variables de l'analyse + étude active
-- `lirePrefsLocales(getItem)` — préférences d'interface, clés absentes omises
-- `lireProfilLocal(getItem)` — profil household + indicateur configuré
-- `lireMetaLocale(getItem)` — régime, ordre, objectifs du portefeuille
 
 ---
 
-## migration-locale.js
-Migration unique exe → cloud, chargée par `main.js` seulement sur 127.0.0.1/localhost:8080 ou avec `?migration-locale=1`, après connexion ; ne fait rien si `settings/migration` existe ; à supprimer en fin de chantier (Phase 6). Ne supprime rien en local.
-- `runLocalMigration({ sanitizeAssetRecord, normaliserVariables })` — point d'entrée, boucle Réessayer, retourne `{ skipped }` ou le bilan
-- `_migrer(deps, modale)` — 5 étapes : études (la plus récente gagne), réglages (analyse, prefs, profil/regime/order/goals seulement si absents du cloud), archives (octets bruts `/exports/<nom>` → Storage), justificatifs PDF (`/api/documents/…` si absents), relecture complète
-- règle : le marqueur `settings/migration` n'est écrit QUE si la relecture correspond à tout ; sinon écarts listés. Sont des écarts : liste des archives illisible (`_lireListeExports` renvoie null), archive listée illisible et absente du cloud, justificatif PDF cité par un bien (`pdfFilename`) introuvable localement ET absent du cloud (revue finale 2026-10-12 : écart bloquant, plus un avertissement ; message « document X du bien Y introuvable localement (/api/documents/…) et absent du cloud »), exception pendant le run (bilan « erreur pendant la migration » + Réessayer/Ignorer, modale fermée en `finally`)
-- garde-fou « aucune donnée locale » (dans `_migrer`, étape études) — écart bloquant (pas de marqueur) si études brutes vides ET analyse `null` ET prefs `{}` (profil WebView2 différent de l'exe) ; la migration continue
-- `_lireListeExports()` / `_lireFichierLocal(url)` — lectures des routes locales de l'exe
-- `_ouvrirModale()` — modale progression (z-index 1600, au-dessus de #app-cloud-loading), contrat `[data-etape]`, `[data-migration-close|retry|skip]`
-- `_afficherBilan(modale, bilan)` — bilan + URL web, ou écarts + Réessayer/Ignorer (`escapeHtml`)
-
 ## cloud-store.js
-Couche cloud des données hors portefeuille (Firestore + Storage) : études du comparateur, réglages (`settings/{analysis|prefs|migration}`, `prefs`) et archives JSON du portefeuille (Storage `users/{uid}/archives/`). Wrapper fin, aucune logique métier. Importé par `main.js`, `owned-portfolio.js` et `migration-locale.js`. Tout vit sous `users/{uid}/`.
+Couche cloud des données hors portefeuille (Firestore + Storage) : études du comparateur, réglages (`settings/{analysis|prefs|migration}`, `prefs`) et archives JSON du portefeuille (Storage `users/{uid}/archives/`). Wrapper fin, aucune logique métier. Importé par `main.js` et `owned-portfolio.js` (lecture seule : `scripts/controle-migration.mjs`). Tout vit sous `users/{uid}/`.
 Écrivains (`cloudSetStudy`, `cloudDeleteStudy`, `cloudSaveAnalysis`, `savePref`, `cloudSetSetting`) `async` : hors connexion ils rejettent au lieu de lever en synchrone ; `cloudListArchives` laisse remonter les erreurs `listAll` (l'export ne réutilise plus le nom du jour si la liste échoue).
 - `watchStudies(onChange, onError)` / `cloudSetStudy(id, record)` / `cloudDeleteStudy(id)` — une étude du comparateur par document (`users/{uid}/studies`)
 - `cloudGetAllStudies()` — lecture ponctuelle de toutes les études (migration), pas un abonnement
@@ -261,7 +219,7 @@ Bootstrap minimal pour `owned.html` — équivalent, pour le seul module portefe
 ---
 
 ## firebase.json / firestore.rules / storage.rules / .firebaserc
-Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, `build/` (intermédiaires PyInstaller, ~26 Mo, exclu le 2026-10-04 — il n'était pas dans la liste et aurait été publié), `Spark/`, `dist/`, les binaires de build et fichiers Python — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt). `/VERSION` est servi avec `Cache-Control: no-cache` et `Content-Type: text/plain` (2026-10-12, lu par l'application pour son numéro de version). `vendor/fonts/**` n'est PLUS dans `hosting.ignore` (2026-10-12) : les polices TTF (1,7 Mo) sont servies, les PDF décision/dossier bancaire déclarent des `@font-face` vers `/vendor/fonts/*.ttf`.
+Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, `scripts/`, `data/`, `Spark/` (ancien dossier de l'exe, tant qu'il reste sur le disque), `*.py` et `*.txt` — exclusions de la chaîne de build (`build/`, `dist/`, `*.bat`, `*.spec`, `*.zip`, `*.ico`, `geocache.json`) retirées le 2026-10-12 avec l'exe — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt). `/VERSION` est servi avec `Cache-Control: no-cache` et `Content-Type: text/plain` (2026-10-12, lu par l'application pour son numéro de version). `vendor/fonts/**` n'est PLUS dans `hosting.ignore` (2026-10-12) : les polices TTF (1,7 Mo) sont servies, les PDF décision/dossier bancaire déclarent des `@font-face` vers `/vendor/fonts/*.ttf`.
 
 ---
 
@@ -408,13 +366,13 @@ Design system complet : tokens CSS, composants, thèmes light/dark.
 
 ---
 
-## config.py / config.example.py
-Secrets locaux racine (gitignored, copier `config.example.py` → `config.py`). Ne sert plus à l'IA depuis le 2026-10-01 (diagnostic et chat passés en Cloud Functions, clé dans le secret Firebase `MAMMOUTH_API_KEY`) — conservé pour compatibilité, aucune route de `server.py` ne le lit plus.
+## config.py
+Ancien fichier de secrets local (gitignoré, absent du dépôt), lu par aucun code depuis le passage au tout-web : l'IA tourne en Cloud Functions avec le secret Firebase `MAMMOUTH_API_KEY`. L'utilisateur peut le supprimer ; `*.py` reste exclu du déploiement (`firebase.json`) par sécurité.
 
 ---
 
 ## VERSION
-Fichier texte à la racine, source de vérité unique du numéro de version (`X.Y.Z`). Lu indépendamment par `app.py` (`__version__`), `server.py` (`/api/version`), `spark.spec` (nom de l'exe) et `build.bat` (raccourci + résumé) — pas d'import possible entre eux vu l'ordre de chargement des modules.
+Fichier texte à la racine, source de vérité unique du numéro de version (`X.Y.Z`). Lu par `main.js` via `fetch('VERSION')` (affichage du numéro), servi par Firebase Hosting avec `Cache-Control: no-cache` (`firebase.json`). Plus lu par `app.py`/`server.py`/`spark.spec`/`build.bat` (supprimés le 2026-10-12).
 
 ---
 
@@ -423,13 +381,8 @@ Journal des versions (format Keep a Changelog) — à mettre à jour à chaque r
 
 ---
 
-## Lancer.bat
-Lancement rapide en développement (hors build) : ferme l'instance existante sur le port 8080 (taskkill par PID via `netstat`), affiche la version lue depuis `VERSION`, relance `pythonw app.py` avec le code source à jour.
-
----
-
 ## tests/playwright/_harness.mjs
-Harnais commun des tests navigateur (tout-web, 2026-10-11) : stubs complets de `owned-cloud.js` et `cloud-store.js`, espions `localStorage`/`window.print`, ouverture de page avec collecte des erreurs.
+Harnais commun des tests navigateur (tout-web, 2026-10-11) : stubs complets de `owned-cloud.js` et `cloud-store.js` (exportent exactement les fonctions des modules réels ; exports de migration retirés le 2026-10-12), espions `localStorage`/`window.print`, ouverture de page avec collecte des erreurs.
 - `openPage(browser, path, { viewport, seedCloud, seedStore, spyStorage, routes, initScripts })` — page stubbée, erreurs collectées
 - `reloadWithStore(page, context)` — recharge en réinjectant l'état du stub
 - `waitAppStarted(page)` / `step(name, fn)` / `getFailures()` — attente démarrage, étapes, bilan
@@ -439,13 +392,8 @@ Scénarios Playwright de la version 100 % web (hors `npm test`, serveur statique
 - `scenarioImpression(browser, viewport, label)` — PDF décision, dossier bancaire, rapport d'un bien via Shadow DOM (PC + iPhone)
 - Espion `localStorage`/`sessionStorage` actif dans TOUS les scénarios (plus de `spyStorage: false`) : étape « zéro accès » avant « aucune erreur JS » (2026-10-12)
 
-## tests/playwright/migration-locale.mjs
-Test Playwright de la migration (hors `npm test`, serveur 8090 ; localStorage pré-rempli via `initScripts`, `ML_SCREENSHOTS=<dir>` pour captures).
-- `scenarioNominal` / `scenarioDejaFaite` / `scenarioEcart` / `scenarioRelance` — nominal, marqueur présent, relecture non conforme + Réessayer, idempotence
-- `scenarioAucuneDonneeLocale` — localStorage vide (`ouvrir(..., { local: null })`) → écart bloquant sans marqueur, puis stockage rempli + Réessayer → marqueur écrit
-
 ## tests/playwright/factures-modal.mjs
-Test Playwright de la modale globale « Ajouter des factures » (PC index.html + iPhone owned.html ; hors `npm test`, `FM_SCREENSHOTS=<dir>`). Adapté au tout-web le 2026-10-12 : stub local d'`owned-cloud.js` complété (`profile` dans `meta`, `cloudGetMeta`/`cloudGetAllAssets`/`cloudDocumentExists`, `cloudSaveMeta` notifie), `cloud-store.js` servi par `CLOUD_STORE_STUB_SOURCE` (harnais), plus d'initScript `localStorage`, attente de `#app-cloud-loading[hidden]` sur index.html. Prérequis : `node scripts/serve-static.mjs 8090`.
+Test Playwright de la modale globale « Ajouter des factures » (PC index.html + iPhone owned.html ; hors `npm test`, `FM_SCREENSHOTS=<dir>`). Adapté au tout-web le 2026-10-12 : stub local d'`owned-cloud.js` complété (`profile` dans `meta`, `cloudSaveMeta` notifie ; exports de migration retirés le 2026-10-12), `cloud-store.js` servi par `CLOUD_STORE_STUB_SOURCE` (harnais), plus d'initScript `localStorage`, attente de `#app-cloud-loading[hidden]` sur index.html. Prérequis : `node scripts/serve-static.mjs 8090`.
 - `openPage(browser, path, viewport)` — page stubbée (deux modules cloud), erreurs collectées
 
 ## tests/playwright/change-password.mjs
@@ -473,18 +421,3 @@ Contrôle post-migration en lecture seule : relit `settings/migration`, compte l
 - `SPARK_USER_DATA_DIR` / `SPARK_ORIGIN` — profil Chromium persistant (session déjà ouverte, headless) ; l'origine (défaut `http://127.0.0.1:8080`) est interceptée et servie depuis `SPARK_TEST_BASE`
 - `SPARK_LOGIN_TIMEOUT_MS` — délai d'attente de la connexion en ms (défaut 300000)
 
----
-
-## verify.bat
-Remplacé par `npm run verify` (même vérification, sans boucle bash) ; ce fichier sera supprimé en Phase 6 du passage au tout-web.
-Vérification locale : `pytest tests/` puis `tests/test_frais_fiscalite.mjs`, `tests/test_regimes_fiscaux.mjs`, `tests/test_loyer_historique.mjs`, `tests/test_ratio_credit.mjs`, `tests/test_projection_impots.mjs`, `tests/test_optimisation_travaux.mjs` et `tests/test_projection_regimes.mjs` (8 étapes), s'arrête net (exit non-zero) au premier échec. Appelé par `build.bat` en première étape (variable `CALLED_FROM_BUILD` pour ne pas `pause` en mode non-interactif).
-
----
-
-## build.bat
-Build de production : appelle `verify.bat` (abandonne si échec), compile via `spark.spec` (exe nommé `Spark-<version>.exe` d'après `VERSION`), copie les fichiers statiques dans `Spark\`, crée le raccourci bureau et une archive `Spark-<version>.zip`. Copie aussi `vendor/leaflet/` (carte portefeuille) et `vendor/pdfjs/` (2026-09-22, conversion PDF→image pour l'import de dossier bien — `pdf.min.mjs`/`pdf.worker.min.mjs`) dans `Spark\vendor\`.
-
----
-
-## spark.spec
-Config PyInstaller. Lit `VERSION` à la racine pour nommer l'exe `Spark-<version>.exe` ; le dossier `COLLECT` reste nommé `Spark` (stable d'une version à l'autre).
