@@ -38,10 +38,11 @@ const routes = [
 
 // L'ancien stockage est pré-rempli AVANT la première navigation (initScripts du harnais) : une première
 // visite à vide écrirait déjà le marqueur settings/migration et le second passage serait ignoré.
-function ouvrir(browser, { seedStore, seedCloud = {} }) {
+// local = null : aucun pré-remplissage (stockage local vide).
+function ouvrir(browser, { seedStore, seedCloud = {}, local = LOCAL }) {
     return openPage(browser, '/index.html?migration-locale=1', {
         viewport: PC, spyStorage: false, seedStore, seedCloud, routes,
-        initScripts: [[local => { for (const [k, v] of Object.entries(local)) localStorage.setItem(k, v); }, LOCAL]]
+        initScripts: local ? [[l => { for (const [k, v] of Object.entries(l)) localStorage.setItem(k, v); }, local]] : []
     });
 }
 
@@ -230,6 +231,31 @@ async function scenarioExceptionPendantRun(browser) {
     await context.close();
 }
 
+async function scenarioAucuneDonneeLocale(browser) {
+    console.log('\nMigration — stockage local vide → écart, pas de marqueur');
+    const { page, context, errors } = await ouvrir(browser, { seedStore: {}, local: null });
+    await step('écart « aucune donnée locale », marqueur absent, Réessayer visible', async () => {
+        await page.waitForSelector('#migration-locale-modal [data-migration-retry]', { timeout: 15000 });
+        const b = await lireBilan(page);
+        assert.match(b.texte, /aucune donnée locale trouvée/);
+        assert.match(b.texte, /WebView2/);
+        assert.equal(await page.evaluate(() => window.__store.settings.migration), undefined);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/migration-aucune-donnee.png` });
+    });
+    await step('stockage rempli + Réessayer → marqueur écrit', async () => {
+        await page.evaluate(local => { for (const [k, v] of Object.entries(local)) localStorage.setItem(k, v); }, LOCAL);
+        await page.click('#migration-locale-modal [data-migration-retry]');
+        await page.waitForSelector('#migration-locale-modal [data-migration-close]', { timeout: 15000 });
+        const st = await page.evaluate(() => window.__store.settings);
+        assert.ok(st.migration);
+        assert.equal(st.migration.counts.etudes, 2);
+        const etudes = await page.evaluate(() => Object.keys(window.__store.studies));
+        assert.ok(etudes.includes('asset-A') && etudes.includes('asset-B'));
+    });
+    await step('aucune erreur JS', () => assert.deepEqual(errors, []));
+    await context.close();
+}
+
 const browser = await chromium.launch();
 try {
     await scenarioNominal(browser);
@@ -239,6 +265,7 @@ try {
     await scenarioListePanne(browser);
     await scenarioDocumentManquant(browser);
     await scenarioExceptionPendantRun(browser);
+    await scenarioAucuneDonneeLocale(browser);
 } finally {
     await browser.close();
 }

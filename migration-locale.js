@@ -51,7 +51,14 @@ async function _migrer({ sanitizeAssetRecord, normaliserVariables }, modale) {
     // 1. Études : fusion avec le cloud, la plus récente gagne (à défaut la locale).
     modale.etape('etudes', 'en cours', 'Lecture des études…');
     const cloudEtudes = await cloudGetAllStudies();
-    const locales = lireEtudesLocales(getItem).map(sanitizeAssetRecord).filter(Boolean);
+    const etudesBrutes = lireEtudesLocales(getItem);
+    // Garde-fou : un stockage local entièrement vide (profil WebView2 différent de celui de l'exe,
+    // par exemple) ne doit jamais passer pour une migration réussie de 0 étude : écart bloquant,
+    // donc pas de marqueur, sinon les vraies études ne seraient jamais migrées. La migration continue.
+    if (etudesBrutes.length === 0 && lireAnalyseLocale(getItem) === null && Object.keys(lirePrefsLocales(getItem)).length === 0) {
+        ecarts.push('aucune donnée locale trouvée (stockage WebView2 vide ?)');
+    }
+    const locales = etudesBrutes.map(sanitizeAssetRecord).filter(Boolean);
     for (const locale of locales) {
         const gardee = choisirEtude(locale, cloudEtudes[locale.id] || null);
         if (gardee === locale) await cloudSetStudy(locale.id, normaliserPourFirestore(locale));

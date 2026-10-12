@@ -228,6 +228,7 @@ Migration unique exe → cloud, chargée par `main.js` seulement sur 127.0.0.1/l
 - `runLocalMigration({ sanitizeAssetRecord, normaliserVariables })` — point d'entrée, boucle Réessayer, retourne `{ skipped }` ou le bilan
 - `_migrer(deps, modale)` — 5 étapes : études (la plus récente gagne), réglages (analyse, prefs, profil/regime/order/goals seulement si absents du cloud), archives (octets bruts `/exports/<nom>` → Storage), justificatifs PDF (`/api/documents/…` si absents), relecture complète
 - règle : le marqueur `settings/migration` n'est écrit QUE si la relecture correspond à tout ; sinon écarts listés. Sont des écarts : liste des archives illisible (`_lireListeExports` renvoie null), archive listée illisible et absente du cloud, justificatif PDF cité par un bien (`pdfFilename`) introuvable localement ET absent du cloud (revue finale 2026-10-12 : écart bloquant, plus un avertissement ; message « document X du bien Y introuvable localement (/api/documents/…) et absent du cloud »), exception pendant le run (bilan « erreur pendant la migration » + Réessayer/Ignorer, modale fermée en `finally`)
+- garde-fou « aucune donnée locale » (dans `_migrer`, étape études) — écart bloquant (pas de marqueur) si études brutes vides ET analyse `null` ET prefs `{}` (profil WebView2 différent de l'exe) ; la migration continue
 - `_lireListeExports()` / `_lireFichierLocal(url)` — lectures des routes locales de l'exe
 - `_ouvrirModale()` — modale progression (z-index 1600, au-dessus de #app-cloud-loading), contrat `[data-etape]`, `[data-migration-close|retry|skip]`
 - `_afficherBilan(modale, bilan)` — bilan + URL web, ou écarts + Réessayer/Ignorer (`escapeHtml`)
@@ -441,6 +442,7 @@ Scénarios Playwright de la version 100 % web (hors `npm test`, serveur statique
 ## tests/playwright/migration-locale.mjs
 Test Playwright de la migration (hors `npm test`, serveur 8090 ; localStorage pré-rempli via `initScripts`, `ML_SCREENSHOTS=<dir>` pour captures).
 - `scenarioNominal` / `scenarioDejaFaite` / `scenarioEcart` / `scenarioRelance` — nominal, marqueur présent, relecture non conforme + Réessayer, idempotence
+- `scenarioAucuneDonneeLocale` — localStorage vide (`ouvrir(..., { local: null })`) → écart bloquant sans marqueur, puis stockage rempli + Réessayer → marqueur écrit
 
 ## tests/playwright/factures-modal.mjs
 Test Playwright de la modale globale « Ajouter des factures » (PC index.html + iPhone owned.html ; hors `npm test`, `FM_SCREENSHOTS=<dir>`). Adapté au tout-web le 2026-10-12 : stub local d'`owned-cloud.js` complété (`profile` dans `meta`, `cloudGetMeta`/`cloudGetAllAssets`/`cloudDocumentExists`, `cloudSaveMeta` notifie), `cloud-store.js` servi par `CLOUD_STORE_STUB_SOURCE` (harnais), plus d'initScript `localStorage`, attente de `#app-cloud-loading[hidden]` sur index.html. Prérequis : `node scripts/serve-static.mjs 8090`.
