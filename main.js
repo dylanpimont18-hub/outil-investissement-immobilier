@@ -2084,6 +2084,7 @@ function buildAnalysisJournal(analysisModel) {
                 <strong class="status-pill status-pill--${decisionJournal.tone}">${decisionJournal.label}</strong>
             </div>
             <p class="decision-hint">${decisionJournal.summary}</p>
+            ${decisionJournal.thesis || decisionJournal.nextStep ? '' : `<p class="journal-empty">Aucune note pour l'instant — renseignez « Journal de décision » dans le formulaire ; les textes ci-dessous sont des suggestions.</p>`}
             <div class="journal-block">
                 <span class="status-label">Thèse d'investissement</span>
                 <p class="journal-note ${decisionJournal.thesis ? '' : 'is-suggested'}">${formatMultilineText(thesis)}</p>
@@ -2674,11 +2675,11 @@ function initGlossaire() {
         {
             section: 'Rentabilité',
             terms: [
-                { name: 'CF brut', def: 'Première mesure de rendement, avant toute déduction.', formula: 'Loyers annuels bruts / Prix d\'achat × 100' },
+                { name: 'CF brut', def: 'Loyers mensuels moins mensualité de crédit, avant charges et impôts.', formula: 'Loyer mensuel − Mensualité de crédit' },
                 { name: 'CF net', def: 'Cash-flow après déduction des charges (crédit, charges courantes, vacance, gestion). Hors impôts.', formula: 'CF net = Loyers × (1 - vacance) - crédit annuel - charges' },
                 { name: 'CF net-net', def: 'Cash-flow après impôts. Indicateur final de ce qui reste en poche chaque mois.', formula: 'CF net-net = CF net - impôts' },
                 { name: 'Rendement brut', def: 'Benchmark rapide, ne tient pas compte des charges ni des impôts.', formula: 'Loyers annuels / Prix d\'achat total × 100' },
-                { name: 'Rendement net', def: 'Rendement après charges et impôts. Plus représentatif de la performance réelle.', formula: null },
+                { name: 'Rendement net', def: 'Rendement après vacance et charges d\'exploitation, hors crédit et impôts. Plus représentatif que le rendement brut.', formula: '(Loyers encaissés − Charges d\'exploitation annuelles) / Coût total du projet × 100' },
                 { name: 'GRM (Gross Rent Multiplier)', def: 'Nombre d\'années de loyers bruts pour rembourser le bien. Plus bas = mieux.', formula: 'Prix d\'achat / Loyers annuels bruts' },
                 { name: 'CoC (Cash-on-Cash)', def: 'Rendement sur le capital investi personnellement. Mesure l\'efficacité de l\'effet de levier.', formula: 'CF net annuel / Apport × 100' },
                 { name: 'Effort d\'épargne', def: 'Montant mensuel que l\'investisseur doit débourser de sa poche si le CF net-net est négatif.', formula: 'max(0, -CF net-net mensuel)' }
@@ -3025,7 +3026,30 @@ function _initCloud() {
     });
 }
 
+// Bandeau mobile (B10) : index.html n'a pas de mise en page téléphone ; sur un écran étroit tactile,
+// on propose la version iPhone (/portefeuille) sans redirection forcée (l'Analyse reste accessible).
+// Fermable (✕), rien n'est mémorisé : il revient au prochain chargement. Jamais dans la fenêtre d'analyse.
+function _initMobileBanner() {
+    if (IS_ANALYSIS_WINDOW) return;
+    if (window.innerWidth >= 700 || window.matchMedia('(pointer: fine)').matches) return;
+    const banner = document.createElement('div');
+    banner.id = 'mobile-redirect-banner';
+    banner.className = 'mobile-redirect-banner';
+    banner.setAttribute('role', 'region');
+    banner.setAttribute('aria-label', 'Version iPhone');
+    banner.innerHTML = `
+        <a class="mobile-redirect-banner__link" href="/portefeuille">Version iPhone : ouvrir le portefeuille →</a>
+        <button type="button" class="mobile-redirect-banner__close" aria-label="Fermer le bandeau">✕</button>`;
+    banner.querySelector('.mobile-redirect-banner__close').addEventListener('click', () => {
+        banner.remove();
+        document.body.classList.remove('has-mobile-banner');
+    });
+    document.body.prepend(banner);
+    document.body.classList.add('has-mobile-banner');
+}
+
 console.log('[Spark] Init start');
+_initMobileBanner();
 initOwnedPortfolio({ state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE: false });
 populateProfiles();
 setupCrossWindowSync();
