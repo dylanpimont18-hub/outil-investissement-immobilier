@@ -8,7 +8,11 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Fixed
-- B1 : les modales Import et Suppression d'un bien ont de nouveau un fond (variable `--surface-1` jamais définie) ; les 20 variables CSS utilisées sans définition sont remplacées par les tokens existants (rendu or conservé via `--accent-color`).
+- B1 : les modales Import et Suppression d'un bien ont de nouveau un fond (variable `--surface-1` jamais définie) ; les 20 variables CSS utilisées sans définition sont remplacées par les tokens du thème (accent or via `--accent-color`) ; leurs couleurs de repli codées en dur disparaissent, d'où un rouge, un vert et un ambre légèrement adoucis en thème sombre.
+- B2 : une seule vacance locative. Les chiffres « au rythme actuel » (dashboard, liste, cartes de la fiche, alertes, régime optimal, rapport du bien, dossier bancaire) utilisent la vacance de l'onglet Exploitation, et non plus les 5 % du scénario « réaliste » dont l'éditeur est masqué. Le simulateur de scénarios est inchangé.
+- B3 : rapport du bien juste. Le tableau « Situation actuelle » s'additionne (ligne « Frais ponctuels de l'année non financés (÷ 12) » ajoutée) et montre la même mensualité que l'onglet Calcul, avec sa base (échéance du mois en cours). L'onglet Calcul ne dilue plus l'assurance dégressive l'année d'achat (470 € affichés contre 492 € réellement prélevés).
+- B5 : une revalorisation de 0 % ou un objectif de CF de 0 € saisis ne sont plus remplacés par 2 % / 1 000 € sur PC (profil identique PC et iPhone).
+- B7 : rapport annuel refait : un seul signe par montant (fini « --962 € », une économie d'impôt s'affiche « +962 € (économie) »), capital restant dû réel en fin d'année (au lieu de « -0 € »), patrimoine net « non renseigné » sans valeur estimée, bloc Trésorerie dont les lignes donnent le CF de l'année et bloc Fiscal où les intérêts ne figurent qu'en charge déductible, mensualités comptées sur les mois réellement détenus, CF libellés par leur base (année ÷ 12, rythme actuel).
 - B4 : Échap ferme toutes les modales du portefeuille (Import, Suppression, « Ajouter un bien » sur iPhone, Rapport même après un clic dans l'aperçu) ; croix « ✕ » ajoutée à la modale « Ajouter un bien » d'owned.html.
 - B6 : la police des chiffres IBM Plex Mono est enfin chargée (`@font-face` depuis `vendor/fonts/`) au lieu d'un repli Courier/Inter.
 - B10 : sur téléphone, index.html affiche un bandeau « Version iPhone : ouvrir le portefeuille → » (fermable, sans redirection).

@@ -24,6 +24,7 @@ import {
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
+import { buildRapportAnnuelData, buildRapportAnnuelTexte } from './rapport-annuel.js';
 import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudDocumentUrl,
@@ -1565,67 +1566,15 @@ function openRapportAnnuelModal() {
     const assets = Object.values(loadOwnedAssets());
     const tmi = getOwnedTmi();
     const regime = getOwnedRegime();
-    const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
     const currentYear = new Date().getFullYear();
     const anneeMin = assets.reduce((m, a) => Math.min(m, parseDateAchat(a.dateAchat).annee), currentYear);
 
     function buildRapport(annee) {
         if (!assets.length) return '<p style="color:var(--text-tertiary);text-align:center">Aucun bien dans le portefeuille.</p>';
-        let totalValeur = 0, totalCRD = 0, totalLoyers = 0, totalCharges = 0, totalMens = 0, totalImpots = 0;
-        const lignesBiens = [];
-
-        for (const a of assets) {
-            const acq = a.acquisition || {};
-            const post = a.postAchat || {};
-            const sc = getOwnedDefaultScenario(a);
-            const r = computeOwnedAssetCF(a, { ...sc.variables, regime }, tmi);
-            const cr = computeCompteResultat(a, annee, state.profileData, regime);
-            const pn = computePatrimoineNet(a);
-
-            totalValeur += acq.valeurEstimee || 0;
-            totalCRD += pn.crd || 0;
-            totalLoyers += cr.recettesBrutes;
-            totalCharges += cr.chargesDeductibles;
-            totalMens += r.mensualiteTotale * 12;
-            totalImpots += cr.impots;
-
-            lignesBiens.push({ nom: a.nom, cf: r.cfNetNet, rdt: r.rentaBrute, patNet: pn.patrimoineNet });
-        }
-
-        const patNet = totalValeur - totalCRD;
-        const cfAnnuel = assets.reduce((sum, a) => {
-            const { years } = computeOwnedAssetTimeline(a, state.profileData, regime);
-            const row = years.find(y => y.year === annee) || years[years.length - 1];
-            return sum + (row ? row.cfAnnuel : 0);
-        }, 0);
-        const sig = v => v >= 0 ? `+${v.toLocaleString('fr-FR')}` : v.toLocaleString('fr-FR');
-
-        return `<pre class="rapport-text">
-═══════════════════════════════════════════
-  RAPPORT PORTEFEUILLE — ${annee}
-═══════════════════════════════════════════
-
-PATRIMOINE
-  Valeur estimée totale     : ${totalValeur > 0 ? totalValeur.toLocaleString('fr-FR') + ' €' : 'Non renseignée'}
-  Capital restant dû total  : ${('-' + totalCRD.toLocaleString('fr-FR') + ' €')}
-  Patrimoine net            : ${patNet.toLocaleString('fr-FR')} €
-
-CASH-FLOW (${annee})
-  Loyers encaissés          : ${totalLoyers.toLocaleString('fr-FR')} €
-  Charges totales           : -${totalCharges.toLocaleString('fr-FR')} €
-  Mensualités crédit        : -${Math.round(totalMens).toLocaleString('fr-FR')} €
-  Impôts estimés            : -${Math.round(totalImpots).toLocaleString('fr-FR')} €
-  CF net-net annuel         : ${sig(Math.round(cfAnnuel))} €
-  CF net-net mensuel moy.   : ${sig(Math.round(cfAnnuel / 12))} €
-
-PAR BIEN
-${lignesBiens.map(b => `  ${escapeHtml(b.nom).padEnd(20)} │ CF : ${(b.cf >= 0 ? '+' : '') + Math.round(b.cf).toLocaleString('fr-FR')} €/m │ Rdt : ${b.rdt.toFixed(1)} % │ Patrim. net : ${b.patNet !== null ? (b.patNet / 1000).toFixed(0) + 'k€' : '—'}`).join('\n')}
-
-FISCALITÉ
-  Régime actuel             : ${REGIME_LABELS[regime] || regime}
-  Revenus fonciers bruts    : ${totalLoyers.toLocaleString('fr-FR')} €
-  Impôts estimés            : ${Math.round(totalImpots).toLocaleString('fr-FR')} €
-═══════════════════════════════════════════</pre>`;
+        // Texte construit par rapport-annuel.js (module pur, testé sous Node) : blocs Patrimoine,
+        // Trésorerie (somme = CF de l'année), Fiscal (intérêts en charges déductibles), Par bien.
+        const data = buildRapportAnnuelData(assets, annee, { profileData: state.profileData, regime, tmi });
+        return `<pre class="rapport-text">${escapeHtml(buildRapportAnnuelTexte(data))}</pre>`;
     }
 
     const annees = [];

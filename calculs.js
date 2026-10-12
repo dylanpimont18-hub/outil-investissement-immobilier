@@ -1945,7 +1945,10 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
         // calcul du régime réel sans dupliquer la résolution loyer/charges/travaux ci-dessus.
         // travauxDeductiblesAnnee (déjà inclus dans chargesAnneeTax) est exposé à part pour que
         // computeProjectionImpotsFoyer puisse isoler l'effet des travaux sur l'impôt.
-        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum, apportAnnee, loyersAnnuels, chargesAnneeTax, interetsAnnee, assuranceAnnee, travauxDeductiblesAnnee });
+        // chargesAnneeBase/debtService/impotsAnnee/travauxCashAnnee : composantes de trésorerie de
+        // cfAnnuel (loyersAnnuels - debtService - chargesAnneeBase - impotsAnnee - travauxCashAnnee),
+        // exposées pour le bloc « Trésorerie » du rapport annuel (rapport-annuel.js).
+        years.push({ year: y, cfAnnuel, cumulCF, recettesAnnee, recettesCum, depensesAnnee, depensesCum, apportAnnee, loyersAnnuels, chargesAnneeTax, interetsAnnee, assuranceAnnee, travauxDeductiblesAnnee, chargesAnneeBase, debtService, impotsAnnee, travauxCashAnnee });
     }
 
     return { years, anneeAchat, endYear };
