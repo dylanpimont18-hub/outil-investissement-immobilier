@@ -79,10 +79,6 @@ export async function cloudGetSetting(name) {
     return snap.exists() ? snap.data() : null;
 }
 
-export async function cloudSetSetting(name, data, { merge = true } = {}) {
-    return setDoc(doc(db, 'users', requireUid(), 'settings', name), data, { merge });
-}
-
 // ─── Archives JSON du portefeuille : Storage users/{uid}/archives/ ───────────
 // Remplace le dossier exports/ de l'ancien server.py (export → copie cloud, import → liste).
 
@@ -106,14 +102,4 @@ export async function cloudListArchives() {
 export async function cloudReadArchive(filename) {
     const blob = await getBlob(_archiveRef(filename));
     return JSON.parse(await blob.text());
-}
-
-export async function cloudArchiveMeta(filename) {
-    try {
-        const meta = await getMetadata(_archiveRef(filename));
-        return { size: meta.size, updated: meta.updated };
-    } catch (err) {
-        if (err?.code === 'storage/object-not-found') return null;
-        throw err;
-    }
 }

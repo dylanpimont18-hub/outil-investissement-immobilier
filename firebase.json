@@ -27,7 +27,6 @@
       "documents/**",
       "data/**",
       "scripts/**",
-      "Spark/**",
       "*.db",
       "*.log",
       "*.py",

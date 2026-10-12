@@ -1,6 +1,3 @@
-# Ancien dossier de l'exe de bureau (copies figées des .js) : à retirer une fois effacé du disque
-Spark/
-
 # Base de données locale
 scraper/biens.db
 

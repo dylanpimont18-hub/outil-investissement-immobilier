@@ -1,7 +1,3 @@
-# Ancien dossier de l'exe de bureau (supprimé avec le passage au tout-web) : à retirer d'ici
-# une fois le dossier effacé du disque — tant qu'il existe, il ne doit pas être versionné.
-Spark/
-
 # Secrets locaux
 config.py
 

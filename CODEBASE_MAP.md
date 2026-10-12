@@ -193,16 +193,15 @@ Règle pure de nommage des archives de l'export du portefeuille (aucun DOM, test
 
 ## cloud-store.js
 Couche cloud des données hors portefeuille (Firestore + Storage) : études du comparateur, réglages (`settings/{analysis|prefs|migration}`, `prefs`) et archives JSON du portefeuille (Storage `users/{uid}/archives/`). Wrapper fin, aucune logique métier. Importé par `main.js` et `owned-portfolio.js` (lecture seule : `scripts/controle-migration.mjs`). Tout vit sous `users/{uid}/`.
-Écrivains (`cloudSetStudy`, `cloudDeleteStudy`, `cloudSaveAnalysis`, `savePref`, `cloudSetSetting`) `async` : hors connexion ils rejettent au lieu de lever en synchrone ; `cloudListArchives` laisse remonter les erreurs `listAll` (l'export ne réutilise plus le nom du jour si la liste échoue).
+Écrivains (`cloudSetStudy`, `cloudDeleteStudy`, `cloudSaveAnalysis`, `savePref`) `async` : hors connexion ils rejettent au lieu de lever en synchrone ; `cloudListArchives` laisse remonter les erreurs `listAll` (l'export ne réutilise plus le nom du jour si la liste échoue).
 - `watchStudies(onChange, onError)` / `cloudSetStudy(id, record)` / `cloudDeleteStudy(id)` — une étude du comparateur par document (`users/{uid}/studies`)
 - `cloudGetAllStudies()` — lecture ponctuelle de toutes les études (migration), pas un abonnement
 - `watchAnalysis(onChange, onError)` / `cloudSaveAnalysis(patch)` — `settings/analysis` (étude en cours) ; `onChange(null)` tant que le document n'existe pas
 - `watchPrefs(onChange, onError)` / `savePref(patch)` — `settings/prefs` (préférences d'interface) ; `{}` tant que le document n'existe pas, écriture en `merge: true`
-- `cloudGetSetting(name)` / `cloudSetSetting(name, data, { merge })` — lecture/écriture ponctuelle d'un `settings/{name}` (ex. marqueur `migration`), `merge` par défaut `true`
+- `cloudGetSetting(name)` — lecture ponctuelle d'un `settings/{name}` (ex. marqueur `migration`, relu par scripts/controle-migration.mjs)
 - `cloudUploadArchive(filename, blobOrText)` — téléverse une archive JSON (Blob ou texte) dans `users/{uid}/archives/` (remplace le dossier `exports/` de l'ancien `server.py`)
 - `cloudListArchives()` — liste les archives avec taille et date, triées du plus récent au plus ancien
 - `cloudReadArchive(filename)` — télécharge une archive et renvoie son contenu parsé (JSON)
-- `cloudArchiveMeta(filename)` — `{size, updated}` d'une archive, ou `null` si elle n'existe pas
 
 ---
 
@@ -219,7 +218,7 @@ Bootstrap minimal pour `owned.html` — équivalent, pour le seul module portefe
 ---
 
 ## firebase.json / firestore.rules / storage.rules / .firebaserc
-Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, `scripts/`, `data/`, `Spark/` (ancien dossier de l'exe, tant qu'il reste sur le disque), `*.py` et `*.txt` — exclusions de la chaîne de build (`build/`, `dist/`, `*.bat`, `*.spec`, `*.zip`, `*.ico`, `geocache.json`) retirées le 2026-10-12 avec l'exe — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt). `/VERSION` est servi avec `Cache-Control: no-cache` et `Content-Type: text/plain` (2026-10-12, lu par l'application pour son numéro de version). `vendor/fonts/**` n'est PLUS dans `hosting.ignore` (2026-10-12) : les polices TTF (1,7 Mo) sont servies, les PDF décision/dossier bancaire déclarent des `@font-face` vers `/vendor/fonts/*.ttf`.
+Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-08-04 — Firestore + Storage + Hosting + Cloud Functions). `firebase.json` sert tout le dépôt en statique (`public: "."`) en excluant `tests/`, `docs/`, `exports/`, `documents/`, `functions/`, `scripts/`, `data/`, `*.py` et `*.txt` — exclusions de la chaîne de build (`build/`, `dist/`, `*.bat`, `*.spec`, `*.zip`, `*.ico`, `geocache.json`) retirées le 2026-10-12 avec l'exe — sécurité en profondeur en plus du `.gitignore` pour ne jamais exposer `config.py` (racine). Bloc `"functions": {"source": "functions"}` pointe vers `functions/index.js`. Les règles Firestore/Storage scopent tout sous `/users/{uid}/...` avec `request.auth.uid == uid` (compte unique). Déployer : `firebase deploy` (tout) ou `firebase deploy --only hosting` / `--only functions` (depuis la racine du projet, compte déjà connecté via `firebase login`). Secret `MAMMOUTH_API_KEY` (depuis le 2026-08-04, remplace `ANTHROPIC_API_KEY`) géré séparément via `firebase functions:secrets:set` (jamais dans ce dépôt). `/VERSION` est servi avec `Cache-Control: no-cache` et `Content-Type: text/plain` (2026-10-12, lu par l'application pour son numéro de version). `vendor/fonts/**` n'est PLUS dans `hosting.ignore` (2026-10-12) : les polices TTF (1,7 Mo) sont servies, les PDF décision/dossier bancaire déclarent des `@font-face` vers `/vendor/fonts/*.ttf`.
 
 ---
 

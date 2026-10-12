@@ -84,11 +84,9 @@ export function cloudSaveAnalysis(patch) { S.writes.push(['analysis']); S.settin
 export function watchPrefs(cb) { S.listeners.prefs.push(cb); setTimeout(() => cb(clone(S.settings.prefs || {})), 0); return () => {}; }
 export function savePref(patch) { S.writes.push(['prefs', Object.keys(patch).join(',')]); S.settings.prefs = { ...(S.settings.prefs || {}), ...clone(patch) }; notify('prefs', S.settings.prefs); return Promise.resolve(); }
 export async function cloudGetSetting(name) { return S.settings[name] ? clone(S.settings[name]) : null; }
-export async function cloudSetSetting(name, data, { merge = true } = {}) { S.writes.push(['setting', name]); S.settings[name] = merge ? { ...(S.settings[name] || {}), ...clone(data) } : clone(data); if (S.listeners[name]) notify(name, S.settings[name]); }
 export async function cloudUploadArchive(name, blobOrText) { if (S.failUploadArchive) { const e = new Error('storage/retry-limit-exceeded'); e.code = 'storage/retry-limit-exceeded'; throw e; } S.writes.push(['archive', name]); S.archives[name] = typeof blobOrText === 'string' ? blobOrText : await blobOrText.text(); }
 export async function cloudListArchives() { if (S.failListArchives) { const e = new Error('storage/unknown'); e.code = 'storage/unknown'; throw e; } return Object.keys(S.archives).sort().reverse().map(name => ({ name, size: S.archives[name].length, updated: '2026-10-11T10:00:00.000Z' })); }
 export async function cloudReadArchive(name) { if (!(name in S.archives)) { const e = new Error('storage/object-not-found'); e.code = 'storage/object-not-found'; throw e; } return JSON.parse(S.archives[name]); }
-export async function cloudArchiveMeta(name) { return name in S.archives ? { size: S.archives[name].length, updated: '2026-10-11T10:00:00.000Z' } : null; }
 `;
 
 // Espion : tout accès à localStorage/sessionStorage est journalisé avec sa pile. Le SDK Firebase
