@@ -12,7 +12,7 @@
 // de rendu par main.js.
 
 import {
-    computeOwnedAssetCF, computeOwnedAssetTimeline, computeAmortizationSchedule,
+    computeOwnedAssetCF, computeOwnedAssetTimeline,
     computePatrimoineNet, computeEndettementGlobal, computeCapaciteEmprunt, getOptimalRegime,
     computeRevenusLocatifsBruts, computeCompteResultat, computePortfolioAlerts,
     computeSimulationTravaux, computeCFBreakdown, computeRegimeComparison, resolveLoyerVacance,

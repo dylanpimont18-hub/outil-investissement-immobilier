@@ -103,6 +103,43 @@ const opts = { profileData, regime: 'reel', tmi: 30 };
     console.log('Test 5 OK — CF libellés par leur base, biens postérieurs exclus');
 }
 
+// --- Test 7 : bloc Fiscal en micro-foncier — abattement 30 %, aucune charge ni intérêt déductible ---
+{
+    const data = buildRapportAnnuelData([makeAsset()], A, { ...opts, regime: 'micro-foncier' });
+    const texte = buildRapportAnnuelTexte(data);
+    const bloc = texte.slice(texte.indexOf('FISCAL'), texte.indexOf('PAR BIEN'));
+    const recettes = data.fiscal.recettes;
+    assert.match(bloc, /Abattement forfaitaire 30 %/);
+    assert.match(bloc, new RegExp(`Base imposable \\(70 % des recettes\\)\\s*: ${Math.round(recettes * 0.7).toLocaleString('fr-FR')} €`));
+    for (const absent of [/Charges déductibles/, /intérêts et assurance d'emprunt/, /Résultat foncier/, /charge déductible/]) {
+        assert.ok(!absent.test(bloc), `micro-foncier : ${absent} ne doit pas apparaître`);
+    }
+    console.log('Test 7 OK — micro-foncier : recettes, abattement 30 %, base 70 %, pas de charges ni intérêts');
+}
+
+// --- Test 8 : bloc Fiscal en SCI-IS — base non calculée (pas d'amortissement), aucun chiffre ---
+{
+    const texte = buildRapportAnnuelTexte(buildRapportAnnuelData([makeAsset()], A, { ...opts, regime: 'sci-is' }));
+    const bloc = texte.slice(texte.indexOf('FISCAL'), texte.indexOf('PAR BIEN'));
+    assert.match(bloc, /Base imposable\s*: non calculée par l'application/);
+    assert.match(bloc, /amortissement/);
+    for (const absent of [/Charges déductibles/, /Résultat foncier/, /Abattement/, /Base imposable[^:]*:\s*[\d+-]/]) {
+        assert.ok(!absent.test(bloc), `SCI-IS : ${absent} ne doit pas apparaître`);
+    }
+    console.log('Test 8 OK — SCI-IS : base imposable non calculée, comme la modale Déclaration');
+}
+
+// --- Test 9 : foncier réel inchangé (charges déductibles, intérêts, résultat foncier) ---
+{
+    const texte = buildRapportAnnuelTexte(buildRapportAnnuelData([makeAsset()], A, opts));
+    const bloc = texte.slice(texte.indexOf('FISCAL'), texte.indexOf('PAR BIEN'));
+    for (const present of [/Charges déductibles/, /dont intérêts et assurance d'emprunt/, /Résultat foncier/, /Base imposable \(Foncier réel\)/]) {
+        assert.match(bloc, present);
+    }
+    assert.ok(!/Abattement/.test(bloc));
+    console.log('Test 9 OK — foncier réel : bloc inchangé');
+}
+
 // --- Test 6 : portefeuille vide ---
 {
     const texte = buildRapportAnnuelTexte(buildRapportAnnuelData([], A, opts));

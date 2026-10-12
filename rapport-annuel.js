@@ -10,8 +10,9 @@
 // les intérêts à la fois dans les charges (montants fiscaux) et dans les mensualités. Ici :
 //   - bloc TRÉSORERIE : loyers, charges payées, mensualités payées, frais ponctuels payés cash,
 //     impôt → la somme des lignes = CF de l'année (computeOwnedAssetTimeline) ;
-//   - bloc FISCAL : recettes, charges déductibles (dont intérêts), résultat foncier
-//     (computeCompteResultat) ;
+//   - bloc FISCAL (computeCompteResultat), selon le régime : réel → recettes, charges déductibles
+//     (dont intérêts), résultat foncier ; micro-foncier → recettes, abattement 30 %, base 70 % ;
+//     SCI-IS → base non calculée (amortissement non géré, comme la modale Déclaration) ;
 //   - CRD = échéancier à la fin de l'année du rapport ; patrimoine « non renseigné » sans valeur ;
 //   - chaque CF dit sa base (année civile ÷ 12, ou rythme actuel du mois en cours).
 import {
@@ -136,12 +137,28 @@ export function buildRapportAnnuelTexte(data) {
     L.push('');
 
     L.push(`FISCAL ${annee} (déclaration, régime ${data.regimeLabel})`);
-    L.push(ligne('Recettes brutes', eur(f.recettes)));
-    L.push(ligne('Charges déductibles', eur(-f.chargesDeductibles)));
-    L.push(ligne("  dont intérêts et assurance d'emprunt", eur(-f.interetsEtAssurance)));
-    L.push(ligne('Résultat foncier (recettes − charges)', eurSigned(f.resultatFoncier)));
-    L.push(ligne(`Base imposable (${data.regimeLabel})`, eur(f.baseImposable)));
-    L.push('  Les intérêts figurent ici comme charge déductible ; en trésorerie, ils sont dans les mensualités.');
+    if (data.regime === 'micro-foncier') {
+        // Micro-foncier : aucune charge réelle (ni intérêts) n'est déductible, l'abattement
+        // forfaitaire de 30 % les remplace ; base imposable = 70 % des recettes.
+        L.push(ligne('Recettes brutes', eur(f.recettes)));
+        L.push(ligne('Abattement forfaitaire 30 %', eur(-f.recettes * 0.3)));
+        L.push(ligne('Base imposable (70 % des recettes)', eur(f.recettes * 0.7)));
+        L.push('  En micro-foncier, les charges réelles et les intérêts ne sont pas déductibles (abattement forfaitaire).');
+    } else if (data.regime === 'sci-is') {
+        // SCI-IS : comme la modale Déclaration fiscale, pas de base chiffrée sans l'amortissement
+        // comptable de l'immeuble, que l'application ne calcule pas.
+        L.push(ligne('Recettes brutes', eur(f.recettes)));
+        L.push(ligne('Base imposable', "non calculée par l'application"));
+        L.push("  SCI-IS : le résultat imposable (formulaire 2065 et liasse comptable) dépend de l'amortissement");
+        L.push("  comptable de l'immeuble, que l'application ne calcule pas ; un expert-comptable est recommandé.");
+    } else {
+        L.push(ligne('Recettes brutes', eur(f.recettes)));
+        L.push(ligne('Charges déductibles', eur(-f.chargesDeductibles)));
+        L.push(ligne("  dont intérêts et assurance d'emprunt", eur(-f.interetsEtAssurance)));
+        L.push(ligne('Résultat foncier (recettes − charges)', eurSigned(f.resultatFoncier)));
+        L.push(ligne(`Base imposable (${data.regimeLabel})`, eur(f.baseImposable)));
+        L.push('  Les intérêts figurent ici comme charge déductible ; en trésorerie, ils sont dans les mensualités.');
+    }
     L.push('');
 
     L.push('PAR BIEN');
