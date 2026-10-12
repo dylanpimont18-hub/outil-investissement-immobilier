@@ -9,12 +9,17 @@ import {
 // le MÊME déficit imputable sur le revenu global et le MÊME déficit reportable.
 //
 // Constat sur le bien réel (achat 08/2026) : 2044 → reportable 1 421 € (case 439) / imputable
-// 8 577 € (case 436) ; fiche et Impôts à venir → 1 231 € / 8 747 €. Deux causes :
-//   - l'assurance emprunteur (≈ 190 € sur 5 mois) : la 2044 la met en case 250 avec les intérêts
-//     (seulement reportable, art. 156 I 3° CGI), les deux autres écrans la rangeaient dans les
-//     charges « hors intérêts » (donc imputable sur les salaires) ;
+// 8 577 € (case 436) ; fiche et Impôts à venir → 1 231 € / 8 747 €. Écarts entre écrans :
+//   - l'assurance emprunteur (≈ 190 € sur 5 mois) : la 2044 la met en case 250 avec les intérêts,
+//     les deux autres écrans la rangeaient dans les autres charges ;
 //   - le forfait de 20 €/local (case 222) : absent de la fiche et de la projection.
 // 190 − 20 = 170 € de répartition décalée, 20 € d'écart de total.
+//
+// Revue (fix round 1) : les TROIS écrans appliquaient en plus la priorité à l'envers. Règle (art.
+// 156 I 3° CGI, BOI-RFPI-BASE-30-20-10, notice 2044 lignes 420-440) : la case 250 (intérêts,
+// assurance emprunteur, frais d'emprunt) s'impute EN PREMIER sur les loyers ; seule sa part non
+// couverte, max(0, case 250 − loyers), est un déficit « d'origine intérêts », reportable 10 ans.
+// Le reste du déficit s'impute sur le revenu global jusqu'à 10 700 €, l'excédent est reporté.
 
 const currentYear = new Date().getFullYear();
 const profileData = { income: 60000, adults: 2, children: 0 };
@@ -37,58 +42,92 @@ function bienReel() {
     };
 }
 
-// --- Test 1 : les trois écrans donnent la même répartition pour l'année d'achat ---
-{
-    const asset = bienReel();
-    const decl = computeDeclaration2044([asset], currentYear, profileData);
-    const ligne = decl.lignes[0];
-    assert.ok(decl.deficit, 'la 2044 doit constater un déficit');
-    assert.equal(ligne.case222, 20, 'forfait frais de gestion 20 €/local');
-    assert.ok(ligne.case250 > 1300 && ligne.case250 < 1500, `intérêts + assurance plausibles (${ligne.case250})`);
-
-    // Règle (art. 156 I 3° CGI) : la part due aux intérêts (case 250) n'est que reportable ; le
-    // reste (déficit hors intérêts, ici < 10 700 €) s'impute sur le revenu global.
-    const horsInterets = -(ligne.case211 - ligne.chargesHorsInterets);
-    assert.equal(decl.deficit.imputableRevenuGlobal, Math.round(horsInterets));
-    assert.equal(decl.deficit.reportFoncier10ans, ligne.case250);
-    assert.equal(decl.deficit.totalDeficit, decl.deficit.imputableRevenuGlobal + decl.deficit.reportFoncier10ans);
-
-    const fiche = computeDeficitFoncierHistorique(asset, profileData);
-    const ligneFiche = fiche.lignes.find(l => l.annee === currentYear);
-    assert.ok(ligneFiche, 'la fiche doit créer une ligne de déficit pour l\'année d\'achat');
-    assert.equal(ligneFiche.montantInitial, decl.deficit.reportFoncier10ans,
-        `fiche « Stock reportable » ${ligneFiche.montantInitial} € ≠ 2044 case 439 ${decl.deficit.reportFoncier10ans} €`);
-    assert.equal(fiche.stockTotal, decl.deficit.reportFoncier10ans);
-
-    const proj = computeProjectionImpotsFoyer([asset], profileData, { anneeDebut: currentYear, horizon: 3 });
-    const y0 = proj.years.find(r => r.annee === currentYear);
-    assert.equal(y0.imputeRevenuGlobal, decl.deficit.imputableRevenuGlobal,
-        `Impôts à venir « Déduits des salaires » ${y0.imputeRevenuGlobal} € ≠ 2044 case 436 ${decl.deficit.imputableRevenuGlobal} €`);
-    assert.equal(y0.deficitReporte, decl.deficit.reportFoncier10ans,
-        `Impôts à venir « reporté » ${y0.deficitReporte} € ≠ 2044 case 439 ${decl.deficit.reportFoncier10ans} €`);
-    assert.equal(y0.resultatFoncier, decl.case420, 'même résultat foncier total (forfait 20 € compris)');
-    assert.equal(y0.loyers, ligne.case211);
-    assert.equal(y0.interets, ligne.case250, 'intérêts de la projection = case 250 (assurance emprunteur comprise)');
-    assert.equal(y0.stockFin, decl.deficit.reportFoncier10ans);
-    console.log(`Test 1 OK — 2044, fiche et Impôts à venir : imputable ${decl.deficit.imputableRevenuGlobal} €, reportable ${decl.deficit.reportFoncier10ans} €, total ${decl.deficit.totalDeficit} €`);
+// Bien sans crédit, une année pleine (année − 1, acheté en janvier de l'année − 2) : loyers annuels
+// `loyers`, autres charges = forfait 20 € + travaux (autres − 20), case 250 = frais d'emprunt.
+function bienSimple({ loyers, autres, interets }) {
+    const annee = currentYear - 1;
+    return {
+        annee,
+        asset: {
+            id: 'simple', nom: 'Simple', dateAchat: `${currentYear - 2}-01`,
+            acquisition: { prix: 100000, fraisAgence: 0, fraisNotaire: 0, loyerInitial: loyers / 12, credit: { montant: 0, duree: 0, taux: 0, assurance: 0 } },
+            postAchat: {
+                taxeFonciere: 0, chargesCopro: 0, gestionLocative: 0, assurancePNO: 0, vacance: 0,
+                travaux: [
+                    { id: 'w', date: `${annee}-04-01`, montant: autres - 20, tag: 'deductible', description: 'Travaux' },
+                    { id: 'e', date: `${annee}-04-01`, montant: interets, tag: 'frais-emprunt', description: 'Frais de garantie' },
+                ],
+                chargesAnnuelles: [], notes: [],
+            },
+        },
+    };
 }
 
-// --- Test 2 : déficit hors intérêts au-delà du plafond — l'excédent rejoint le report partout ---
+// Les trois écrans pour un bien et une année : { total, imputable, reportable } de chacun.
+function troisEcrans(asset, annee) {
+    const decl = computeDeclaration2044([asset], annee, profileData);
+    const fiche = computeDeficitFoncierHistorique(asset, profileData);
+    const ligneFiche = fiche.lignes.find(l => l.annee === annee);
+    const y = computeProjectionImpotsFoyer([asset], profileData, { anneeDebut: annee, horizon: 1 }).years.find(r => r.annee === annee);
+    return {
+        decl, ligne: decl.lignes[0], y,
+        declaration: { total: decl.deficit?.totalDeficit ?? 0, imputable: decl.deficit?.imputableRevenuGlobal ?? 0, reportable: decl.deficit?.reportFoncier10ans ?? 0 },
+        ficheReportable: ligneFiche ? ligneFiche.montantInitial : 0,
+        projection: { total: -Math.min(0, y.resultatFoncier), imputable: y.imputeRevenuGlobal, reportable: y.deficitReporte },
+    };
+}
+function attendre(r, { total, imputable, reportable }, nom) {
+    assert.deepEqual(r.declaration, { total, imputable, reportable }, `${nom} : déclaration 2044`);
+    assert.deepEqual(r.projection, { total, imputable, reportable }, `${nom} : Impôts à venir`);
+    assert.equal(r.ficheReportable, reportable, `${nom} : fiche « Déficits fonciers reportables »`);
+}
+
+// --- Test 1 : bien réel — intérêts couverts par les loyers, tout le déficit est imputable ---
+// loyers 3 375 ; autres charges 11 713 (forfait 20 + TF 143 + PNO 29 + travaux 11 521) ; case 250
+// 1 421 < 3 375 → aucune part « intérêts » ; déficit 11 713 + 1 421 − 3 375 = 9 759 < 10 700 →
+// 9 759 imputables sur le revenu global, 0 reportable.
+{
+    const r = troisEcrans(bienReel(), currentYear);
+    assert.equal(r.ligne.case211, 3375);
+    assert.equal(r.ligne.case222, 20, 'forfait frais de gestion 20 €/local');
+    assert.equal(r.ligne.chargesHorsInterets, 11713);
+    assert.equal(r.ligne.case250, 1421, 'intérêts + assurance emprunteur (case 250)');
+    attendre(r, { total: 9759, imputable: 9759, reportable: 0 }, 'bien réel');
+    assert.equal(r.y.resultatFoncier, r.decl.case420, 'même résultat foncier total (forfait 20 € compris)');
+    assert.equal(r.y.interets, r.ligne.case250, 'intérêts de la projection = case 250 (assurance emprunteur comprise)');
+    assert.equal(computeDeficitFoncierHistorique(bienReel(), profileData).stockTotal, 0);
+    console.log('Test 1 OK — bien réel : 9 759 € imputables, 0 € reportable, identique sur les trois écrans');
+}
+
+// --- Test 2 : déficit au-delà du plafond — l'excédent est reporté (mêmes chiffres sous les deux lectures) ---
+// autres charges 11 713 − 11 521 + 25 000 = 25 192 ; déficit 25 192 + 1 421 − 3 375 = 23 238 →
+// 10 700 imputables, 12 538 reportables.
 {
     const asset = bienReel();
     asset.postAchat.travaux[0].montant = 25000;
-    const decl = computeDeclaration2044([asset], currentYear, profileData);
-    assert.equal(decl.deficit.imputableRevenuGlobal, 10700);
-    const fiche = computeDeficitFoncierHistorique(asset, profileData);
-    const proj = computeProjectionImpotsFoyer([asset], profileData, { anneeDebut: currentYear, horizon: 2 });
-    const y0 = proj.years.find(r => r.annee === currentYear);
-    assert.equal(fiche.lignes.find(l => l.annee === currentYear).montantInitial, decl.deficit.reportFoncier10ans);
-    assert.equal(y0.imputeRevenuGlobal, 10700);
-    assert.equal(y0.deficitReporte, decl.deficit.reportFoncier10ans);
-    console.log(`Test 2 OK — au-delà du plafond : reportable ${decl.deficit.reportFoncier10ans} € identique sur les trois écrans`);
+    attendre(troisEcrans(asset, currentYear), { total: 23238, imputable: 10700, reportable: 12538 }, 'au-delà du plafond');
+    console.log('Test 2 OK — au-delà du plafond : 10 700 € imputables, 12 538 € reportables sur les trois écrans');
 }
 
-// --- Test 3 : la SCI à l'IS ne reçoit pas le forfait 20 € (propre aux revenus fonciers) ---
+// --- Test 3 : intérêts supérieurs aux loyers, sous le plafond ---
+// loyers 1 000, case 250 2 000, autres charges 5 000 → déficit 6 000 ; part intérêts 2 000 − 1 000
+// = 1 000 reportable ; 5 000 imputables.
+{
+    const { asset, annee } = bienSimple({ loyers: 1000, autres: 5000, interets: 2000 });
+    attendre(troisEcrans(asset, annee), { total: 6000, imputable: 5000, reportable: 1000 }, 'intérêts > loyers');
+    console.log('Test 3 OK — intérêts > loyers : 5 000 € imputables, 1 000 € reportables');
+}
+
+// --- Test 4 : autres charges sous les loyers, les intérêts font basculer en déficit ---
+// loyers 6 000, autres charges 5 000, case 250 2 000 → déficit 1 000 ; intérêts couverts par les
+// loyers → 1 000 imputables, 0 reportable.
+{
+    const { asset, annee } = bienSimple({ loyers: 6000, autres: 5000, interets: 2000 });
+    attendre(troisEcrans(asset, annee), { total: 1000, imputable: 1000, reportable: 0 }, 'bascule par les intérêts');
+    console.log('Test 4 OK — bascule par les intérêts : 1 000 € imputables, 0 € reportable');
+}
+
+// --- Test 5 : la SCI à l'IS ne reçoit pas le forfait 20 € (propre aux revenus fonciers) ---
 // L'assurance emprunteur passe des charges aux intérêts : le total charges + intérêts de la SCI
 // est inchangé, le forfait ne s'y ajoute pas.
 {
@@ -99,7 +138,7 @@ function bienReel() {
     const y0 = regimes.years.find(r => r.annee === currentYear);
     const chargesReelles = l.chargesHorsInterets - l.case222 + l.case250;
     assert.equal(y0.sciIs.resultat, Math.round(l.case211 - chargesReelles - y0.sciIs.amortissement));
-    console.log('Test 3 OK — SCI-IS : charges réelles + intérêts, sans le forfait 20 € des revenus fonciers');
+    console.log('Test 5 OK — SCI-IS : charges réelles + intérêts, sans le forfait 20 € des revenus fonciers');
 }
 
 console.log('\nTous les tests de cohérence du déficit foncier passent.');

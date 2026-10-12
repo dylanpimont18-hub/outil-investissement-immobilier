@@ -3,9 +3,9 @@ import { computeProjectionImpotsFoyer, computeImpotFoyer } from '../calculs.js';
 
 // Projection des impôts du foyer sur les années à venir, en fonction des travaux déductibles.
 // Mécanisme (art. 156 I 3° CGI, régime foncier réel) :
-//   - un déficit foncier HORS intérêts s'impute sur le revenu global (salaires) à hauteur de
-//     10 700 €/an — « déduction des salaires » ;
-//   - l'excédent, et la part du déficit due aux intérêts d'emprunt, se reportent sur les revenus
+//   - les intérêts d'emprunt (case 250) s'imputent d'abord sur les loyers ; le reste du déficit
+//     s'impute sur le revenu global (salaires) à hauteur de 10 700 €/an — « déduction des salaires » ;
+//   - l'excédent, et la part des intérêts non couverte par les loyers, se reportent sur les revenus
 //     fonciers des 10 années suivantes (FIFO) — « déduction des loyers » ;
 //   - l'impôt de chaque année est celui du foyer entier (IR au barème + prélèvements sociaux
 //     17,2 % sur le revenu foncier imposable), calculé par computeImpotFoyer.
@@ -100,9 +100,9 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     console.log(`Test 2 OK — 20 000 € de travaux : 10 700 € déduits des salaires, 3 320 € reportés ; économie totale ${proj.totaux.economie} €`);
 }
 
-// --- Test 3 : la part du déficit due aux intérêts d'emprunt n'est jamais déduite des salaires ---
-// Crédit à taux non nul : intérêts > 0. loyers 6 000 − forfait 20 − travaux 20 000 = −14 020 hors
-// intérêts → 10 700 imputés ; le reste (3 320) ET la totalité des intérêts partent en report.
+// --- Test 3 : crédit avec intérêts couverts par les loyers, déficit au-delà du plafond ---
+// Intérêts I (≈ 2 600) < loyers 6 000 : imputés d'abord sur les loyers, aucune part « intérêts ».
+// Déficit = 20 020 + I − 6 000 = 14 020 + I → 10 700 imputés, le reste (3 320 + I) reporté.
 {
     const asset = makeAsset({
         dateAchat: `${currentYear - 3}-01`, loyer: 500,
@@ -114,8 +114,8 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     assert.ok(y0.interets > 2000 && y0.interets < 3000, `intérêts de l'année plausibles pour 100 k€ à 3 % en 4e année (${y0.interets})`);
     assert.equal(y0.imputeRevenuGlobal, 10700);
     assert.equal(y0.resultatFoncier, 6000 - 20 - 20000 - y0.interets);
-    assert.equal(y0.deficitReporte, 3320 + y0.interets, 'report = excédent hors intérêts + intérêts');
-    console.log(`Test 3 OK — intérêts (${y0.interets} €) reportés sur les loyers, jamais déduits des salaires`);
+    assert.equal(y0.deficitReporte, 3320 + y0.interets, 'report = déficit total − plafond 10 700');
+    console.log(`Test 3 OK — intérêts (${y0.interets} €) couverts par les loyers, déficit au-delà du plafond reporté`);
 }
 
 // --- Test 4 : travaux simulés (pas encore saisis) une année future ---

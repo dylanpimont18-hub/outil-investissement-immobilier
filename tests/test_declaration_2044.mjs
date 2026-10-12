@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
     computeDeclaration2044, computeCompteResultat, computeOwnedAssetTimeline, computeOwnedAssetCF,
-    estFraisDeductible, NATURES_FRAIS_DEDUCTIBLES,
+    estFraisDeductible, NATURES_FRAIS_DEDUCTIBLES, resolveTmiFoyer,
 } from '../calculs.js';
 
 // B9 (bilan 2026-10-12) : deux natures de frais en plus de « déductible » (travaux, case 224) —
@@ -62,15 +62,33 @@ const frais = (tag, montant, mois = '03', an = annee) => ({ id: `${tag}-${montan
     console.log(`Test 3 OK — frais d'emprunt 2 000 € : case 250 = ${l.case250} € (dont ${base.case250} € intérêts + assurance)`);
 }
 
-// --- Test 4 : les frais d'emprunt suivent la règle des intérêts pour le déficit (reportables) ---
+// --- Test 4 : les frais d'emprunt suivent la règle des intérêts pour le déficit ---
+// Art. 156 I 3° CGI : la case 250 (intérêts + assurance + frais d'emprunt) s'impute d'abord sur les
+// loyers ; seule sa part non couverte est reportable. Loyers 8 400 ; autres charges = forfait 20 +
+// TF 342 + PNO 69 + travaux 1 000 = 1 431 ; case 250 = intérêts + assurance (I) + 9 000 de frais
+// d'emprunt. Part intérêts = I + 9 000 − 8 400 ; imputable = les 1 431 d'autres charges.
 {
-    const asset = makeAsset([frais('deductible', 15000), frais('frais-emprunt', 2000)]);
+    const asset = makeAsset([frais('deductible', 1000), frais('frais-emprunt', 9000)]);
     const d = computeDeclaration2044([asset], annee, profileData);
     const l = d.lignes[0];
+    assert.equal(l.case211, 8400);
+    assert.equal(l.chargesHorsInterets, 1431);
+    assert.ok(l.case250 > 9000 + 2000, `case 250 = intérêts + assurance + 9 000 (${l.case250})`);
     assert.ok(d.deficit);
-    assert.equal(d.deficit.imputableRevenuGlobal, Math.min(10700, l.chargesHorsInterets - l.case211));
-    assert.ok(d.deficit.reportFoncier10ans >= l.case250, 'toute la case 250 (frais d\'emprunt compris) est reportable');
-    console.log(`Test 4 OK — déficit : imputable ${d.deficit.imputableRevenuGlobal} €, reportable ${d.deficit.reportFoncier10ans} € (case 250 ${l.case250} €)`);
+    assert.equal(d.deficit.reportFoncier10ans, l.case250 - 8400, "part non couverte de la case 250 (frais d'emprunt compris) : reportable");
+    assert.equal(d.deficit.imputableRevenuGlobal, 1431, 'autres charges : imputables sur le revenu global');
+
+    // Compte de résultat (réel) : l'économie d'impôt estimée ne porte que sur la part imputable
+    // (1 411 € : le compte de résultat ne déduit pas le forfait de 20 € propre à la 2044).
+    const cr = computeCompteResultat(asset, annee, profileData, 'reel');
+    const tmi = resolveTmiFoyer(profileData, annee);
+    assert.ok(Math.abs(cr.impots + 1411 * tmi / 100) <= 1, `impôt du compte de résultat = −1 411 × TMI (${cr.impots})`);
+
+    // Intérêts + frais d'emprunt couverts par les loyers : tout le déficit (sous 10 700 €) est imputable.
+    const couvert = computeDeclaration2044([makeAsset([frais('deductible', 8000), frais('frais-emprunt', 2000)])], annee, profileData).deficit;
+    assert.equal(couvert.reportFoncier10ans, 0);
+    assert.equal(couvert.imputableRevenuGlobal, couvert.totalDeficit);
+    console.log(`Test 4 OK — frais d'emprunt dans la case 250 : imputable ${d.deficit.imputableRevenuGlobal} €, reportable ${d.deficit.reportFoncier10ans} € (case 250 ${l.case250} €)`);
 }
 
 // --- Test 5 : compte de résultat — charges déductibles, impôt, trésorerie ---

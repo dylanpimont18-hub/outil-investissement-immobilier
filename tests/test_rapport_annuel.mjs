@@ -54,7 +54,7 @@ const opts = { profileData, regime: 'reel', tmi: 30 };
     const data = buildRapportAnnuelData([asset], A, opts);
     const cr = computeCompteResultat(asset, A, profileData, 'reel');
     assert.equal(data.fiscal.chargesDeductibles, cr.chargesDeductibles);
-    assert.equal(data.fiscal.interetsEtAssurance, cr.interetsAnnee + cr.assuranceAnnee);
+    assert.equal(data.fiscal.interetsEtAssurance, cr.interetsAnnee + cr.assuranceAnnee + cr.fraisEmprunt);
     const texte = buildRapportAnnuelTexte(data);
     const blocTreso = texte.slice(texte.indexOf('TRÉSORERIE'), texte.indexOf('FISCAL'));
     assert.ok(!/Charges déductibles/.test(blocTreso), 'les charges déductibles (avec intérêts) ne sont pas dans la trésorerie');

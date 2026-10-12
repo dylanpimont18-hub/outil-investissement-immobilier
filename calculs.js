@@ -2413,10 +2413,11 @@ export function computeCompteResultat(asset, annee, profileData, regime) {
             impots = resultatFoncier * tauxGlobal;
         } else {
             baseImposable = 0;
-            // Seule la part hors case 250 (intérêts + assurance emprunteur + frais d'emprunt)
-            // s'impute sur le revenu global (art. 156 I 3° CGI, même règle que la 2044).
-            const defHorsInt = Math.min(0, recettesBrutes - (chargesDeductibles - interetsAnnee - assuranceAnnee - fraisEmprunt));
-            impots = -(Math.min(10700, Math.abs(defHorsInt)) * (tmi / 100));
+            // Même répartition que la 2044 (repartirDeficitFoncier, art. 156 I 3° CGI) : la case 250
+            // (intérêts + assurance emprunteur + frais d'emprunt) s'impute d'abord sur les loyers.
+            const case250 = interetsAnnee + assuranceAnnee + fraisEmprunt;
+            const { imputableRevenuGlobal } = repartirDeficitFoncier(recettesBrutes, chargesDeductibles - case250, case250);
+            impots = -(imputableRevenuGlobal * (tmi / 100));
         }
     } else {
         resultatFoncier = recettesBrutes - chargesDeductibles;
@@ -2461,7 +2462,10 @@ export function computeCompteResultat(asset, annee, profileData, regime) {
 // (computeCompteResultat). Mapping de cases vérifié sur la notice officielle 2044-NOT-SD (DGFiP, éd. 2026) :
 // 211 loyers bruts, 221 gestion/agence, 222 forfait frais de gestion (20€/local, valeur fixe légale),
 // 223 assurance PNO, 224 travaux déductibles, 227 taxe foncière, 229 charges de copropriété,
-// 250 intérêts d'emprunt + assurance crédit, 263 résultat par immeuble, 420 résultat total.
+// 250 intérêts d'emprunt + assurance crédit + frais d'emprunt, 263 résultat par immeuble, 420 résultat
+// total. Déficit (lignes 430-440 → 2042 cases 4BB/4BC) : voir repartirDeficitFoncier — corrigé le
+// 2026-10-12 (B8, revue) : l'ancien code imputait les intérêts en dernier au lieu de les imputer en
+// priorité sur les loyers, et reportait donc à tort toute la case 250 dès qu'il y avait un déficit.
 // Ceci reste un calcul indicatif — cf. avertissement à afficher côté UI, ne remplace pas un professionnel.
 const PLAFOND_DEFICIT_REVENU_GLOBAL = 10700;
 const FORFAIT_FRAIS_GESTION_PAR_LOCAL = 20;
@@ -2495,17 +2499,18 @@ function lignes2044Bien(asset, annee, profileData) {
     };
 }
 
-// Répartition d'un déficit foncier (art. 156 I 3° CGI) : la part hors intérêts (case 250 exclue)
-// s'impute sur le revenu global dans la limite de 10 700 € ; l'excédent et la part due aux
-// intérêts d'emprunt ne s'imputent que sur les revenus fonciers des 10 années suivantes.
-// Retourne des zéros si le résultat n'est pas déficitaire.
-function repartirDeficitFoncier(resultatAvantInterets, interets) {
-    const resultat = resultatAvantInterets - interets;
-    if (!(resultat < 0)) return { deficit: 0, imputableRevenuGlobal: 0, reportable: 0 };
-    const imputableRevenuGlobal = resultatAvantInterets < 0
-        ? Math.min(PLAFOND_DEFICIT_REVENU_GLOBAL, -resultatAvantInterets)
-        : 0;
-    return { deficit: -resultat, imputableRevenuGlobal, reportable: -resultat - imputableRevenuGlobal };
+// Répartition d'un déficit foncier (art. 156 I 3° CGI, BOI-RFPI-BASE-30-20-10, notice 2044 lignes
+// 420 à 440) : les intérêts d'emprunt et frais assimilés (case 250) s'imputent EN PRIORITÉ sur les
+// loyers. Seule leur part non couverte, max(0, case 250 − loyers), forme le déficit « d'origine
+// intérêts », reportable sur les revenus fonciers des 10 années suivantes. Le reste du déficit
+// (autres charges) s'impute sur le revenu global dans la limite de 10 700 € ; l'excédent est
+// reportable 10 ans. Retourne des zéros si le résultat n'est pas déficitaire.
+function repartirDeficitFoncier(recettes, chargesHorsInterets, interets) {
+    const deficit = chargesHorsInterets + interets - recettes;
+    if (!(deficit > 0)) return { deficit: 0, imputableRevenuGlobal: 0, reportable: 0, partInterets: 0 };
+    const partInterets = Math.max(0, interets - recettes);
+    const imputableRevenuGlobal = Math.min(PLAFOND_DEFICIT_REVENU_GLOBAL, deficit - partInterets);
+    return { deficit, imputableRevenuGlobal, reportable: deficit - imputableRevenuGlobal, partInterets };
 }
 
 export function computeDeclaration2044(assets, annee, profileData) {
@@ -2518,7 +2523,7 @@ export function computeDeclaration2044(assets, annee, profileData) {
 
     let deficit = null;
     if (case420 < 0) {
-        const rep = repartirDeficitFoncier(totalRecettes - totalChargesHorsInterets, totalInterets);
+        const rep = repartirDeficitFoncier(totalRecettes, totalChargesHorsInterets, totalInterets);
         deficit = {
             totalDeficit: Math.round(-case420),
             imputableRevenuGlobal: Math.round(rep.imputableRevenuGlobal),
@@ -2604,7 +2609,7 @@ export function computeDeficitFoncierHistorique(asset, profileData) {
                 restantAAbsorber -= absorbe;
             }
         } else {
-            const { reportable } = repartirDeficitFoncier(l.case211 - l.chargesHorsInterets, l.case250);
+            const { reportable } = repartirDeficitFoncier(l.case211, l.chargesHorsInterets, l.case250);
             if (reportable > 0) lignes.push({ annee: y, montantInitial: reportable, utilise: 0 });
         }
     }
@@ -2772,10 +2777,11 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
 // sont déductibles et où le déficit foncier existe, quel que soit le régime actuellement suivi
 // (même convention que computeDeficitFoncierHistorique) :
 //   - résultat foncier = loyers − charges déductibles − intérêts − travaux déductibles ;
-//   - déficit HORS intérêts : imputé sur le revenu global (salaires) jusqu'à 10 700 €/an
-//     (« déduction des salaires », art. 156 I 3° CGI) ;
-//   - excédent au-delà du plafond + part due aux intérêts : reportés sur les revenus fonciers des
-//     10 années suivantes, consommés par ordre d'ancienneté (« déduction des loyers ») ;
+//   - répartition du déficit = repartirDeficitFoncier (art. 156 I 3° CGI) : les intérêts (case 250)
+//     s'imputent d'abord sur les loyers ; le reste du déficit s'impute sur le revenu global
+//     (salaires) jusqu'à 10 700 €/an (« déduction des salaires ») ;
+//   - excédent au-delà du plafond + part des intérêts non couverte par les loyers : reportés sur les
+//     revenus fonciers des 10 années suivantes, par ordre d'ancienneté (« déduction des loyers ») ;
 //   - impôt de l'année = IR au barème progressif du foyer + prélèvements sociaux 17,2 % sur le
 //     revenu foncier imposable (computeImpotFoyer, revenu salarial historisé de l'année).
 // Deux scénarios sont calculés avec le même moteur : « avec » (travaux déductibles saisis à partir
@@ -2876,7 +2882,7 @@ function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map
             }
             revenuFoncierImposable = reste;
         } else if (resultatFoncier < 0) {
-            const rep = repartirDeficitFoncier(resultatAvantInterets, agg.interets);
+            const rep = repartirDeficitFoncier(agg.loyers, agg.chargesHorsTravaux + travaux, agg.interets);
             imputeRevenuGlobal = rep.imputableRevenuGlobal;
             deficitReporte = rep.reportable;
             if (deficitReporte > 0) stock.push({ annee: y, restant: deficitReporte });

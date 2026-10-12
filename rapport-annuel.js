@@ -58,7 +58,8 @@ export function buildRapportAnnuelData(assets, annee, { profileData = {}, regime
         const cr = computeCompteResultat(asset, annee, profileData, regime);
         fiscal.recettes += cr.recettesBrutes;
         fiscal.chargesDeductibles += cr.chargesDeductibles;
-        fiscal.interetsEtAssurance += cr.interetsAnnee + cr.assuranceAnnee;
+        // Case 250 : intérêts + assurance emprunteur + frais d'emprunt (garantie, courtage, dossier).
+        fiscal.interetsEtAssurance += cr.interetsAnnee + cr.assuranceAnnee + cr.fraisEmprunt;
         fiscal.resultatFoncier += cr.resultatFoncier;
         fiscal.baseImposable += cr.baseImposable;
 

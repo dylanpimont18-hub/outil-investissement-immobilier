@@ -604,7 +604,9 @@ function openCompteResultatModal(assetId) {
                 <div class="cr-row cr-row--total"><span>Charges ${regime === 'micro-foncier' ? 'réelles' : 'déductibles'}</span><span>${cr.chargesDeductibles.toLocaleString('fr-FR')} €</span></div>
                 ${cr.interetsAnnee > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Intérêts d'emprunt</span><span>${cr.interetsAnnee.toLocaleString('fr-FR')} €</span></div>` : ''}
                 ${cr.assuranceAnnee > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Assurance crédit</span><span>${cr.assuranceAnnee.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.fraisEmprunt > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Frais d'emprunt (garantie, courtage, dossier)</span><span>${cr.fraisEmprunt.toLocaleString('fr-FR')} €</span></div>` : ''}
                 ${cr.taxeFonciere > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Taxe foncière</span><span>${cr.taxeFonciere.toLocaleString('fr-FR')} €</span></div>` : ''}
+                ${cr.taxeFonciereFrais > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Taxe foncière (frais saisis)</span><span>${cr.taxeFonciereFrais.toLocaleString('fr-FR')} €</span></div>` : ''}
                 ${cr.chargesCopro > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Charges copro</span><span>${cr.chargesCopro.toLocaleString('fr-FR')} €</span></div>` : ''}
                 ${cr.assurancePNO > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Assurance PNO</span><span>${cr.assurancePNO.toLocaleString('fr-FR')} €</span></div>` : ''}
                 ${cr.gestionLocative > 0 ? `<div class="cr-row cr-row--sub"><span>&nbsp;&nbsp;Gestion locative</span><span>${cr.gestionLocative.toLocaleString('fr-FR')} €</span></div>` : ''}
@@ -829,7 +831,7 @@ function openProjectionImpotsModal(assetId = null) {
             foncier.push(ligne('Report des années précédentes utilisé', r.reportUtilise ? `−${fmt(r.reportUtilise)}` : '—'));
             foncier.push(ligne('Revenu foncier imposable', fmt(r.revenuFoncierImposable), 'projection-ledger__row--total'));
         } else {
-            foncier.push(ligne(`Déduit des salaires <small>plafond ${fmt(proj.plafondRevenuGlobal)}, hors intérêts</small>`, r.imputeRevenuGlobal ? fmt(r.imputeRevenuGlobal) : '—'));
+            foncier.push(ligne(`Déduit des salaires <small>plafond ${fmt(proj.plafondRevenuGlobal)}, intérêts imputés d'abord sur les loyers</small>`, r.imputeRevenuGlobal ? fmt(r.imputeRevenuGlobal) : '—'));
             foncier.push(ligne('Reporté sur les loyers des 10 années suivantes', r.deficitReporte ? fmt(r.deficitReporte) : '—'));
         }
         if (r.deficitPerdu) foncier.push(ligne('Report ancien expiré cette année', fmt(r.deficitPerdu), 'negative'));
@@ -949,7 +951,7 @@ function openProjectionImpotsModal(assetId = null) {
                 </div>
             </details>
             <ul class="projection-impots__notes">
-                <li>Déficit foncier (art. 156 I 3° CGI) : la part hors intérêts d'emprunt s'impute sur le revenu global jusqu'à ${fmt(proj.plafondRevenuGlobal)} par an, à condition de louer le bien jusqu'au 31 décembre de la 3ᵉ année suivante ; l'excédent et la part due aux intérêts se reportent sur les revenus fonciers des ${proj.expirationAns} années suivantes.</li>
+                <li>Déficit foncier (art. 156 I 3° CGI) : les intérêts d'emprunt (avec l'assurance et les frais d'emprunt) s'imputent d'abord sur les loyers ; le reste du déficit s'impute sur le revenu global jusqu'à ${fmt(proj.plafondRevenuGlobal)} par an, à condition de louer le bien jusqu'au 31 décembre de la 3ᵉ année suivante ; l'excédent et la part des intérêts non couverte par les loyers se reportent sur les revenus fonciers des ${proj.expirationAns} années suivantes.</li>
                 <li>Hypothèses de projection : loyers et charges au dernier niveau connu, revenu salarial du profil (historisé, puis dernier connu), barème ${currentYear} reconduit, échéancier de crédit réel. Revente, plus-value et évolution des loyers ne sont pas modélisées.</li>
                 <li>Calcul indicatif à partir de vos saisies — ne remplace pas un professionnel.</li>
             </ul>`;
