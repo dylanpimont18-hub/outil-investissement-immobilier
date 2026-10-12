@@ -1,21 +1,8 @@
-# Build artifacts — inutiles pour le codage
-dist/
-dist-validate/
+# Ancien dossier de l'exe de bureau (copies figées des .js) : à retirer une fois effacé du disque
 Spark/
-build/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-venv/
-.pytest_cache/
 
 # Base de données locale
 scraper/biens.db
-geocache.json
 
 # Logs
 scraper/spark_scraper.log

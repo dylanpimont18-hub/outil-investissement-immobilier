@@ -30,7 +30,7 @@ import {
     cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword
 } from './owned-cloud.js';
 import { watchPrefs, savePref, cloudListArchives, cloudUploadArchive, cloudReadArchive } from './cloud-store.js';
-import { nomArchiveUnique } from './migration-regles.js';
+import { nomArchiveUnique } from './archives-regles.js';
 
 let state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
 

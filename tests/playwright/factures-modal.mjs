@@ -129,16 +129,12 @@ export function cloudSetAsset(id, data) { S.assets[id] = clone(data); notify(); 
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; notify(); return Promise.resolve(); }
 export function watchPortfolioMeta(cb) { S.metaListeners.push(cb); setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
 export function cloudSaveMeta(patch) { Object.assign(S.meta, clone(patch)); setTimeout(() => S.metaListeners.forEach(cb => cb(clone(S.meta))), 0); return Promise.resolve(); }
-export async function cloudGetMeta() { return clone(S.meta); }
-export async function cloudGetAllAssets() { return clone(S.assets); }
-export async function cloudDocumentExists() { return false; }
 export async function cloudUploadDocument(assetId, file) {
     const name = 'up-' + (S.uploads.length + 1) + '-' + file.name;
     S.uploads.push({ assetId, name, type: file.type, size: file.size });
     return name;
 }
 export function cloudDocumentUrl() { return Promise.resolve('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC'); }
-export async function cloudUploadDocumentAs() {}
 export async function cloudDeleteDocument() {}
 export async function cloudDeleteAllDocuments() {}
 export async function cloudExtraireFraisFacture(base64, mimeType) {

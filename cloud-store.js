@@ -1,7 +1,7 @@
 // Couche cloud des données hors portefeuille (Firebase Firestore + Storage) : études du comparateur,
 // réglages (étude en cours, préférences d'interface, marqueur de migration) et archives JSON du
 // portefeuille. Wrapper fin, même esprit qu'owned-cloud.js : aucune logique métier ici. Importé par
-// main.js, owned-portfolio.js et migration-locale.js. Tout vit sous users/{uid}/ (règles
+// main.js et owned-portfolio.js (lecture seule : scripts/controle-migration.mjs). Tout vit sous users/{uid}/ (règles
 // firestore.rules / storage.rules inchangées). Voir docs/superpowers/specs/2026-10-11-passage-tout-web-prompt.md.
 import { auth, db, storage } from './firebase-init.js';
 import {

@@ -65,12 +65,8 @@ export function cloudSetAsset(id, data) { S.assets[id] = clone(data); notify(); 
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; notify(); return Promise.resolve(); }
 export function watchPortfolioMeta(cb) { S.metaListeners.push(cb); setTimeout(() => cb(clone(S.meta)), 0); return () => {}; }
 export function cloudSaveMeta(patch) { Object.assign(S.meta, clone(patch)); setTimeout(() => S.metaListeners.forEach(cb => cb(clone(S.meta))), 0); return Promise.resolve(); }
-export async function cloudGetMeta() { return clone(S.meta); }
-export async function cloudGetAllAssets() { return clone(S.assets); }
-export async function cloudDocumentExists() { return false; }
 export async function cloudUploadDocument() { return 'x'; }
 export function cloudDocumentUrl() { return Promise.resolve(''); }
-export async function cloudUploadDocumentAs() {}
 export async function cloudDeleteDocument() {}
 export async function cloudDeleteAllDocuments() {}
 export async function cloudExtraireFraisFacture() { throw new Error('not stubbed'); }

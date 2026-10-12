@@ -34,7 +34,7 @@ const S = window.__stub = {
     user: seed.user === undefined ? { uid: 'u-test', email: 'test@example.com' } : seed.user,
     documents: seed.documents || {},            // { 'assetId/filename': true }
     authListeners: [], assetListeners: [], metaListeners: [],
-    uploads: [], uploadsAs: [], signIns: [], metaWrites: []
+    uploads: [], signIns: [], metaWrites: []
 };
 const clone = v => JSON.parse(JSON.stringify(v));
 const later = fn => setTimeout(fn, 0);
@@ -52,11 +52,7 @@ export function cloudSetAsset(id, data) { S.assets[id] = clone(data); later(() =
 export function cloudDeleteAssetDoc(id) { delete S.assets[id]; later(() => S.assetListeners.forEach(cb => cb(clone(S.assets)))); return Promise.resolve(); }
 export function watchPortfolioMeta(cb) { S.metaListeners.push(cb); later(() => cb(clone(S.meta))); return () => {}; }
 export function cloudSaveMeta(patch) { S.metaWrites.push(clone(patch)); Object.assign(S.meta, clone(patch)); later(() => S.metaListeners.forEach(cb => cb(clone(S.meta)))); return Promise.resolve(); }
-export async function cloudGetMeta() { return clone(S.meta); }
-export async function cloudGetAllAssets() { return clone(S.assets); }
 export async function cloudUploadDocument(assetId, file) { const name = 'up-' + (S.uploads.length + 1) + '-' + file.name; S.uploads.push({ assetId, name, type: file.type, size: file.size }); S.documents[assetId + '/' + name] = true; return name; }
-export async function cloudUploadDocumentAs(assetId, filename, blob) { S.uploadsAs.push({ assetId, filename, size: blob.size }); S.documents[assetId + '/' + filename] = true; }
-export async function cloudDocumentExists(assetId, filename) { return !!S.documents[assetId + '/' + filename]; }
 export function cloudDocumentUrl() { return Promise.resolve('data:application/pdf;base64,JVBERi0xLjQK'); }
 export async function cloudDeleteDocument() {}
 export async function cloudDeleteAllDocuments() {}
@@ -127,7 +123,7 @@ window.print = () => {
     setTimeout(() => window.dispatchEvent(new Event('afterprint')), 0);
 };`;
 
-// initScripts : [[fn, arg], …] posés AVANT la première navigation (ex. ancien localStorage du test de migration).
+// initScripts : [[fn, arg], …] posés AVANT la première navigation.
 export async function openPage(browser, path, { viewport, seedCloud = {}, seedStore = {}, spyStorage = true, routes = [], initScripts = [] } = {}) {
     const context = await browser.newContext({ viewport, acceptDownloads: true });
     await context.addInitScript(`window.__seedCloud = ${JSON.stringify({ assets: { 'oa-test-1': ASSET_TEST_1 }, meta: META_TEST, ...seedCloud })};`);

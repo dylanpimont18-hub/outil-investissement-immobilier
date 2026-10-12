@@ -1,8 +1,6 @@
-# Build artifacts
-build/
-dist/
+# Ancien dossier de l'exe de bureau (supprimé avec le passage au tout-web) : à retirer d'ici
+# une fois le dossier effacé du disque — tant qu'il existe, il ne doit pas être versionné.
 Spark/
-Spark-*.zip
 
 # Secrets locaux
 config.py
@@ -13,19 +11,7 @@ documents/
 # Exports générés localement (peuvent contenir des données financières réelles du portefeuille)
 exports/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-venv/
-.env
 .worktrees/
-.pytest_cache/
-
-geocache.json
 
 # Firebase CLI (cache local de deploy, pas de secret dedans mais inutile a versionner)
 .firebase/

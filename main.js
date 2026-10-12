@@ -35,11 +35,6 @@ function animateCounter(el, targetText) {
     requestAnimationFrame(tick);
 }
 
-// Migration unique depuis l'exe (origine http://127.0.0.1:8080, seule à pouvoir lire son ancien stockage local) :
-// le module n'est chargé que là, ou avec ?migration-locale=1 (tests). Supprimé en fin de chantier.
-const MIGRATION_LOCALE_ACTIVE = (['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '8080')
-    || new URLSearchParams(location.search).has('migration-locale');
-
 // --- Portfolio biens détenus ---
 
 const PROFILE_OPTIONS = [
@@ -3026,21 +3021,6 @@ function _initCloud() {
         }
         _showAuthGate(false);
         if (loading) loading.hidden = false;
-        if (MIGRATION_LOCALE_ACTIVE && !IS_ANALYSIS_WINDOW) {
-            // Doit tourner avant tout abonnement : l'app n'écrit dans settings/* que sur action, mais
-            // on ne veut même pas lire des documents que la migration est en train de remplir.
-            try {
-                const { runLocalMigration } = await import('./migration-locale.js');
-                await runLocalMigration({
-                    sanitizeAssetRecord,
-                    normaliserVariables: raw => sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...(raw || {}) })
-                });
-            } catch (err) {
-                console.error('[Spark] migration locale :', err);
-                showToast('Migration locale impossible — voir la console', 'negative');
-            }
-            if (_authUser !== user) return; // déconnecté pendant la migration
-        }
         _startCloud();
     });
 }
