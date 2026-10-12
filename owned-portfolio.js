@@ -18,7 +18,8 @@ import {
     computeSimulationTravaux, computeCFBreakdown, computeRegimeComparison, resolveLoyerVacance,
     computeDeclaration2044, parseDateAchat, computeDeficitFoncierHistorique,
     computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer,
-    ratioRemboursement, computeProjectionImpotsFoyer, computeOptimisationTravaux, computeProjectionRegimesFoyer
+    ratioRemboursement, computeProjectionImpotsFoyer, computeOptimisationTravaux, computeProjectionRegimesFoyer,
+    resolveScenarioCourant
 } from './calculs.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
@@ -2574,9 +2575,12 @@ function setOwnedRegime(regime) {
     if (_authUser) cloudSaveMeta({ regime }).catch(() => {});
 }
 
+// Scénario des chiffres « au rythme actuel » (liste, dashboard, KPI, rapports) : le scénario
+// réaliste, mais avec la vacance de l'onglet Exploitation (resolveScenarioCourant, calculs.js) —
+// l'éditeur des scénarios est masqué, sa vacance par défaut (5 %) ne doit plus rien piloter.
+// Le simulateur de scénarios (renderOwnedScenarios) lit, lui, asset.scenarios tels que saisis.
 function getOwnedDefaultScenario(asset) {
-    const scenarios = asset.scenarios || [];
-    return scenarios.find(s => s.id === 'realiste') || scenarios[0] || { variables: {} };
+    return resolveScenarioCourant(asset);
 }
 
 function renderOwnedRegimeSelector() {
@@ -5193,25 +5197,18 @@ function renderOwnedCalculTab(asset) {
     const sc = getOwnedDefaultScenario(asset);
     const regime = getOwnedRegime();
 
-    // Mensualité crédit calculée
     const montant = credit.montant || 0;
-    const nMois = (credit.duree || 0) * 12;
-    const tauxM = ((credit.taux || 0) / 100) / 12;
-    let mensualiteCredit = 0;
-    if (tauxM > 0 && nMois > 0) mensualiteCredit = (montant * tauxM) / (1 - Math.pow(1 + tauxM, -nMois));
-    else if (nMois > 0) mensualiteCredit = montant / nMois;
-    let assuranceMens = 0;
-    if (montant > 0 && (credit.duree || 0) > 0) {
-        const { schedule } = computeAmortizationSchedule(montant, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
-        const yearRow = schedule.find(r => r.annee === new Date().getFullYear());
-        assuranceMens = yearRow ? yearRow.assurance / 12 : 0;
-    }
-    const mensualiteTotale = mensualiteCredit + assuranceMens;
     const investTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
     const apport = Math.max(0, investTotal - montant);
 
-    // Métriques scénario réaliste — régime global
+    // Métriques scénario courant — régime global
     const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+    // Mensualité = échéance du mois civil courant (même source que le CF, la liste et le rapport du
+    // bien) : avant, l'assurance de l'année civile ÷ 12 était diluée l'année d'achat (bilan B3,
+    // 470 € ici contre 492 € dans le rapport). Crédit soldé ou pas encore démarré : 0 €.
+    const assuranceMens = r.assuranceMensuelle;
+    const mensualiteTotale = r.mensualiteTotale;
+    const echeanceLabel = `${String(r.echeance.mois).padStart(2, '0')}/${r.echeance.annee}`;
     const cfAvantTone = r.cfNet >= 0 ? 'positive' : 'negative';
     const cfApresTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
     const dscrTone = r.dscr > 0 && r.dscr < 1 ? 'negative' : r.dscr >= 1.1 ? 'positive' : '';
@@ -5256,7 +5253,7 @@ function renderOwnedCalculTab(asset) {
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Mensualité crédit</span>
                 <span class="owned-synthese__card-value">${Math.round(mensualiteTotale).toLocaleString('fr-FR')} €/mois</span>
-                ${assuranceMens > 0 ? `<span class="owned-synthese__card-sub">dont ${Math.round(assuranceMens).toLocaleString('fr-FR')} € assurance</span>` : ''}
+                ${mensualiteTotale > 0 ? `<span class="owned-synthese__card-sub">${assuranceMens > 0 ? `dont ${Math.round(assuranceMens).toLocaleString('fr-FR')} € assurance · ` : ''}échéance de ${echeanceLabel}</span>` : ''}
             </div>
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Investissement total</span>

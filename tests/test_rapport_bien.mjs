@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { computeOwnedAssetTimeline } from '../calculs.js';
+import { computeOwnedAssetTimeline, computeOwnedAssetCF, resolveScenarioCourant, resolveTmiFoyer } from '../calculs.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown } from '../rapport-bien.js';
 
 // Rapport d'un bien (PDF + Markdown) — spec 2026-10-01 : prévisionnel sur les 10 prochaines années
@@ -133,6 +133,101 @@ function makeAsset(overrides = {}) {
     assert.doesNotThrow(() => buildAssetReportMarkdown(data));
     assert.doesNotThrow(() => buildAssetReportHTML(data));
     console.log('Test 6 OK — bien vide : aucune exception');
+}
+
+// ─── Bilan 2026-10-12 : B2 (vacance unique) et B3 (cascade du rapport = CF affiché) ─────────────
+// Bien bâti comme le cas réel du bilan : loyer 675 €, vacance Exploitation 0 % mais scénario
+// « réaliste » (éditeur masqué) resté à 5 %, assurance dégressive (CRD), frais ponctuels payés cash
+// dans l'année, un frais financé par le crédit principal et un frais avec son propre crédit.
+function makeAssetBilan() {
+    return {
+        id: 'bien-bilan', nom: 'Bien bilan', ville: 'Bourges', codePostal: '18000', adresse: '',
+        dateAchat: `${Y - 1}-01`,
+        acquisition: {
+            prix: 85000, fraisAgence: 0, fraisNotaire: 7000, loyerInitial: 675, surface: 50, typeBien: 'appartement',
+            credit: { montant: 94182, duree: 25, taux: 4, assurance: 0.485, assuranceMode: 'crd' }
+        },
+        postAchat: {
+            taxeFonciere: 342, chargesCopro: 50, gestionLocative: 0, assurancePNO: 69, vacance: 0,
+            travaux: [
+                { id: 'f1', date: `${Y}-01-15`, description: 'Frais de courtage', montant: 1250, tag: 'non-deductible', financeParCredit: false },
+                { id: 'f2', date: `${Y}-01-20`, description: 'Taxe foncière prorata', montant: 334, tag: 'deductible', financeParCredit: false },
+                { id: 'f3', date: `${Y}-01-25`, description: 'Cuisine (crédit principal)', montant: 4000, tag: 'deductible', financeParCredit: true },
+                { id: 'f4', date: `${Y - 1}-03-01`, description: 'Chaudière (crédit dédié)', montant: 6000, tag: 'deductible',
+                    credit: { montant: 6000, duree: 5, taux: 3 } }
+            ],
+            chargesAnnuelles: [], notes: []
+        },
+        scenarios: [
+            { id: 'pessimiste', nom: 'Pessimiste', variables: { vacance: 8, regime: 'micro-foncier' } },
+            { id: 'realiste', nom: 'Réaliste', variables: { vacance: 5, regime: 'micro-foncier' } },
+            { id: 'optimiste', nom: 'Optimiste', variables: { vacance: 2, regime: 'micro-foncier' } }
+        ]
+    };
+}
+
+// --- Test 7 (B2) : le scénario courant suit la vacance de l'onglet Exploitation ---
+{
+    const asset = makeAssetBilan();
+    const sc = resolveScenarioCourant(asset);
+    assert.equal(sc.variables.vacance, 0, 'vacance du scénario courant = postAchat.vacance (0), pas 5');
+    assert.equal(sc.variables.regime, 'micro-foncier', 'les autres variables du scénario sont conservées');
+    assert.equal(asset.scenarios[1].variables.vacance, 5, 'le scénario stocké (simulateur) n\'est pas modifié');
+
+    const data = buildAssetReportData(asset, { profileData, regime: 'reel' });
+    assert.equal(data.actuel.vacancePct, 0, 'le rapport affiche la vacance de l\'onglet Exploitation');
+    assert.equal(Math.round(data.actuel.loyerEffectif), 675, 'vacance 0 % → loyer encaissé = loyer');
+    assert.ok(!data.hypotheses.some(h => /vacance locative 5 %/.test(h)), 'plus de vacance 5 % cachée dans les hypothèses');
+
+    // Lots (immeuble) : vacance pondérée des lots, comme l'onglet Exploitation
+    const immeuble = { ...makeAssetBilan(), lots: [{ loyer: 500, vacance: 0 }, { loyer: 500, vacance: 10 }] };
+    assert.equal(resolveScenarioCourant(immeuble).variables.vacance, 5);
+    // Bien sans scénario : pas d'exception, vacance Exploitation
+    assert.equal(resolveScenarioCourant({ postAchat: { vacance: 3 } }).variables.vacance, 3);
+    console.log('Test 7 OK — B2 : une seule vacance (onglet Exploitation) pour les chiffres au rythme actuel');
+}
+
+// --- Test 8 (B3) : la cascade du rapport tombe sur le CF avant impôt affiché ---
+{
+    const asset = makeAssetBilan();
+    const regime = 'reel';
+    const data = buildAssetReportData(asset, { profileData, regime });
+    const c = data.actuel;
+    const lignes = c.cascade;
+    assert.ok(Array.isArray(lignes) && lignes.length >= 4, 'cascade : loyer, charges, mensualité, frais ponctuels');
+    const somme = lignes.reduce((s, l) => s + l.montant, 0);
+    assert.ok(Math.abs(somme - c.cfNet) < 1, `somme des lignes (${somme.toFixed(2)}) = CF avant impôt (${c.cfNet.toFixed(2)})`);
+    // Arrondis affichés : la somme des montants arrondis retombe sur le total arrondi à 1 € près
+    const sommeArrondie = lignes.reduce((s, l) => s + Math.round(l.montant), 0);
+    assert.ok(Math.abs(sommeArrondie - Math.round(c.cfNet)) <= 1, 'somme des lignes affichées = total affiché, à 1 € près');
+
+    const frais = lignes.find(l => /Frais ponctuels/.test(l.label));
+    assert.ok(frais, 'ligne « Frais ponctuels de l\'année non financés (÷ 12) » présente');
+    assert.equal(Math.round(frais.montant * 12), -(1250 + 334), 'frais cash de l\'année uniquement (pas le frais financé par le crédit)');
+
+    const tmi = resolveTmiFoyer(profileData, Y);
+    const cf = computeOwnedAssetCF(asset, resolveScenarioCourant(asset).variables, tmi, regime);
+    assert.ok(Math.abs(c.mensualite - cf.mensualiteTotale) < 0.01, 'mensualité du rapport = mensualité de computeOwnedAssetCF');
+    const ligneMens = lignes.find(l => /Mensualité/.test(l.label));
+    assert.ok(Math.abs(-ligneMens.montant - cf.mensualiteTotale) < 0.01, 'la ligne mensualité de la cascade = mensualité affichée');
+    assert.match(ligneMens.label, /échéance de \d{2}\/\d{4}/, 'la base de la mensualité (mois courant) est écrite');
+    assert.ok(Math.abs(cf.assuranceMensuelle - c.assuranceMensuelle) < 0.01, 'assurance du mois courant exposée');
+    assert.ok(cf.assuranceMensuelle > 0, 'assurance dégressive du mois courant > 0');
+
+    const md = buildAssetReportMarkdown(data);
+    assert.match(md, /Frais ponctuels de l'année non financés \(÷ 12\)/, 'Markdown : ligne frais ponctuels');
+    const { documentHTML } = buildAssetReportHTML(data);
+    assert.ok(documentHTML.includes('Frais ponctuels de l&#39;année non financés (÷ 12)'), 'HTML : ligne frais ponctuels');
+    console.log('Test 8 OK — B3 : cascade = CF avant impôt, mensualité identique à computeOwnedAssetCF');
+}
+
+// --- Test 9 : computeOwnedAssetCF n'exige plus de vacance dans le scénario (repli = Exploitation) ---
+{
+    const asset = makeAssetBilan();
+    const tmi = resolveTmiFoyer(profileData, Y);
+    const sansVacance = computeOwnedAssetCF(asset, { regime: 'micro-foncier' }, tmi);
+    assert.equal(Math.round(sansVacance.loyerEffectif), 675, 'scénario sans vacance → vacance Exploitation (0 %)');
+    console.log('Test 9 OK — repli de vacance de computeOwnedAssetCF = onglet Exploitation');
 }
 
 console.log('\nTous les tests rapport-bien OK');

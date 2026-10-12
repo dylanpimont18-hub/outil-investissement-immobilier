@@ -1594,6 +1594,23 @@ export function resolveLoyerVacance(asset, moisCible = null) {
     return { loyer: asset.acquisition?.loyerInitial || 0, vacancePct };
 }
 
+/**
+ * Scénario « courant » d'un bien détenu, à passer à computeOwnedAssetCF pour tous les chiffres
+ * « au rythme actuel » (liste, dashboard, cartes KPI, rapports, alertes, régime optimal).
+ * C'est le scénario « réaliste » (repli : premier scénario), MAIS sa vacance est remplacée par
+ * celle de l'onglet Exploitation (resolveLoyerVacance → postAchat.vacance ou lots) : l'éditeur
+ * des scénarios est masqué, sa vacance par défaut (5 %) contredisait la saisie de l'utilisateur
+ * (bilan 2026-10-12, B2). Les scénarios stockés ne sont pas modifiés (simulateur inchangé).
+ */
+export function resolveScenarioCourant(asset) {
+    const scenarios = asset?.scenarios || [];
+    const sc = scenarios.find(s => s.id === 'realiste')
+        || scenarios.find(s => s.nom?.toLowerCase().includes('éaliste'))
+        || scenarios[0]
+        || { id: 'realiste', nom: 'Réaliste', variables: {} };
+    return { ...sc, variables: { ...(sc.variables || {}), vacance: resolveLoyerVacance(asset || {}).vacancePct } };
+}
+
 // Résout le revenu du foyer applicable à une année civile donnée — même logique que
 // resolveLoyerFromHistorique (dernière entrée dont `annee` est <= à l'année cible s'applique ;
 // avant la première prise d'effet, on retient quand même la première valeur connue). Un revenu qui
@@ -1702,8 +1719,10 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
     const interetsAnnee = interetsMoisCourant * 12;
     const mensualiteTotale = creditActif ? (mensCredit + assuranceMensCredit) : 0;
 
-    const vacancePct = scenario.vacance ?? 5;
-    const loyer = scenario.loyer ?? resolveLoyerVacance(asset).loyer;
+    // Repli de vacance = onglet Exploitation (et non plus 5 % en dur) : voir resolveScenarioCourant.
+    const loyerVacanceExploitation = resolveLoyerVacance(asset);
+    const vacancePct = scenario.vacance ?? loyerVacanceExploitation.vacancePct;
+    const loyer = scenario.loyer ?? loyerVacanceExploitation.loyer;
     const loyersEncaisses = loyer * 12 * (1 - vacancePct / 100);
 
     const taxeFonciere = scenario.taxeFonciere ?? resolvedTF;
@@ -1750,6 +1769,16 @@ export function computeOwnedAssetCF(asset, scenario, tmi, regimeOverride = null)
         loyerEffectif: loyersEncaisses / 12,
         rentaBrute,
         dscr,
+        // Composantes de cfNet, pour qu'un affichage en cascade (rapport du bien) retombe
+        // exactement sur cfNet sans recompter les mensualités des crédits travaux, déjà incluses
+        // dans mensualiteTotale ET dans chargesMensuelles :
+        // cfNet = loyerEffectif - chargesExploitationMensuelles - mensualiteTotale - fraisPonctuelsMensuels
+        chargesExploitationMensuelles: chargesExploitationAnnuelles / 12,
+        fraisPonctuelsMensuels: travauxCashAnnee / 12,
+        // Assurance emprunteur du mois civil courant (dégressive si assuranceMode 'crd') et mois
+        // de l'échéance lue : base explicite de mensualiteTotale (« échéance de MM/AAAA »).
+        assuranceMensuelle: creditActif ? assuranceMensCredit : 0,
+        echeance: { annee: currentYear, mois: currentMonth },
     };
 }
 
@@ -2284,9 +2313,7 @@ export function ratioRemboursement(tauxAnnuelPct, dureeAnnees) {
 }
 
 export function getOptimalRegime(asset, tmi) {
-    const scenarios = asset.scenarios || [];
-    const sc = scenarios.find(s => s.id === 'realiste') || scenarios.find(s => s.nom?.toLowerCase().includes('éaliste')) || scenarios[0];
-    const vars = sc?.variables || {};
+    const vars = resolveScenarioCourant(asset).variables;
     const regimes = ['micro-foncier', 'reel', 'sci-is'];
     const results = regimes.map(r => ({
         regime: r,
@@ -2584,8 +2611,7 @@ export function computePortfolioAlerts(assets, profileData, regime, revenusMensu
     }
 
     for (const asset of assets) {
-        const sc = (asset.scenarios || []).find(s => s.id === 'realiste') || (asset.scenarios || [])[0];
-        const r = computeOwnedAssetCF(asset, { ...(sc?.variables || {}), regime }, tmi);
+        const r = computeOwnedAssetCF(asset, { ...resolveScenarioCourant(asset).variables, regime }, tmi);
 
         if (r.cfNetNet < -100) {
             alerts.push({ type: 'cf', severity: 'error', assetId: asset.id, msg: `${asset.nom} — CF négatif : ${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €/mois` });
@@ -2695,8 +2721,7 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
         }
     }
 
-    const sc = (asset.scenarios || []).find(s => s.id === 'realiste') || (asset.scenarios || [])[0];
-    const vars = sc?.variables || {};
+    const vars = resolveScenarioCourant(asset).variables;
     // cfBase reste le taux courant (comme computeOwnedAssetCF partout ailleurs) : TMI de
     // l'année en cours, pas celle de l'année simulée `annee`.
     const cfBase = computeOwnedAssetCF(asset, { ...vars, regime }, resolveTmiFoyer(profileData, new Date().getFullYear()));

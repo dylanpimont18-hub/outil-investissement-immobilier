@@ -1,4 +1,4 @@
-import { computeOwnedAssetCF, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer, computeAmortizationSchedule, computeEndettementGlobal, resolveRevenuFoyer } from './calculs.js';
+import { computeOwnedAssetCF, resolveScenarioCourant, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer, computeAmortizationSchedule, computeEndettementGlobal, resolveRevenuFoyer } from './calculs.js';
 
 function buildPDFParts(uploadedPhotos) {
     const projectName = document.getElementById('project-name').value.trim() || 'Investissement';
@@ -2484,9 +2484,9 @@ function getTypeBienLabelForPdf(type) {
     return 'Appartement';
 }
 
+// Scénario courant (réaliste, vacance de l'onglet Exploitation) : voir resolveScenarioCourant.
 function getOwnedDefaultScenarioForPdf(asset) {
-    const scenarios = asset.scenarios || [];
-    return scenarios.find(s => s.id === 'realiste') || scenarios[0] || { variables: {} };
+    return resolveScenarioCourant(asset);
 }
 
 function getPessimisteScenarioForPdf(asset) {
