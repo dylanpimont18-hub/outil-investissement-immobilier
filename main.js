@@ -566,6 +566,15 @@ function normalizeLegacyCopy(value) {
     return text;
 }
 
+// Nombre saisi ou valeur par defaut si le champ est absent/vide/non numerique. A la difference de
+// `Number(x) || def`, un 0 saisi est conserve (revalorisation 0 %, objectif CF 0 €) : sinon le PC
+// remplacait 0 par la valeur par defaut alors que l'iPhone (onglet Profil) gardait 0.
+function numberOrDefault(raw, fallback) {
+    if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+}
+
 function sanitizeProfileData(rawProfile) {
     return {
         name: normalizeLegacyCopy(rawProfile.name || 'Profil') || 'Profil',
@@ -573,8 +582,8 @@ function sanitizeProfileData(rawProfile) {
         incomeUnit: rawProfile.incomeUnit === 'annuel' ? 'annuel' : 'mensuel',
         adults: Math.min(2, Math.max(1, Number(rawProfile.adults) || 1)),
         children: Math.max(0, Math.round(Number(rawProfile.children) || 0)),
-        objectifCF: Math.max(0, Number(rawProfile.objectifCF) || 1000),
-        revaloAnnuelle: Math.max(0, Math.min(20, Number(rawProfile.revaloAnnuelle) || 2)),
+        objectifCF: Math.max(0, numberOrDefault(rawProfile.objectifCF, 1000)),
+        revaloAnnuelle: Math.max(0, Math.min(20, numberOrDefault(rawProfile.revaloAnnuelle, 2))),
         autresCredits: Array.isArray(rawProfile.autresCredits) ? rawProfile.autresCredits : [],
         // Historique des revenus (voir resolveRevenuFoyer, calculs.js) : passe-plat, pas edite par
         // cette modale (onboarding uniquement) mais a preserver — sinon un save modale apres coup
@@ -1437,8 +1446,8 @@ function syncProfileForm() {
     setProfileIncomeUnit(incomeUnit, { convert: false });
     nodes.profileAdults.value = String(state.profileData.adults);
     nodes.profileChildren.value = String(state.profileData.children);
-    if (nodes.profileObjectifCF) nodes.profileObjectifCF.value = String(state.profileData.objectifCF || 1000);
-    if (nodes.profileRevaloAnnuelle) nodes.profileRevaloAnnuelle.value = String(state.profileData.revaloAnnuelle || 2);
+    if (nodes.profileObjectifCF) nodes.profileObjectifCF.value = String(state.profileData.objectifCF ?? 1000);
+    if (nodes.profileRevaloAnnuelle) nodes.profileRevaloAnnuelle.value = String(state.profileData.revaloAnnuelle ?? 2);
     renderProfileCreditsList();
 }
 
