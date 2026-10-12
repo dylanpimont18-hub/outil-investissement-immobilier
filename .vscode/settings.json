@@ -1,10 +1,3 @@
 {
-    "liveServer.settings.port": 5501,
-    "python-envs.pythonProjects": [
-        {
-            "path": "app.py",
-            "envManager": "ms-python.python:venv",
-            "packageManager": "ms-python.python:pip"
-        }
-    ]
+    "liveServer.settings.port": 5501
 }

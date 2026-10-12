@@ -5,6 +5,11 @@ Spark/
 # Secrets locaux
 config.py
 
+# Secrets locaux (Firebase Functions lit functions/.env*)
+.env
+.env.*
+*.local
+
 # Documents utilisateur (factures PDF importées, générés localement)
 documents/
 

@@ -44,7 +44,7 @@ try {
         return {
             migration,
             nbEtudes: Object.keys(studies).length,
-            etudes: Object.values(studies).map(s => ({ id: s.id, nom: s.variablesData?.['nom-bien'], updatedAt: new Date(s.updatedAt).toISOString() })),
+            etudes: Object.values(studies).map(s => ({ id: s.id, nom: s.variablesData?.['nom-bien'], updatedAt: Number.isFinite(s.updatedAt) ? new Date(s.updatedAt).toISOString() : null })),
             analysis: analysis ? { nom: analysis.variablesData?.['nom-bien'], activeAssetId: analysis.activeAssetId } : null,
             prefsKeys: Object.keys(prefs || {}),
             archives: archives.map(a => `${a.name} (${a.size} o)`)

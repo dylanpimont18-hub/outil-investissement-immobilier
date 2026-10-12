@@ -1,6 +1,6 @@
 // Couche cloud du portefeuille biens detenus (Firebase Firestore + Storage + Auth).
 // Wrapper fin autour du SDK Firebase : aucune logique metier ici (cache, diff, rendu),
-// tout ca reste dans owned-portfolio.js qui est le seul importeur de ce module.
+// tout ca reste dans owned-portfolio.js. Importe par owned-portfolio.js, main.js (watchAuth, watchPortfolioMeta) et owned-entry.js.
 import { auth, db, storage, functions } from './firebase-init.js';
 import {
     onAuthStateChanged, signInWithEmailAndPassword, signOut
