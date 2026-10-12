@@ -7,6 +7,17 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+- B1 : les modales Import et Suppression d'un bien ont de nouveau un fond (variable `--surface-1` jamais définie) ; les 20 variables CSS utilisées sans définition sont remplacées par les tokens existants (rendu or conservé via `--accent-color`).
+- B4 : Échap ferme toutes les modales du portefeuille (Import, Suppression, « Ajouter un bien » sur iPhone, Rapport même après un clic dans l'aperçu) ; croix « ✕ » ajoutée à la modale « Ajouter un bien » d'owned.html.
+- B6 : la police des chiffres IBM Plex Mono est enfin chargée (`@font-face` depuis `vendor/fonts/`) au lieu d'un repli Courier/Inter.
+- B10 : sur téléphone, index.html affiche un bandeau « Version iPhone : ouvrir le portefeuille → » (fermable, sans redirection).
+- B11 : les boutons flottants ne recouvrent plus le bas des formulaires (marge basse sous le contenu, iPhone et PC).
+- B12 : cibles tactiles d'owned.html portées à 44 × 44 px (icônes des frais, suppression du Profil/Exploitation, cases à cocher, boutons An 1/3/5/10, champs).
+- Analyse : les blocs repliables ont un chevron et ne s'étirent plus en cartes vides ; le Journal de décision indique « Aucune note » quand rien n'a été saisi.
+- Sélecteurs d'année (Rapport annuel, Déclaration, Impôt) : la flèche ne recouvre plus le dernier chiffre.
+- Glossaire : définition et formule du « CF brut » corrigées (loyer − mensualité), formule du « Rendement net » ajoutée (hors crédit et impôts, comme le calcul).
+
 ## [1.0.24] - 2026-10-12
 
 ### Added

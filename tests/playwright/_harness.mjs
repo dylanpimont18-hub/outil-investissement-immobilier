@@ -122,8 +122,9 @@ window.print = () => {
 };`;
 
 // initScripts : [[fn, arg], …] posés AVANT la première navigation.
-export async function openPage(browser, path, { viewport, seedCloud = {}, seedStore = {}, spyStorage = true, routes = [], initScripts = [] } = {}) {
-    const context = await browser.newContext({ viewport, acceptDownloads: true });
+// contextOptions : options supplémentaires de newContext (ex. { hasTouch: true, isMobile: true } pour un vrai écran tactile).
+export async function openPage(browser, path, { viewport, seedCloud = {}, seedStore = {}, spyStorage = true, routes = [], initScripts = [], contextOptions = {} } = {}) {
+    const context = await browser.newContext({ viewport, acceptDownloads: true, ...contextOptions });
     await context.addInitScript(`window.__seedCloud = ${JSON.stringify({ assets: { 'oa-test-1': ASSET_TEST_1 }, meta: META_TEST, ...seedCloud })};`);
     await context.addInitScript(`window.__seedStore = ${JSON.stringify(seedStore)};`);
     if (spyStorage) await context.addInitScript(STORAGE_SPY_SCRIPT);
