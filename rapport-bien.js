@@ -8,13 +8,16 @@
 // Le PDF et le Markdown sont tous deux rendus depuis le MÊME modèle : ils ne peuvent pas diverger.
 import {
     computeOwnedAssetCF, computeOwnedAssetTimeline, computeAmortizationSchedule,
-    resolveTmiFoyer, resolveLoyerVacance, resolveScenarioCourant, parseDateAchat
+    resolveTmiFoyer, resolveLoyerVacance, resolveScenarioCourant, parseDateAchat, estFraisDeductible
 } from './calculs.js';
 
 const HORIZON_ANS = 10;
 const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
 const TYPE_BIEN_LABELS = { appartement: 'Appartement', maison: 'Maison', immeuble: 'Immeuble de rapport' };
-const TAG_LABELS = { 'deductible': 'Déductible', 'non-deductible': 'Non déductible', 'a-classifier': 'À classifier' };
+const TAG_LABELS = {
+    'deductible': 'Déductible', 'taxe-fonciere': 'Taxe foncière (case 227)', 'frais-emprunt': "Frais d'emprunt (case 250)",
+    'non-deductible': 'Non déductible', 'a-classifier': 'À classifier',
+};
 
 // ─── Modèle de données ───────────────────────────────────────────────────────
 
@@ -156,7 +159,7 @@ export function buildAssetReportData(asset, { profileData = {}, regime = 'micro-
         travaux: {
             lignes: lignesTravaux,
             total: lignesTravaux.reduce((s, t) => s + t.montant, 0),
-            totalDeductible: lignesTravaux.filter(t => t.tag === 'deductible').reduce((s, t) => s + t.montant, 0)
+            totalDeductible: lignesTravaux.filter(t => estFraisDeductible(t.tag)).reduce((s, t) => s + t.montant, 0)
         },
         projection,
         hypotheses: [

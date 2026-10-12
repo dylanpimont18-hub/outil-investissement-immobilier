@@ -19,7 +19,7 @@ import {
     computeDeclaration2044, parseDateAchat, computeDeficitFoncierHistorique,
     computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer,
     ratioRemboursement, computeProjectionImpotsFoyer, computeOptimisationTravaux, computeProjectionRegimesFoyer,
-    resolveScenarioCourant
+    resolveScenarioCourant, estFraisDeductible
 } from './calculs.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
@@ -261,6 +261,59 @@ function deleteOwnedLot(assetId, lotId) {
     saveOwnedAssets(all);
 }
 
+// Natures d'un frais (champ `tag`), dans l'ordre des listes déroulantes. 'taxe-fonciere' et
+// 'frais-emprunt' (bilan 2026-10-12, B9) sont déductibles au réel comme 'deductible', mais vont en
+// case 227 / case 250 de la 2044 et non en travaux (case 224) — voir NATURES_FRAIS_DEDUCTIBLES dans
+// calculs.js. `label` : listes déroulantes ; `court` : badge de la liste des frais.
+const NATURES_FRAIS = [
+    { value: 'a-classifier', label: 'À classifier', court: 'À classifier', css: 'tag--orange' },
+    { value: 'deductible', label: 'Déductible', court: 'Déductible', css: 'tag--green' },
+    { value: 'taxe-fonciere', label: 'Taxe foncière (case 227)', court: 'Taxe foncière', css: 'tag--green' },
+    { value: 'frais-emprunt', label: "Frais d'emprunt : garantie, courtage, dossier (case 250)", court: "Frais d'emprunt", css: 'tag--green' },
+    { value: 'non-deductible', label: 'Non déductible', court: 'Non déductible', css: 'tag--grey' },
+];
+const NATURES_FRAIS_VALUES = NATURES_FRAIS.map(n => n.value);
+
+function natureFraisOptionsHtml(selected = 'a-classifier') {
+    return NATURES_FRAIS.map(n => `<option value="${n.value}"${n.value === selected ? ' selected' : ''}>${escapeHtml(n.label)}</option>`).join('');
+}
+
+// La Cloud Function de lecture des factures ne connaît que 3 natures (deductible, non-deductible,
+// a-classifier) : les deux natures B9 sont déduites ici des mots du fournisseur et du résumé.
+const RE_TAXE_FONCIERE = /taxe\s+fonci|\btf\b/i;
+const RE_FRAIS_EMPRUNT = /courtage|garantie|frais\s+de\s+dossier|caution/i;
+
+function suggererNatureFrais({ fournisseur = '', description = '', tagSuggestion = '' } = {}) {
+    const texte = `${fournisseur || ''} ${description || ''}`;
+    if (RE_TAXE_FONCIERE.test(texte)) return 'taxe-fonciere';
+    // « garantie décennale » est une assurance de chantier, pas un frais d'emprunt.
+    if (RE_FRAIS_EMPRUNT.test(texte) && !/d[ée]cennale/i.test(texte)) return 'frais-emprunt';
+    return NATURES_FRAIS_VALUES.includes(tagSuggestion) ? tagSuggestion : 'a-classifier';
+}
+
+// Taxe foncière saisie dans les charges (onglet Exploitation) pour l'année d'une date : même
+// résolution que computeCompteResultat (entrée chargesAnnuelles la plus récente <= année, sinon
+// postAchat.taxeFonciere).
+function taxeFonciereChargesAnnee(asset, date) {
+    const post = asset?.postAchat || {};
+    const annee = date ? new Date(date).getFullYear() : new Date().getFullYear();
+    const entree = (post.chargesAnnuelles || [])
+        .filter(e => e.annee <= annee)
+        .sort((a, b) => b.annee - a.annee)[0];
+    return Number(entree ? (entree.taxeFonciere ?? post.taxeFonciere ?? 0) : (post.taxeFonciere ?? 0)) || 0;
+}
+
+// Avertissement NON bloquant (B9) : un frais classé « taxe foncière » (ou décrit comme tel) alors
+// que la taxe foncière de l'année est déjà dans les charges — elle serait comptée deux fois en
+// case 227. Retourne le texte à afficher, ou null.
+function alerteDoublonTaxeFonciere(asset, { tag, description = '', fournisseur = '', date } = {}) {
+    const estTF = tag === 'taxe-fonciere' || RE_TAXE_FONCIERE.test(`${fournisseur || ''} ${description || ''}`);
+    if (!estTF || !asset) return null;
+    const tf = taxeFonciereChargesAnnee(asset, date);
+    if (!(tf > 0)) return null;
+    return `La taxe foncière est déjà saisie dans les charges (${Math.round(tf).toLocaleString('fr-FR')} €/an) : ne la comptez pas deux fois`;
+}
+
 const TRAVAIL_DUPLICATE_MONTANT_TOLERANCE = 2; // €, arrondis de saisie (ex. 149,99 vs 150)
 const TRAVAIL_DUPLICATE_JOURS_TOLERANCE = 5; // jours, date de facture vs date de paiement/saisie
 
@@ -303,7 +356,7 @@ export function addOwnedTravail(assetId, travail) {
         date: travail.date || '',
         description: travail.description || '',
         montant: Math.max(0, Number(travail.montant) || 0),
-        tag: ['deductible', 'non-deductible', 'a-classifier'].includes(travail.tag) ? travail.tag : 'a-classifier',
+        tag: NATURES_FRAIS_VALUES.includes(travail.tag) ? travail.tag : 'a-classifier',
         commentaire: travail.commentaire || '',
         pdfFilename: travail.pdfFilename || null,
         credit: travail.credit || null,
@@ -332,7 +385,7 @@ function updateOwnedTravail(assetId, travailId, patch) {
         date: patch.date ?? current.date,
         description: patch.description ?? current.description,
         montant: patch.montant != null ? Math.max(0, Number(patch.montant) || 0) : current.montant,
-        tag: ['deductible', 'non-deductible', 'a-classifier'].includes(patch.tag) ? patch.tag : current.tag,
+        tag: NATURES_FRAIS_VALUES.includes(patch.tag) ? patch.tag : current.tag,
         commentaire: patch.commentaire ?? current.commentaire,
         // undefined = champ absent du patch, ne pas toucher ; null = retirer le justificatif.
         pdfFilename: patch.pdfFilename !== undefined ? patch.pdfFilename : current.pdfFilename,
@@ -767,8 +820,8 @@ function openProjectionImpotsModal(assetId = null) {
         const ligne = (label, valeur, cls = '') => `<div class="projection-ledger__row ${cls}"><span>${label}</span><span>${valeur}</span></div>`;
         const foncier = [
             ligne('Loyers encaissés', fmt(r.loyers)),
-            ligne('Charges (taxe foncière, copro, PNO, gestion, assurance emprunteur)', `−${fmt(r.chargesHorsTravaux)}`),
-            ligne('Intérêts d\'emprunt', r.interets ? `−${fmt(r.interets)}` : '—'),
+            ligne('Charges (taxe foncière, copro, PNO, gestion, forfait 20 € par local)', `−${fmt(r.chargesHorsTravaux)}`),
+            ligne('Intérêts, assurance et frais d\'emprunt', r.interets ? `−${fmt(r.interets)}` : '—'),
             ligne(`Travaux déductibles${r.travauxSimules ? ` <small>dont ${fmt(r.travauxSimules)} simulés</small>` : ''}`, r.travaux ? `−${fmt(r.travaux)}` : '—'),
             ligne('Résultat foncier', fmtS(r.resultatFoncier), 'projection-ledger__row--total'),
         ];
@@ -3735,12 +3788,6 @@ function openEditTravailModal(assetId, travailId) {
     const travail = (asset?.postAchat?.travaux || []).find(t => t.id === travailId);
     if (!travail) return;
 
-    const TAGS = [
-        { value: 'a-classifier', label: 'À classifier' },
-        { value: 'deductible', label: 'Déductible' },
-        { value: 'non-deductible', label: 'Non déductible' }
-    ];
-
     const modal = _showOwnedModal(`
         <div class="owned-modal">
             <div class="owned-modal-head">
@@ -3763,7 +3810,7 @@ function openEditTravailModal(assetId, travailId) {
                 <label class="variables-field">
                     <span class="variables-label">Nature</span>
                     <select class="variables-input" name="tag">
-                        ${TAGS.map(t => `<option value="${t.value}"${travail.tag === t.value ? ' selected' : ''}>${t.label}</option>`).join('')}
+                        ${natureFraisOptionsHtml(travail.tag)}
                     </select>
                 </label>
                 <label class="variables-field">
@@ -4014,8 +4061,7 @@ function _extractDossierTravaux(rows) {
             date: row.result.travail.date || '',
             description: row.result.travail.description || '',
             montant: Number(row.result.travail.montant) || 0,
-            tag: ['deductible', 'non-deductible', 'a-classifier'].includes(row.result.travail.tagSuggestion)
-                ? row.result.travail.tagSuggestion : 'a-classifier'
+            tag: suggererNatureFrais(row.result.travail)
         }));
 }
 
@@ -4024,12 +4070,12 @@ function renderOwnedTravauxTab(asset) {
     if (!el) return;
 
     const post = asset.postAchat || {};
-    const TAG_LABELS = { 'deductible': 'Déductible', 'non-deductible': 'Non déductible', 'a-classifier': 'À classifier' };
-    const TAG_CSS = { 'deductible': 'tag--green', 'non-deductible': 'tag--grey', 'a-classifier': 'tag--orange' };
+    const TAG_LABELS = Object.fromEntries(NATURES_FRAIS.map(n => [n.value, n.court]));
+    const TAG_CSS = Object.fromEntries(NATURES_FRAIS.map(n => [n.value, n.css]));
 
     const currentYear = new Date().getFullYear();
     const totalDed = (post.travaux || [])
-        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
+        .filter(t => estFraisDeductible(t.tag) && t.date && new Date(t.date).getFullYear() === currentYear)
         .reduce((s, t) => s + t.montant, 0);
 
     const byYear = {};
@@ -4092,9 +4138,7 @@ function renderOwnedTravauxTab(asset) {
                 <input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" data-field="montant" style="flex:0 0 100px">
                 <span class="owned-travaux-tag-wrap">
                     <select name="tag" class="variables-input" data-field="tag" style="flex:0 0 130px">
-                        <option value="a-classifier">À classifier</option>
-                        <option value="deductible">Déductible</option>
-                        <option value="non-deductible">Non déductible</option>
+                        ${natureFraisOptionsHtml()}
                     </select>
                     <span class="owned-tag-suggested-badge" data-tag-suggested-badge hidden>🤖 suggéré</span>
                 </span>
@@ -4235,7 +4279,7 @@ function renderOwnedTravauxTab(asset) {
             if (result.date) { fieldDate.value = result.date; fieldDate.classList.add('ai-filled'); }
             if (descriptionIA) { fieldDesc.value = descriptionIA; fieldDesc.classList.add('ai-filled'); }
             if (result.montant > 0) { fieldMontant.value = result.montant; fieldMontant.classList.add('ai-filled'); }
-            fieldTag.value = result.tagSuggestion || 'a-classifier';
+            fieldTag.value = suggererNatureFrais(result);
             tagBadge.hidden = false;
             aiBanner.hidden = false;
             aiBanner.textContent = `🤖 Facture : ${file.name} — vérifie les champs avant de valider`;
@@ -4284,6 +4328,9 @@ function renderOwnedTravauxTab(asset) {
             return;
         }
         const doublon = findSimilarTravail(getOwnedAsset(id), { montant, date });
+        // Taxe foncière déjà dans les charges : avertissement non bloquant (B9), porté par le toast
+        // de confirmation de l'ajout (un seul toast à la fois, voir showToast).
+        const alerteTF = alerteDoublonTaxeFonciere(getOwnedAsset(id), { tag: fd.get('tag'), description, date });
         if (doublon && !window.confirm(`Une dépense très proche existe déjà : « ${doublon.description || 'sans description'} » du ${doublon.date} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €).\n\nAjouter quand même ce frais ?`)) {
             return;
         }
@@ -4307,7 +4354,7 @@ function renderOwnedTravauxTab(asset) {
         });
         form.reset();
         resetDropzone();
-        showToast('Frais ajouté');
+        showToast(alerteTF ? `Frais ajouté. ⚠ ${alerteTF}` : 'Frais ajouté', alerteTF ? 'negative' : 'positive');
         const fresh = getOwnedAsset(id);
         renderOwnedTravauxTab(fresh);
         renderAccordionPostAchat(fresh);
@@ -4423,10 +4470,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
     const initialId = [assetId, lastUsed, assets[0].id].find(id => id && assets.some(a => a.id === id));
     let currentAssetId = initialId;
 
-    const TAG_OPTIONS = `
-        <option value="a-classifier">À classifier</option>
-        <option value="deductible">Déductible</option>
-        <option value="non-deductible">Non déductible</option>`;
+    const TAG_OPTIONS = natureFraisOptionsHtml();
 
     const modal = _showOwnedModal(`
         <div class="owned-modal owned-modal--xwide owned-fm">
@@ -4549,12 +4593,17 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             const dupEl = row.el.querySelector('[data-fm-dup]');
             const v = rowValues(row);
             const doublon = asset && v.montant > 0 && v.date ? findSimilarTravail(asset, { montant: v.montant, date: v.date }) : null;
-            dupEl.hidden = !doublon;
+            // Taxe foncière déjà dans les charges (B9) : même bandeau, mais la ligne reste cochée.
+            const alerteTF = alerteDoublonTaxeFonciere(asset, v);
+            const messages = [];
             if (doublon) {
-                dupEl.textContent = `⚠ Doublon probable : « ${doublon.description || 'sans description'} » du ${_formatDateFr(doublon.date)} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €) — décoché par précaution`;
+                messages.push(`⚠ Doublon probable : « ${doublon.description || 'sans description'} » du ${_formatDateFr(doublon.date)} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €) — décoché par précaution`);
                 existingEl.querySelector(`[data-travail-id="${CSS.escape(doublon.id)}"]`)?.classList.add('owned-fm-existing__row--dup');
                 if (!row.dupSeen) { row.dupSeen = true; rowCheck(row).checked = false; }
             }
+            if (alerteTF) messages.push(`⚠ ${alerteTF}`);
+            dupEl.hidden = messages.length === 0;
+            dupEl.replaceChildren(...messages.map(m => Object.assign(document.createElement('div'), { textContent: m })));
         }
         updateSubmit();
     };
@@ -4569,7 +4618,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
         set('description', result.description || '');
         set('montant', result.montant > 0 ? result.montant : '');
         set('date', result.date || '');
-        row.el.querySelector('[data-fm-field="tag"]').value = result.tagSuggestion || 'a-classifier';
+        row.el.querySelector('[data-fm-field="tag"]').value = suggererNatureFrais(result);
     };
 
     const extractRow = async row => {
@@ -4658,8 +4707,8 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             el.querySelector('[data-fm-thumb-icon]').hidden = true;
         }
         el.querySelector('[data-fm-check]').addEventListener('change', updateSubmit);
-        ['montant', 'date'].forEach(f => el.querySelector(`[data-fm-field="${f}"]`).addEventListener('change', refreshDuplicates));
-        el.querySelector('[data-fm-field="description"]').addEventListener('change', updateSubmit);
+        ['montant', 'date', 'tag', 'fournisseur'].forEach(f => el.querySelector(`[data-fm-field="${f}"]`).addEventListener('change', refreshDuplicates));
+        el.querySelector('[data-fm-field="description"]').addEventListener('change', refreshDuplicates);
         el.querySelector('[data-fm-retry]').addEventListener('click', () => extractRow(row));
         el.querySelector('[data-fm-remove]').addEventListener('click', () => removeRow(row));
         el.querySelector('[data-fm-preview]').addEventListener('click', () => {
@@ -4876,21 +4925,21 @@ async function openImportDossierModal(existingAssetId) {
     // préexistant à rapprocher.
     const travauxRowsHtml = travauxRows.map((t, idx) => {
         const doublon = existingAsset ? findSimilarTravail(existingAsset, { montant: t.montant, date: t.date }) : null;
+        const alerteTF = alerteDoublonTaxeFonciere(existingAsset, t);
         return `
         <tr>
             <td><input type="checkbox" data-dossier-travail-check="${idx}" checked></td>
             <td class="owned-batch-filename">
                 📄 ${escapeHtml(t.file.name)}
                 ${doublon ? `<div class="owned-batch-duplicate">⚠ Possible doublon : « ${escapeHtml(doublon.description || 'sans description')} » du ${escapeHtml(doublon.date)}</div>` : ''}
+                ${alerteTF ? `<div class="owned-batch-duplicate">⚠ ${escapeHtml(alerteTF)}</div>` : ''}
             </td>
             <td><input type="date" class="variables-input" data-dossier-travail-field="date" data-idx="${idx}" value="${escapeHtml(t.date)}"></td>
             <td><input type="text" class="variables-input" data-dossier-travail-field="description" data-idx="${idx}" value="${escapeHtml(t.description)}"></td>
             <td><input type="number" class="variables-input" data-dossier-travail-field="montant" data-idx="${idx}" min="0" value="${t.montant || ''}"></td>
             <td>
                 <select class="variables-input" data-dossier-travail-field="tag" data-idx="${idx}">
-                    <option value="a-classifier" ${t.tag === 'a-classifier' ? 'selected' : ''}>À classifier</option>
-                    <option value="deductible" ${t.tag === 'deductible' ? 'selected' : ''}>Déductible</option>
-                    <option value="non-deductible" ${t.tag === 'non-deductible' ? 'selected' : ''}>Non déductible</option>
+                    ${natureFraisOptionsHtml(t.tag)}
                 </select>
             </td>
         </tr>`;
@@ -5623,7 +5672,7 @@ function renderAccordionPostAchat(asset) {
 
     const currentYear = new Date().getFullYear();
     const totalDed = (post.travaux || [])
-        .filter(t => t.tag === 'deductible' && t.date && new Date(t.date).getFullYear() === currentYear)
+        .filter(t => estFraisDeductible(t.tag) && t.date && new Date(t.date).getFullYear() === currentYear)
         .reduce((s, t) => s + t.montant, 0);
 
     // P0-B : résoudre les valeurs courantes depuis chargesAnnuelles pour les inputs plats
