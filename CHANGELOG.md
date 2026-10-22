@@ -7,6 +7,14 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [1.0.26] - 2026-10-22
+
+### Added
+- Impression groupée des factures : bouton « Imprimer les factures » de l'onglet Frais (PC et iPhone) et bouton « Factures » du dashboard. On choisit le bien (ou tous), l'année (ou toutes) et la nature (dont « Déductibles au réel uniquement »), on décoche au besoin, et l'app télécharge un seul PDF : un récapitulatif (totaux, par nature, par bien, tableau détaillé avec la page de chaque facture) suivi de toutes les factures dans le même ordre, PDF de plusieurs pages compris. pdf-lib 1.17.1 est vendorisé dans `vendor/pdf-lib/`.
+
+### Removed
+- Les cases à cocher par ligne et « Imprimer la sélection » de l'onglet Frais, remplacées par la modale ci-dessus (l'ancienne impression n'affichait que la première page des PDF).
+
 ## [1.0.25] - 2026-10-12
 
 Corrections du bilan d'usage et d'ergonomie du 2026-10-12 (`docs/audits/2026-10-12-bilan-ergonomie.md`) : 12 bugs confirmés (B1-B12) et 3 erreurs factuelles.
