@@ -30,6 +30,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `utils.js` | Helpers partagés formatage/échappement/toast, sans dépendance à `state`/`nodes` |
 | `calculs.js` | Moteur financier pur — tous les calculs, zéro accès DOM |
 | `pdf.js` | Génère le PDF de décision comme une page HTML autonome (imprimée depuis la page) |
+| `factures-pdf.js` | Module pur : impression groupée des factures (sélection, récapitulatif, PDF unique assemblé avec pdf-lib vendorisé dans `vendor/pdf-lib/`) |
 | `rapport-bien.js` | Module pur : rapport d'un bien détenu en HTML imprimable (courbes SVG) et en Markdown (export IA) |
 | `assistant-chat.js` | Onglet Assistant IA (chat), via la Cloud Function `chatPortefeuille` |
 | `styles.css` | Design system complet (thèmes clair/sombre, toutes les classes de composants) |
@@ -87,7 +88,7 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
   - Serveur : `npm run serve` (serveur statique `scripts/serve-static.mjs`, http://127.0.0.1:8090, mêmes réécritures que Hosting). **Jamais sur le port 8080.** Vérifier qu'il sert bien le code courant (`curl -s http://127.0.0.1:8090/VERSION`).
   - L'app exige Firebase Auth + un vrai compte Firestore, qu'un test n'a pas. **Ne jamais se connecter pour de vrai** : `tests/playwright/_harness.mjs` intercepte les DEUX modules cloud, `owned-cloud.js` (`OWNED_CLOUD_STUB_SOURCE`) et `cloud-store.js` (`CLOUD_STORE_STUB_SOURCE`), et sert des stubs alimentés par `seedCloud`/`seedStore`. Un stub doit exporter exactement les fonctions du module réel (un export manquant casse l'import sans erreur claire). Le code réel de l'app (`main.js`, `owned-portfolio.js`, `calculs.js`…) tourne ainsi dans un vrai Chromium sans toucher au vrai projet Firebase ni aux vraies données.
   - Le harnais fournit `openPage(browser, path, { viewport, seedCloud, seedStore, spyStorage, routes, initScripts })`, `waitAppStarted`, `step`, `getFailures` ; l'espion `localStorage`/`sessionStorage` vérifie qu'aucun accès n'a lieu ; `page.on('pageerror'/'console')` collecte les erreurs JS.
-  - Tests de référence (hors `npm test`, ils demandent le serveur + Chromium) : `tests/playwright/tout-web.mjs`, `factures-modal.mjs`, `change-password.mjs`, `projection-impots.mjs`. Lancer avec `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/<fichier>.mjs` ; `FM_SCREENSHOTS=<dir>` / `PI_SCREENSHOTS=<dir>` enregistrent des captures PNG pour contrôler le rendu.
+  - Tests de référence (hors `npm test`, ils demandent le serveur + Chromium) : `tests/playwright/tout-web.mjs`, `factures-modal.mjs`, `impression-factures.mjs`, `change-password.mjs`, `projection-impots.mjs`. Lancer avec `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/<fichier>.mjs` ; `FM_SCREENSHOTS=<dir>` / `PI_SCREENSHOTS=<dir>` enregistrent des captures PNG pour contrôler le rendu.
   - Viewport `{ width: 393, height: 852 }` pour approcher un iPhone (`owned.html`, comportement `IS_MOBILE_PAGE`).
   - Outillage de dev local uniquement — `node_modules/`, `tests/` et `scripts/` sont gitignorés ou exclus du déploiement (`firebase.json`) ; ne jamais compter dessus en production.
 

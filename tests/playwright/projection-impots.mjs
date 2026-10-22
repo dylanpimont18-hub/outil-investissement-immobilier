@@ -336,7 +336,7 @@ async function scenarioMobile(browser) {
         assert.ok(opened, 'aucun déclencheur d\'ouverture de fiche trouvé');
         await page.waitForSelector('#owned-detail-view:not([hidden])');
         await page.click('#owned-detail-view .owned-tab[data-tab="travaux"]');
-        await page.waitForSelector('#owned-travaux-content [data-action="print-selection"]', { timeout: 5000 });
+        await page.waitForSelector('#owned-travaux-content [data-action="print-factures"]', { timeout: 5000 });
         assert.equal(await page.$('#owned-travaux-content [data-action="open-projection-impots"]'), null);
     });
 

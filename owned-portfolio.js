@@ -33,6 +33,7 @@ import {
 } from './owned-cloud.js';
 import { watchPrefs, savePref, cloudListArchives, cloudUploadArchive, cloudReadArchive } from './cloud-store.js';
 import { nomArchiveUnique } from './archives-regles.js';
+import { anneesDisponibles, selectionnerFrais, nomFichierFactures, formatEuros, formatDateFr, genererPdfFactures } from './factures-pdf.js';
 
 let state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
 
@@ -2217,6 +2218,7 @@ function renderOwnedDashboard(list, profileData, regime) {
                 <button class="btn btn--ghost btn--sm" data-action="open-objectifs">Objectifs</button>
                 <button class="btn btn--ghost btn--sm" data-action="open-rapport">Rapport annuel</button>
                 <button class="btn btn--ghost btn--sm" data-action="open-declaration">Déclaration fiscale</button>
+                <button class="btn btn--ghost btn--sm" data-action="open-factures">Factures</button>
                 <button class="btn btn--ghost btn--sm" data-action="open-projection-impots">Impôts à venir</button>
             </div>
         </div>
@@ -2302,6 +2304,9 @@ function renderOwnedDashboard(list, profileData, regime) {
     });
     wrap.querySelectorAll('[data-action="open-projection-impots"]').forEach(btn => {
         btn.addEventListener('click', () => openProjectionImpotsModal(null));
+    });
+    wrap.querySelectorAll('[data-action="open-factures"]').forEach(btn => {
+        btn.addEventListener('click', () => openImpressionFacturesModal({ assetId: null }));
     });
 }
 
@@ -3895,26 +3900,184 @@ function openEditTravailModal(assetId, travailId) {
     });
 }
 
-async function printSelectedDocuments(assetId, filenames) {
-    if (!filenames.length) return;
-    const win = window.open('', '_blank');
-    if (!win) return;
-    const pairs = await Promise.all(filenames.map(async f => ({ url: await cloudDocumentUrl(assetId, f).catch(() => null), isImage: _isImageFilename(f) })));
-    const embeds = pairs.filter(p => p.url).map(p => p.isImage
-        ? `<img src="${p.url}" class="print-doc-embed">`
-        : `<embed src="${p.url}" type="application/pdf" class="print-doc-embed">`).join('');
-    win.document.write(`
-        <!doctype html><html><head><title>Impression des factures</title>
-        <style>
-            body { margin: 0; }
-            .print-doc-embed { width: 100%; height: 100vh; display: block; break-after: page; object-fit: contain; }
-            .print-doc-embed:last-child { break-after: auto; }
-        </style>
-        </head><body>${embeds}</body></html>
-    `);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 500);
+// ─── IMPRESSION GROUPÉE DES FACTURES (2026-10-22) ──────────────────────────────
+// Un seul PDF = récapitulatif + justificatifs, assemblé dans le navigateur par factures-pdf.js
+// (pdf-lib vendorisé, chargé à la demande comme pdf.js). Les fichiers sont lus depuis Firebase
+// Storage par leur URL de téléchargement (CORS ouvert sur firebasestorage.googleapis.com).
+
+let _pdfLibPromise = null;
+function _loadPdfLib() {
+    if (!_pdfLibPromise) _pdfLibPromise = import('/vendor/pdf-lib/pdf-lib.esm.min.js');
+    return _pdfLibPromise;
+}
+
+function _telechargerBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function openImpressionFacturesModal({ assetId = null } = {}) {
+    const assets = getOrderedAssetList();
+    if (!assets.length) return;
+    const LIBELLES = Object.fromEntries(NATURES_FRAIS.map(n => [n.value, n.court]));
+    const TAG_CSS = Object.fromEntries(NATURES_FRAIS.map(n => [n.value, n.css]));
+    const anneeCourante = new Date().getFullYear();
+    const filtre = { assetId: assetId && assets.some(a => a.id === assetId) ? assetId : (assets.length === 1 ? assets[0].id : 'tous'), annee: 'toutes', nature: 'toutes' };
+    const annees0 = anneesDisponibles(assets, filtre.assetId);
+    filtre.annee = annees0.includes(anneeCourante) ? anneeCourante : (annees0[0] ?? 'toutes');
+    const exclus = new Set(); // ids de frais décochés à la main (survivent aux changements de filtre)
+
+    const modal = _showOwnedModal(`
+        <div class="owned-modal owned-modal--wide owned-pf" role="dialog" aria-labelledby="owned-pf-title">
+            <div class="owned-modal-head">
+                <div>
+                    <h3 class="owned-modal-title" id="owned-pf-title">Imprimer les factures</h3>
+                    <div class="owned-modal-sub">Un seul PDF : le récapitulatif, puis chaque facture dans le même ordre.</div>
+                </div>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+            </div>
+            <div class="owned-pf__filters">
+                <label class="variables-field">
+                    <span class="variables-label">Bien</span>
+                    <select class="variables-input" data-pf="asset">
+                        ${assets.length > 1 ? `<option value="tous">Tous les biens</option>` : ''}
+                        ${assets.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.nom || 'Sans nom')}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Année</span>
+                    <select class="variables-input" data-pf="annee"></select>
+                </label>
+                <label class="variables-field">
+                    <span class="variables-label">Nature</span>
+                    <select class="variables-input" data-pf="nature">
+                        <option value="toutes">Toutes les natures</option>
+                        <option value="deductibles">Déductibles au réel uniquement</option>
+                        ${NATURES_FRAIS.map(n => `<option value="${n.value}">${escapeHtml(n.court)}</option>`).join('')}
+                    </select>
+                </label>
+            </div>
+            <div class="owned-pf__bar">
+                <label class="owned-pf__all"><input type="checkbox" data-pf-all> Tout sélectionner</label>
+                <span class="owned-pf__summary" data-pf-summary></span>
+            </div>
+            <div class="owned-pf__list" data-pf-list></div>
+            <div class="owned-modal-actions">
+                <span class="owned-pf__status" data-pf-status role="status"></span>
+                <button type="button" class="btn btn--ghost" data-close-modal>Annuler</button>
+                <button type="button" class="btn btn--primary" data-pf-generate>Générer le PDF</button>
+            </div>
+        </div>
+    `, 'owned-print-factures-modal');
+
+    const sel = name => modal.querySelector(`[data-pf="${name}"]`);
+    const listEl = modal.querySelector('[data-pf-list]');
+    const summaryEl = modal.querySelector('[data-pf-summary]');
+    const allCb = modal.querySelector('[data-pf-all]');
+    const genBtn = modal.querySelector('[data-pf-generate]');
+    const statusEl = modal.querySelector('[data-pf-status]');
+    let items = [];
+
+    const remplirAnnees = () => {
+        const annees = anneesDisponibles(assets, filtre.assetId);
+        if (filtre.annee !== 'toutes' && !annees.includes(Number(filtre.annee))) filtre.annee = annees[0] ?? 'toutes';
+        sel('annee').innerHTML = `<option value="toutes">Toutes les années</option>`
+            + annees.map(y => `<option value="${y}">${y}</option>`).join('');
+        sel('annee').value = String(filtre.annee);
+    };
+
+    const selectionnes = () => items.filter(i => !exclus.has(i.travail.id));
+
+    const majResume = () => {
+        const choisis = selectionnes();
+        const total = choisis.reduce((s, i) => s + (Number(i.travail.montant) || 0), 0);
+        const justif = choisis.filter(i => i.travail.pdfFilename).length;
+        summaryEl.textContent = choisis.length
+            ? `${choisis.length} frais · ${formatEuros(total)} · ${justif} justificatif${justif > 1 ? 's' : ''}`
+            : 'Aucun frais sélectionné';
+        allCb.checked = items.length > 0 && choisis.length === items.length;
+        allCb.indeterminate = choisis.length > 0 && choisis.length < items.length;
+        allCb.disabled = items.length === 0;
+        genBtn.disabled = choisis.length === 0;
+    };
+
+    const rendreListe = () => {
+        items = selectionnerFrais(assets, filtre);
+        const multi = filtre.assetId === 'tous';
+        listEl.innerHTML = items.length ? items.map(({ assetNom, travail: t }) => `
+            <label class="owned-pf-row">
+                <input type="checkbox" data-pf-item="${escapeHtml(t.id)}" ${exclus.has(t.id) ? '' : 'checked'}>
+                <span class="owned-pf-row__date">${escapeHtml(formatDateFr(t.date))}</span>
+                <span class="owned-pf-row__desc">${escapeHtml(t.description || '—')}${multi ? `<small>${escapeHtml(assetNom)}</small>` : ''}</span>
+                <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(LIBELLES[t.tag] || t.tag || '—')}</span>
+                <span class="owned-pf-row__montant">${escapeHtml(formatEuros(t.montant))}</span>
+                <span class="owned-pf-row__justif${t.pdfFilename ? '' : ' owned-pf-row__justif--absent'}">${t.pdfFilename ? 'Facture jointe' : 'Sans facture'}</span>
+            </label>`).join('')
+            : '<p class="owned-pf__empty">Aucun frais pour ces critères.</p>';
+        listEl.querySelectorAll('[data-pf-item]').forEach(cb => cb.addEventListener('change', () => {
+            if (cb.checked) exclus.delete(cb.dataset.pfItem); else exclus.add(cb.dataset.pfItem);
+            majResume();
+        }));
+        majResume();
+    };
+
+    sel('asset').value = filtre.assetId;
+    remplirAnnees();
+    sel('asset').addEventListener('change', () => { filtre.assetId = sel('asset').value; remplirAnnees(); rendreListe(); });
+    sel('annee').addEventListener('change', () => { filtre.annee = sel('annee').value === 'toutes' ? 'toutes' : Number(sel('annee').value); rendreListe(); });
+    sel('nature').addEventListener('change', () => { filtre.nature = sel('nature').value; rendreListe(); });
+    allCb.addEventListener('change', () => {
+        items.forEach(i => { if (allCb.checked) exclus.delete(i.travail.id); else exclus.add(i.travail.id); });
+        rendreListe();
+    });
+    rendreListe();
+
+    genBtn.addEventListener('click', async () => {
+        const choisis = selectionnes();
+        if (!choisis.length) return;
+        const libNature = sel('nature').selectedOptions[0]?.textContent || 'Toutes les natures';
+        const bienNom = filtre.assetId === 'tous' ? null : (assets.find(a => a.id === filtre.assetId)?.nom || 'Sans nom');
+        const entete = [
+            bienNom ? `Bien : ${bienNom}` : `Biens : tous les biens (${new Set(choisis.map(i => i.assetId)).size})`,
+            `Période : ${filtre.annee === 'toutes' ? 'toutes les années' : `année ${filtre.annee}`}`,
+            `Nature : ${filtre.nature === 'toutes' ? 'toutes' : libNature}`,
+            `Édité le ${new Date().toLocaleDateString('fr-FR')}`,
+        ];
+        genBtn.disabled = true;
+        statusEl.textContent = 'Préparation…';
+        try {
+            const PDFLib = await _loadPdfLib();
+            const { bytes, echecs } = await genererPdfFactures({
+                PDFLib, items: choisis, entete, libellesNatures: LIBELLES,
+                chargerJustificatif: async item => {
+                    const url = await cloudDocumentUrl(item.assetId, item.travail.pdfFilename);
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error(`http_${res.status}`);
+                    return res.arrayBuffer();
+                },
+                onProgress: (n, N) => { statusEl.textContent = `Téléchargement des factures ${n} / ${N}…`; },
+            });
+            _telechargerBlob(new Blob([bytes], { type: 'application/pdf' }), nomFichierFactures({ annee: filtre.annee, bienNom }));
+            statusEl.textContent = '';
+            if (echecs.length) {
+                showToast(`PDF généré, mais ${echecs.length} facture${echecs.length > 1 ? 's illisibles' : ' illisible'} (page d'avertissement à la place)`, 'negative');
+            } else {
+                showToast('PDF des factures généré');
+                modal.hidden = true;
+            }
+        } catch (err) {
+            statusEl.textContent = '';
+            showToast('Impossible de générer le PDF des factures', 'negative');
+        } finally {
+            genBtn.disabled = selectionnes().length === 0;
+        }
+    });
 }
 
 function _normalizeSearchText(str) {
@@ -4102,12 +4265,11 @@ function renderOwnedTravauxTab(asset) {
             <div class="owned-travaux-list">
                 ${rows.map(t => `
                     <div class="owned-travaux-row" data-search-text="${escapeHtml(`${t.description || ''} ${t.montant || ''} ${t.commentaire || ''}`)}">
-                        <input type="checkbox" class="owned-travaux-select" data-select-travail="${escapeHtml(t.id)}" ${t.pdfFilename ? '' : 'disabled title="Aucun justificatif attaché"'}>
                         <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
                         <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.financeParCredit ? ` <small class="owned-caveat" data-tooltip="Inclus dans le crédit immobilier principal (pas payé cash) — reste déductible l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">🏦 financé</small>` : ''}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
                         <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
                         <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
-                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le justificatif" aria-label="Voir le justificatif de ${escapeHtml(t.description || 'ce frais')}">📄</button>` : '<span></span>'}
+                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le justificatif" aria-label="Voir le justificatif de ${escapeHtml(t.description || 'ce frais')}">📄</button>` : '<span class="owned-travaux-pdf-vide"></span>'}
                         <button type="button" class="owned-travaux-edit" data-edit-travail="${escapeHtml(t.id)}" title="Modifier" aria-label="Modifier ${escapeHtml(t.description || 'ce frais')}">✏️</button>
                         <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
                     </div>
@@ -4120,7 +4282,7 @@ function renderOwnedTravauxTab(asset) {
         <div class="owned-section-title">Frais &amp; justificatifs</div>
         <div class="owned-travaux-toolbar">
             <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…">
-            <button type="button" class="btn btn--ghost btn--sm" data-action="print-selection" disabled>🖨 Imprimer la sélection</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="print-factures" ${(post.travaux || []).length ? '' : 'disabled'}>Imprimer les factures</button>
             ${IS_MOBILE_PAGE ? '' : `<button type="button" class="btn btn--ghost btn--sm" data-action="open-projection-impots" title="Effet des travaux déductibles sur l'impôt du foyer, année par année">Impôts des prochaines années</button>`}
         </div>
         ${yearBlocksHtml}
@@ -4155,25 +4317,8 @@ function renderOwnedTravauxTab(asset) {
         </div>
     `;
 
-    const updateSelectionToolbar = () => {
-        const printBtn = el.querySelector('[data-action="print-selection"]');
-        const checked = el.querySelectorAll('.owned-travaux-select:checked');
-        if (printBtn) printBtn.disabled = checked.length === 0;
-    };
-
-    el.querySelectorAll('.owned-travaux-select').forEach(cb => {
-        cb.addEventListener('change', updateSelectionToolbar);
-    });
-
-    el.querySelector('[data-action="print-selection"]')?.addEventListener('click', () => {
-        const id = state.activeOwnedAssetId;
-        if (!id) return;
-        const fresh = getOwnedAsset(id);
-        const checkedIds = [...el.querySelectorAll('.owned-travaux-select:checked')].map(cb => cb.dataset.selectTravail);
-        const filenames = (fresh.postAchat.travaux || [])
-            .filter(t => checkedIds.includes(t.id) && t.pdfFilename)
-            .map(t => t.pdfFilename);
-        printSelectedDocuments(id, filenames);
+    el.querySelector('[data-action="print-factures"]')?.addEventListener('click', () => {
+        openImpressionFacturesModal({ assetId: state.activeOwnedAssetId });
     });
 
     el.querySelectorAll('[data-preview-pdf]').forEach(btn => {

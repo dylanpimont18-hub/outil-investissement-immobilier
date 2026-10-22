@@ -6864,8 +6864,9 @@ body.asset-report-open .owned-quickfab { display: none; }
 
 .owned-travaux-row {
     display: grid;
-    /* checkbox / date / desc / montant / tag / pdf / modifier / supprimer */
-    grid-template-columns: 20px 110px 1fr 90px 120px 28px 26px 24px;
+    /* date / desc / montant / tag / pdf / modifier / supprimer (cases à cocher retirées le
+       2026-10-22 : l'impression passe par la modale « Imprimer les factures ») */
+    grid-template-columns: 110px 1fr 90px 120px 28px 26px 24px;
     gap: 8px;
     align-items: center;
     padding: 5px 0;
@@ -6878,21 +6879,21 @@ body.asset-report-open .owned-quickfab { display: none; }
 /* Smartphone : la grille 8 colonnes à largeurs fixes (≥ 418px) déborde sur un écran de
    390px de large — on la replie sur 2 lignes de 4 colonnes auto-dimensionnées. */
 .shell--owned .owned-travaux-row {
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto auto 1fr auto auto;
     grid-template-areas:
-        "check desc edit del"
-        "date montant tag pdf";
+        "desc desc desc edit del"
+        "date montant tag tag pdf";
     row-gap: 8px;
     column-gap: 8px;
 }
-.shell--owned .owned-travaux-row .owned-travaux-select { grid-area: check; }
 .shell--owned .owned-travaux-row .owned-travaux-desc { grid-area: desc; }
 .shell--owned .owned-travaux-row .owned-travaux-edit { grid-area: edit; }
 .shell--owned .owned-travaux-row .owned-travaux-delete { grid-area: del; }
-.shell--owned .owned-travaux-row .owned-travaux-date { grid-area: date; font-size: 0.78rem; color: var(--text-secondary); }
-.shell--owned .owned-travaux-row .owned-travaux-montant { grid-area: montant; }
-.shell--owned .owned-travaux-row .tag { grid-area: tag; }
-.shell--owned .owned-travaux-row .owned-travaux-pdf-btn { grid-area: pdf; }
+.shell--owned .owned-travaux-row .owned-travaux-date { grid-area: date; font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; }
+.shell--owned .owned-travaux-row .owned-travaux-montant { grid-area: montant; white-space: nowrap; }
+.shell--owned .owned-travaux-row .tag { grid-area: tag; justify-self: start; }
+.shell--owned .owned-travaux-row .owned-travaux-pdf-btn,
+.shell--owned .owned-travaux-row .owned-travaux-pdf-vide { grid-area: pdf; }
 
 .owned-travaux-year { margin-bottom: 6px; }
 .owned-travaux-year__summary {
@@ -8782,4 +8783,57 @@ body.has-mobile-banner .shell { margin-top: calc(48px + env(safe-area-inset-top,
     }
     .shell--owned input[type="checkbox"]:disabled { opacity: 0.45; cursor: not-allowed; }
     .shell--owned input[type="checkbox"]:focus-visible::before { outline: 2px solid var(--primary); outline-offset: 2px; }
+}
+
+/* Impression groupée des factures (2026-10-22, openImpressionFacturesModal) */
+.owned-pf__filters { display: grid; grid-template-columns: 1.4fr 1fr 1.2fr; gap: 12px; }
+.owned-pf__bar {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin: 16px 0 8px; font-size: .82rem;
+}
+.owned-pf__all { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-secondary); }
+.owned-pf__summary { font-family: var(--font-mono); font-size: .78rem; color: var(--text-secondary); }
+.owned-pf__list {
+    max-height: 46vh; overflow-y: auto;
+    border: 1px solid var(--border-subtle); border-radius: 8px;
+}
+.owned-pf__empty { margin: 0; padding: 16px; font-size: .82rem; color: var(--text-tertiary); font-style: italic; }
+.owned-pf-row {
+    display: grid;
+    grid-template-columns: 18px 84px minmax(0, 1fr) auto 92px 96px;
+    gap: 10px; align-items: center;
+    padding: 8px 12px; font-size: .82rem; cursor: pointer;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.owned-pf-row:last-child { border-bottom: none; }
+.owned-pf-row:hover { background: var(--surface-low); }
+.owned-pf-row input { width: 16px; height: 16px; margin: 0; }
+.owned-pf-row__date { font-family: var(--font-mono); font-size: .76rem; color: var(--text-secondary); }
+.owned-pf-row__desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owned-pf-row__desc small { display: block; font-size: .72rem; color: var(--text-tertiary); }
+.owned-pf-row__montant { font-family: var(--font-mono); text-align: right; font-weight: 600; }
+.owned-pf-row__justif { font-size: .74rem; color: var(--success); text-align: right; }
+.owned-pf-row__justif--absent { color: var(--text-tertiary); }
+.owned-pf__status { margin-right: auto; align-self: center; font-size: .78rem; color: var(--text-secondary); }
+
+/* Media query plutôt que .shell--owned : la modale est ajoutée à <body>, hors de l'arbre .shell. */
+@media (max-width: 640px) {
+    .owned-pf__filters { grid-template-columns: 1fr; gap: 8px; }
+    .owned-pf__list { max-height: none; }
+    .owned-pf-row {
+        grid-template-columns: 22px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "check desc montant"
+            "check date justif"
+            "check tag tag";
+        row-gap: 4px; min-height: 44px;
+    }
+    .owned-pf-row input { grid-area: check; width: 20px; height: 20px; }
+    .owned-pf-row__desc { grid-area: desc; white-space: normal; }
+    .owned-pf-row__montant { grid-area: montant; }
+    .owned-pf-row__date { grid-area: date; }
+    .owned-pf-row__justif { grid-area: justif; }
+    .owned-pf-row .tag { grid-area: tag; justify-self: start; }
+    .owned-pf .owned-modal-actions { flex-wrap: wrap; }
+    .owned-pf__status { flex-basis: 100%; }
 }
