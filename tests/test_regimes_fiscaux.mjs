@@ -8,6 +8,9 @@ import { computeCFBreakdown } from '../calculs.js';
 // par régime, sans travaux.
 
 const tmi = 30; // 30%
+// L'impôt est calculé par différence de deux impôts complets du foyer. Sur ce profil (célibataire à
+// 60 000 €, sans décote) toutes les bases testées restent dans la tranche à 30 % : la différence vaut
+// donc exactement base × 30 %, et la formule « TMI + 17,2 % » ci-dessous reste la bonne attente.
 const tauxGlobalImpot = (tmi / 100) + 0.172; // TMI + CSG/CRDS 17.2%
 // Profil sans historique de revenu : income (60000€, 1 part) résout à TMI=30% quelle que soit
 // l'année visée — équivalent au tmi=30 figé d'avant le passage à computeCFBreakdown(asset,
@@ -65,8 +68,10 @@ function makeAsset({ prix = 100000, loyer = 800, taxeFonciere = 0, credit = null
 
     // Une fois le report de 3300€ épuisé (absorbé en année 2), l'année 3 retombe à la taxation pleine.
     const bdY3 = computeCFBreakdown(asset, profileData, 'reel', 3);
-    // Loyers 6 000 − forfait 20 € (case 222, chantier CF unique étape 3).
-    assert.equal(bdY3.impots, Math.round(5980 * tauxGlobalImpot), `année 3 : le report est épuisé, l'impôt doit redevenir plein (${Math.round(5980 * tauxGlobalImpot)}), trouvé ${bdY3.impots}`);
+    // Loyers 6 000 − forfait 20 € (case 222, chantier CF unique étape 3). Base pleine, diminuée
+    // côté IR de la CSG déductible née de la base de l'année 2 (5 980 − 3 320 de report = 2 660 €).
+    const attenduY3 = Math.round(5980 * tauxGlobalImpot - 2660 * 0.068 * (tmi / 100));
+    assert.equal(bdY3.impots, attenduY3, `année 3 : le report est épuisé, l'impôt doit redevenir plein (${attenduY3}), trouvé ${bdY3.impots}`);
 
     console.log('Test 3 OK — réel, plafond 10 700€ : an 1 =', bdY1.impots, '€ (imputation plafonnée), an 2 =', bdY2.impots, '€ (report partiel), an 3 =', bdY3.impots, '€ (report épuisé, taxation pleine)');
 }
@@ -119,23 +124,31 @@ function makeAsset({ prix = 100000, loyer = 800, taxeFonciere = 0, credit = null
     console.log('Test 5 OK — SCI-IS bénéfice : sous seuil =', bdLow.impots, '€ (15%), au-dessus =', bdHigh.impots, '€ (15%/25% mixte)');
 }
 
-// --- Test 6 : SCI-IS, bénéfice négatif — pas de déficit reportable (contrairement au réel) ---
+// --- Test 6 : SCI-IS, bénéfice négatif — déficit reporté sur les bénéfices suivants (art. 209 I CGI) ---
 {
-    // Simplification connue du moteur : à l'IS, un déficit n'est ni imputable sur le revenu global
-    // (logique, l'IS est un impôt de société) ni reporté sur les bénéfices futurs de la SCI — il est
-    // simplement perdu dans ce modèle. Ce test documente ce comportement pour éviter une régression
-    // silencieuse si un report était introduit sans le vouloir.
+    // Le déficit d'une société à l'IS n'est pas imputable sur le revenu du foyer, mais il se reporte
+    // sans limite de durée sur les bénéfices suivants de la société. L'ancien moteur le perdait : ce
+    // test verrouillait ce défaut, il vérifie désormais le report.
     const asset = makeAsset({ prix: 200000, loyer: 1666.67, travaux: [{ date: '2024-06-01', montant: 30000, tag: 'deductible' }] });
+    const loyersAnnuels = 1666.67 * 12;
+    const amortissement = 200000 * 0.80 / 30;
+    const resultatY1 = loyersAnnuels - 30000 - amortissement;   // ≈ −15 333 €
+    const beneficeCourant = loyersAnnuels - amortissement;       // ≈ 14 667 €/an
 
     const bdY1 = computeCFBreakdown(asset, profileData, 'sci-is', 1);
     assert.equal(bdY1.impots, 0, `SCI-IS en déficit ne doit générer aucun impôt (ni négatif ni positif), trouvé ${bdY1.impots}`);
 
     const bdY2 = computeCFBreakdown(asset, profileData, 'sci-is', 2);
-    const baselineNoDeficit = makeAsset({ prix: 200000, loyer: 1666.67 });
-    const bdBaselineY2 = computeCFBreakdown(baselineNoDeficit, profileData, 'sci-is', 2);
-    assert.equal(bdY2.impots, bdBaselineY2.impots, `SCI-IS : aucun report attendu, l'impôt de l'année suivante doit être identique à un actif sans déficit préalable (${bdBaselineY2.impots}), trouvé ${bdY2.impots}`);
+    assert.equal(bdY2.impots, 0, `année 2 : le bénéfice (${Math.round(beneficeCourant)} €) est absorbé par le déficit reporté, trouvé ${bdY2.impots}`);
 
-    console.log('Test 6 OK — SCI-IS déficit : an 1 impôt =', bdY1.impots, '€, an 2 =', bdY2.impots, '€ (identique au cas sans déficit, aucun report)');
+    const bdY3 = computeCFBreakdown(asset, profileData, 'sci-is', 3);
+    const resteReport = -resultatY1 - beneficeCourant;
+    assert.equal(bdY3.impots, Math.round((beneficeCourant - resteReport) * 0.15), `année 3 : solde du report (${Math.round(resteReport)} €) imputé, trouvé ${bdY3.impots}`);
+
+    const bdBaselineY2 = computeCFBreakdown(makeAsset({ prix: 200000, loyer: 1666.67 }), profileData, 'sci-is', 2);
+    assert.ok(bdBaselineY2.impots > 0, 'sans déficit préalable, l\'année 2 est imposée');
+
+    console.log('Test 6 OK — SCI-IS déficit : an 1 =', bdY1.impots, '€, an 2 =', bdY2.impots, '€ (report), an 3 =', bdY3.impots, '€ (solde du report)');
 }
 
 console.log('ALL RÉGIMES FISCAUX TESTS PASSED');

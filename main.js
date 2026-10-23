@@ -74,6 +74,7 @@ const VARIABLE_DEFAULTS = {
     loyer: 0,
     notaire: 8,
     travaux: 0,
+    'travaux-non-deductibles': 0,
     meubles: 0,
     agence: 0,
     dpe: 'D',
@@ -130,7 +131,7 @@ const TUTO_STEPS = [
         fields: [
             { id: 'prix', label: 'Prix affiché', exemple: 'ex : 185 000', explication: 'Prix demandé par le vendeur, avant toute négociation.' },
             { id: 'loyer', label: 'Loyer cible mensuel', exemple: 'ex : 750', explication: 'Loyer mensuel hors charges que vous estimez pouvoir obtenir.' },
-            { id: 'nego', label: 'Négociation visée (%)', exemple: 'ex : 5', explication: 'Décote visée sur le prix. 5 % sur 185 000 € = offre à 175 750 €.' },
+            { id: 'nego', label: 'Négociation visée (€)', exemple: 'ex : 9 000', explication: 'Montant que vous comptez retirer du prix affiché. 9 000 € sur 185 000 € = offre à 176 000 €.' },
             { id: 'notaire', label: 'Frais de notaire (%)', exemple: 'ex : 7.5', explication: 'Environ 7–8 % dans l\'ancien, 2–3 % dans le neuf.' },
             { id: 'travaux', label: 'Budget travaux', exemple: 'ex : 15 000', explication: 'Travaux de rénovation estimés, intégrés au coût total d\'acquisition.' }
         ]
@@ -189,7 +190,7 @@ const WIZARD_STEPS = [
         fields: [
             { id: 'prix', label: 'Prix affiché par le vendeur (€)', type: 'number', hint: 'Prix demandé, avant négociation.' },
             { id: 'loyer', label: 'Loyer cible mensuel (€)', type: 'number', hint: 'Loyer mensuel hors charges que vous estimez pouvoir obtenir.' },
-            { id: 'nego', label: 'Négociation visée (%)', type: 'number', hint: 'Décote visée sur le prix. 0 si vous gardez le prix affiché.' },
+            { id: 'nego', label: 'Négociation visée (€)', type: 'number', hint: 'Montant retiré du prix affiché. 0 si vous gardez le prix affiché.' },
             { id: 'travaux', label: 'Budget travaux (€)', type: 'number', hint: 'Travaux à intégrer au coût d\'acquisition. 0 si aucun.' }
         ]
     },
@@ -609,6 +610,11 @@ function sanitizeVariablesData(rawVariables) {
         loyer: Math.max(0, Number(rawVariables.loyer) || 0),
         notaire: Math.max(0, Number(rawVariables.notaire) || 0),
         travaux: Math.max(0, Number(rawVariables.travaux) || 0),
+        // Part non déductible (construction, agrandissement) : bornée par le budget travaux.
+        'travaux-non-deductibles': Math.min(
+            Math.max(0, Number(rawVariables.travaux) || 0),
+            Math.max(0, Number(rawVariables['travaux-non-deductibles']) || 0)
+        ),
         meubles: Math.max(0, Number(rawVariables.meubles) || 0),
         agence: Math.max(0, Number(rawVariables.agence) || 0),
         dpe: DPE_VALUES.has(String(rawVariables.dpe || '').toUpperCase()) ? String(rawVariables.dpe).toUpperCase() : 'D',

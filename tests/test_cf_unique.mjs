@@ -129,13 +129,17 @@ for (const regime of ['micro-foncier', 'reel', 'sci-is']) {
     cas(`[${regime}] compte de résultat, timeline et détail donnent le même impôt et le même CF`, () => {
         for (const asset of [bienStable(), bienStable([travauxCredit]), bienStable([fraisPonctuel]), bienRecent(), bienDeficit()]) {
             const tl = computeOwnedAssetTimeline(asset, profileData, regime).years;
+            // computeImpotAnnuelBien enchaîné depuis l'achat avec un seul état fiscal (reports de
+            // déficit, CSG déductible) doit redonner exactement l'impôt de la timeline, chaque année.
+            const etat = calculs.etatFiscalInitial();
+            const chaine = new Map();
+            for (const y of tl) chaine.set(y.year, calculs.computeImpotAnnuelBien(asset, y.year, profileData, regime, etat).impots);
             for (const annee of [currentYear, nextYear]) {
                 const row = tl.find(y => y.year === annee);
                 const cr = calculs.computeCompteResultat(asset, annee, profileData, regime);
-                const seul = calculs.computeImpotAnnuelBien(asset, annee, profileData, regime, 0);
                 proche(cr.impots, row.impotsAnnee, 0.5, `${asset.nom} ${annee} : impôt compte de résultat`);
                 proche(cr.cfReel, row.cfAnnuel, 3, `${asset.nom} ${annee} : cfReel du compte de résultat`);
-                if (regime !== 'reel') proche(seul.impots, row.impotsAnnee, 0.01, `${asset.nom} ${annee} : computeImpotAnnuelBien`);
+                proche(chaine.get(annee), row.impotsAnnee, 0.01, `${asset.nom} ${annee} : computeImpotAnnuelBien enchaîné`);
             }
         }
     });

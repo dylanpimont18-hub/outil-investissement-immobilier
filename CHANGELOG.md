@@ -8,6 +8,20 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Fixed
+- Impôt (étude et biens détenus) : l'impôt d'un revenu locatif est désormais la différence de deux impôts complets du foyer (barème, plafonnement du quotient familial, décote), et non plus la base multipliée par la TMI. Sur un couple à 45 000 €, 6 930 € de revenu foncier coûtent 1 107 € d'IR, et non 762 €.
+- Impôt : la CSG déductible (6,8 %) née des revenus fonciers d'une année est retranchée du revenu imposable de l'année suivante, dans l'étude, le cash-flow des biens et les projections du foyer.
+- Déficit foncier : il reste imputable jusqu'à la dixième année suivante incluse (art. 156 I 3° CGI). Il était perdu un an trop tôt dans le tableau des déficits reportables, les alertes et les projections. Dans l'étude, le report n'expirait jamais.
+- SCI à l'IS : un déficit est reporté sur les bénéfices suivants, au lieu d'être perdu. L'amortissement porte sur 80 % du prix augmenté des frais de notaire et d'agence, au prorata la première année, et s'arrête une fois le bien amorti.
+- Parent isolé : un adulte seul avec enfant reçoit la demi-part supplémentaire (case T), avec son plafond propre. La TMI affichée tient compte du plafonnement du quotient familial.
+- Étude : au-delà de 15 000 € de loyers, le micro-foncier est calculé au réel, et la comparaison des régimes le signale. Sans durée de crédit, le coût est intégralement apporté (il n'y a plus de prêt sans remboursement). La projection et le tableau du prêt appliquent l'assurance dégressive quand elle est choisie.
+- Étude : la SCI à l'IS est comparée aux autres régimes sur le cash-flow qui revient au foyer, après prélèvement forfaitaire unique (31,4 % depuis 2026).
+- Étude : la matrice prix/loyer se recalcule quand les travaux, le notaire, l'assurance, la gestion ou le mobilier changent.
+- Simulation de travaux : l'« économie fiscale sur 3 ans » est réellement calculée sur trois ans (impôt sans travaux moins impôt avec travaux, report et prélèvements sociaux compris), au lieu d'une seule année au taux marginal.
+- Négociation : l'aide et le tutoriel parlaient d'un pourcentage alors que le calcul retire un montant en euros. Les libellés disent désormais « € ».
+- Revente (calcul disponible, non affiché) : forfaits de 7,5 % et 15 %, surtaxe au-delà de 50 000 €, et sortie de SCI à l'IS imposée à l'IS puis au prélèvement forfaitaire unique.
+
+### Added
+- Étude : champ « dont non déductibles » sous le budget travaux, pour la part qui relève de la construction ou de l'agrandissement. Elle est comptée dans le coût et le financement, mais pas dans les charges.
 - Impression des factures : les justificatifs n'étaient jamais intégrés au PDF en production (« Load failed » sur iPhone) : le bucket Firebase Storage n'avait aucune règle CORS, le navigateur bloquait leur lecture. Règle ajoutée (lecture GET seule, origines de l'app), conservée dans `scripts/storage-cors.json`.
 
 ### Changed

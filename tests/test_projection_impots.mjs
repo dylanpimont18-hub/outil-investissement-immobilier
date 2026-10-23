@@ -8,7 +8,8 @@ import { computeProjectionImpotsFoyer, computeImpotFoyer } from '../calculs.js';
 //   - l'excédent, et la part des intérêts non couverte par les loyers, se reportent sur les revenus
 //     fonciers des 10 années suivantes (FIFO) — « déduction des loyers » ;
 //   - l'impôt de chaque année est celui du foyer entier (IR au barème + prélèvements sociaux
-//     17,2 % sur le revenu foncier imposable), calculé par computeImpotFoyer.
+//     17,2 % sur le revenu foncier imposable), calculé par computeImpotFoyer ;
+//   - la CSG déductible (6,8 % du revenu foncier imposé l'an passé) se retranche du revenu global.
 // Le moteur raisonne au niveau du FOYER : les résultats fonciers de tous les biens s'additionnent
 // avant imputation, comme sur la déclaration 2044.
 // Depuis B8 (bilan 2026-10-12), chaque année d'un bien est lue sur la 2044 (source unique) : le
@@ -18,7 +19,8 @@ import { computeProjectionImpotsFoyer, computeImpotFoyer } from '../calculs.js';
 const currentYear = new Date().getFullYear();
 const profileData = { income: 60000, adults: 1, children: 0 };
 const foyer = { adults: 1, children: 0 };
-const impot = (foncier) => computeImpotFoyer(60000, foncier, foyer).total;
+// `foncierPrecedent` : revenu foncier imposable de l'année précédente, source de la CSG déductible.
+const impot = (foncier, foncierPrecedent = 0) => computeImpotFoyer(60000 - foncierPrecedent * 0.068, foncier, foyer).total;
 
 function makeAsset({ id = 'bien', dateAchat, loyer = 500, travaux = [], credit = null } = {}) {
     return {
@@ -50,7 +52,7 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
         assert.equal(r.revenuFoncierImposable, 5980);
         assert.equal(r.imputeRevenuGlobal, 0);
         assert.equal(r.reportUtilise, 0);
-        assert.equal(r.impotTotal, impot(5980), `impôt ${r.annee} = IR + PS sur 60 000 € de salaires + 5 980 € de foncier`);
+        assert.equal(r.impotTotal, impot(5980, 5980), `impôt ${r.annee} = IR + PS sur 60 000 € de salaires + 5 980 € de foncier, CSG déductible de l'an passé`);
         assert.equal(r.impotSansTravaux, r.impotTotal, 'aucun travaux futur : les deux scénarios coïncident');
         assert.equal(r.economie, 0);
         assert.equal(r.impotSalairesSeuls, impot(0), 'référence salaires seuls');
@@ -77,24 +79,26 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     assert.equal(y0.deficitReporte, 3320, 'excédent reporté sur les loyers futurs');
     assert.equal(y0.stockFin, 3320);
     assert.equal(y0.revenuFoncierImposable, 0);
-    assert.equal(y0.impotTotal, impot(-10700), 'l\'IR de l\'année est calculé sur 60 000 − 10 700 €, sans prélèvements sociaux');
-    assert.equal(y0.impotSansTravaux, impot(5980));
-    assert.equal(y0.economie, impot(5980) - impot(-10700));
+    assert.equal(y0.impotTotal, impot(-10700, 5980), 'l\'IR de l\'année est calculé sur 60 000 − 10 700 €, sans prélèvements sociaux');
+    assert.equal(y0.impotSansTravaux, impot(5980, 5980));
+    assert.equal(y0.economie, impot(5980, 5980) - impot(-10700, 5980));
     assert.ok(y0.economie > 0, 'les travaux font baisser l\'impôt de l\'année');
 
     assert.equal(y1.travaux, 0);
     assert.equal(y1.reportUtilise, 3320, 'déduction des loyers : le report absorbe une partie des 5 980 € de résultat');
     assert.equal(y1.revenuFoncierImposable, 2660);
     assert.equal(y1.stockFin, 0);
-    assert.equal(y1.impotTotal, impot(2660));
-    assert.equal(y1.economie, impot(5980) - impot(2660));
+    assert.equal(y1.impotTotal, impot(2660, 0));
+    assert.equal(y1.economie, impot(5980, 5980) - impot(2660, 0));
 
     assert.equal(y2.reportUtilise, 0);
     assert.equal(y2.revenuFoncierImposable, 5980);
-    assert.equal(y2.economie, 0, 'au-delà, plus aucun effet');
+    // Effet résiduel en y2 : moins de CSG déductible, née d'un revenu foncier y1 plus faible.
+    assert.equal(y2.economie, impot(5980, 5980) - impot(5980, 2660), 'en y2, seule joue encore la CSG déductible');
+    assert.ok(y2.economie < 0 && y2.economie > -100);
 
     assert.equal(proj.totaux.travaux, 20000);
-    assert.equal(proj.totaux.economie, y0.economie + y1.economie);
+    assert.equal(proj.totaux.economie, y0.economie + y1.economie + y2.economie);
     assert.equal(proj.totaux.imputeRevenuGlobal, 10700);
     assert.equal(proj.totaux.reportUtilise, 3320);
     console.log(`Test 2 OK — 20 000 € de travaux : 10 700 € déduits des salaires, 3 320 € reportés ; économie totale ${proj.totaux.economie} €`);
@@ -130,7 +134,7 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     assert.equal(y1.travaux, 20000, 'les travaux simulés comptent dans l\'assiette');
     assert.equal(y1.travauxSimules, 20000, 'et sont distingués des travaux saisis');
     assert.equal(y1.imputeRevenuGlobal, 10700);
-    assert.equal(y1.impotSansTravaux, impot(5980), 'le scénario « sans » ignore les travaux simulés');
+    assert.equal(y1.impotSansTravaux, impot(5980, 5980), 'le scénario « sans » ignore les travaux simulés');
     assert.equal(y2.reportUtilise, 3320);
     assert.equal(proj.travauxSimules.montant, 20000);
 
@@ -142,12 +146,23 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     console.log('Test 4 OK — travaux simulés pris en compte l\'année choisie, ignorés dans le scénario « sans »');
 }
 
-// --- Test 5 : expiration à 10 ans d'un déficit jamais absorbé ---
-// Bien sans loyer acheté il y a 10 ans avec 20 000 € de travaux : déficit 20 000 € (pas de forfait
-// de 20 € sans loyer), 10 700 € imputés sur les salaires cette année-là, 9 300 € reportables jamais
-// consommés (aucun loyer). L'année de départ (10 ans plus tard) ils expirent : stock 0, perte signalée.
+// --- Test 5 : expiration d'un déficit jamais absorbé ---
+// Art. 156 I 3° CGI : le déficit de l'année A s'impute sur les revenus fonciers des dix années
+// suivantes, donc jusqu'en A+10 inclus. Bien sans loyer avec 20 000 € de travaux : déficit 20 000 €
+// (pas de forfait de 20 € sans loyer), 10 700 € imputés sur les salaires, 9 300 € reportables jamais
+// consommés (aucun loyer).
 {
-    const anneeTravaux = currentYear - 10;
+    // Né il y a 10 ans : encore imputable cette année (A+10), rien n'est perdu ; perdu l'an prochain.
+    const recent = computeProjectionImpotsFoyer([makeAsset({
+        dateAchat: `${currentYear - 10}-01`, loyer: 0,
+        travaux: [{ date: `${currentYear - 10}-06-01`, montant: 20000, tag: 'deductible' }]
+    })], profileData, { anneeDebut: currentYear, horizon: 2 });
+    assert.equal(row(recent, currentYear).deficitPerdu, 0, 'A+10 : encore imputable');
+    assert.equal(row(recent, currentYear).stockFin, 9300);
+    assert.equal(row(recent, currentYear + 1).deficitPerdu, 9300, 'perdu en A+11');
+
+    // Né il y a 11 ans : il expire l'année de départ.
+    const anneeTravaux = currentYear - 11;
     const asset = makeAsset({
         dateAchat: `${anneeTravaux}-01`, loyer: 0,
         travaux: [{ date: `${anneeTravaux}-06-01`, montant: 20000, tag: 'deductible' }]
@@ -175,9 +190,10 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     assert.equal(y0.resultatFoncier, -8040);
     assert.equal(y0.imputeRevenuGlobal, 8040);
     assert.equal(y0.deficitReporte, 0);
-    assert.equal(y0.impotTotal, impot(-8040));
+    assert.equal(y0.impotTotal, impot(-8040, 11960));
     assert.equal(y1.revenuFoncierImposable, 11960);
-    assert.equal(y1.economie, 0);
+    // y1 : seul l'écart de CSG déductible (aucune née en y0 avec les travaux, 11 960 × 6,8 % sans).
+    assert.equal(y1.economie, impot(11960, 11960) - impot(11960, 0));
     console.log('Test 6 OK — résultats fonciers additionnés au niveau du foyer avant imputation');
 }
 
@@ -250,9 +266,9 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
 {
     const sansTravaux = makeAsset({ dateAchat: `${currentYear - 3}-01`, loyer: 500 });
     const p1 = computeProjectionImpotsFoyer([sansTravaux], profileData, { anneeDebut: currentYear, horizon: 10 });
-    assert.equal(row(p1, currentYear).effetFoncier, impot(5980) - impot(0), 'effet du foncier = impôt total − impôt sur les salaires seuls');
+    assert.equal(row(p1, currentYear).effetFoncier, impot(5980, 5980) - impot(0), 'effet du foncier = impôt total − impôt sur les salaires seuls');
     assert.equal(p1.synthese.anneeFinReport, null, 'aucun report : pas d\'année d\'épuisement');
-    assert.equal(p1.synthese.impotMoyen, impot(5980));
+    assert.equal(p1.synthese.impotMoyen, impot(5980, 5980));
 
     // Cas du test 2 : report de 3 320 € épuisé l'année suivante.
     const asset = makeAsset({
@@ -262,8 +278,10 @@ const row = (proj, annee) => proj.years.find(r => r.annee === annee);
     const p2 = computeProjectionImpotsFoyer([asset], profileData, { anneeDebut: currentYear, horizon: 10 });
     assert.ok(row(p2, currentYear).effetFoncier < 0, 'année de déficit : le foncier fait baisser l\'impôt sous celui des salaires seuls');
     assert.equal(p2.synthese.anneeFinReport, currentYear + 1);
-    assert.equal(p2.synthese.anneeMax, currentYear + 2, 'année la plus chère : la première sans déficit ni report (à égalité, la plus tôt)');
-    assert.equal(p2.synthese.impotMax, impot(5980));
+    // Année la plus chère : la première sans déficit ni report, qui ne bénéficie en plus que d'une
+    // faible CSG déductible (née des 2 660 € imposés l'année précédente).
+    assert.equal(p2.synthese.anneeMax, currentYear + 2, 'année la plus chère : la première sans déficit ni report');
+    assert.equal(p2.synthese.impotMax, impot(5980, 2660));
     const somme = p2.years.reduce((s, r) => s + r.impotTotal, 0);
     assert.equal(p2.synthese.impotMoyen, Math.round(somme / p2.years.length));
     console.log('Test 10 OK — effet du foncier par année et synthèse (moyenne, année max, fin du report)');

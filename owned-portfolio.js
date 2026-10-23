@@ -5995,7 +5995,7 @@ function renderAccordionPostAchat(asset) {
             <p class="owned-caveat">Calculé automatiquement depuis l'historique de ce bien dans l'app (loyers, charges, crédit — régime réel simulé, quel que soit le régime actuellement suivi ci-dessus). Un déficit réel antérieur à la saisie du bien ici n'est pas repris.</p>
             ${stockTotal > 0 ? `<div class="owned-deficit-total">Stock reportable : <strong>${stockTotal.toLocaleString('fr-FR')} €</strong></div>` : ''}
             <table class="owned-loyers-table">
-                <thead><tr><th>Année</th><th>Montant</th><th>Utilisé</th><th>Restant</th><th>Expire</th></tr></thead>
+                <thead><tr><th>Année</th><th>Montant</th><th>Utilisé</th><th>Restant</th><th>Imputable jusqu'en</th></tr></thead>
                 <tbody>
                 ${lignes.length ? lignes.map(d => `<tr ${d.expired ? 'style="opacity:0.4"' : ''}>
                         <td>${d.annee}</td>

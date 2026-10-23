@@ -189,7 +189,7 @@
                                         <input id="prix" name="prix" type="number" class="variables-input" min="0" step="1000" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="nego">
-                                        <span class="status-label">Négociation visée <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Décote souhaitée sur le prix vendeur, en %. Le prix d'achat retenu sera prix × (1 − nego/100).">?</button></span>
+                                        <span class="status-label">Négociation visée <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Montant de la négociation visée, en euros. Le prix d'achat retenu sera prix affiché − négociation.">?</button></span>
                                         <input id="nego" name="nego" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="loyer">
@@ -203,6 +203,10 @@
                                     <label class="variables-field" for="travaux">
                                         <span class="status-label">Budget travaux</span>
                                         <input id="travaux" name="travaux" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
+                                    </label>
+                                    <label class="variables-field" for="travaux-non-deductibles">
+                                        <span class="status-label">dont non déductibles <button class="field-hint" type="button" tabindex="-1" aria-label="Aide" data-tip="Part du budget travaux qui ne se déduit pas des loyers : construction, reconstruction, agrandissement (art. 31 du CGI). Elle compte dans le coût et le financement, pas dans les charges. 0 pour une rénovation classique.">?</button></span>
+                                        <input id="travaux-non-deductibles" name="travaux-non-deductibles" type="number" class="variables-input" min="0" step="500" inputmode="numeric">
                                     </label>
                                     <label class="variables-field" for="meubles">
                                         <span class="status-label">Budget mobilier</span>

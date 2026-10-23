@@ -64,9 +64,10 @@ The app supports a split-screen mode where the analysis panel opens in a second 
 - `computeAnalysisViewModel(inputs)` — main entry point for single-asset analysis; returns all metrics, decisions, scenarios, charts data
 - `computeCF(prixVendeur, loyer, inputs, tmi)` — core net-net cash-flow function used throughout
 - `computeProjectMetrics(inputs)` — per-asset KPIs (rentaBrute, rentaNette, dscr, grm, coc…)
-- `computeResaleTimeline(...)` — resale gain projection (used in `pdf.js`)
+- `computeResaleTimeline(...)` — resale gain projection (exported, currently not called anywhere)
 - `computeOwnedAssetCF`, `computeOwnedAssetTimeline`, `computeCFBreakdown`, `computeRegimeComparison`, `computePortfolioAlerts`, etc. — owned-portfolio-specific, imported by `owned-portfolio.js`
 - Tax logic handles three regimes: `micro-foncier`, `reel` (foncier réel), `sci-is`
+- One yearly tax engine (`impotLocatifAnnee`) serves both the study and owned assets: IR is always the difference of two full household taxes (`impotRevenuDifferentiel`, décote and quotient-familial cap included), never base × TMI; foncier deficits carry forward by vintage for 10 years (usable until A+10), SCI-IS deficits indefinitely, deductible CSG (6.8 %) offsets next year's income
 
 ### Decision model (analysis tool)
 

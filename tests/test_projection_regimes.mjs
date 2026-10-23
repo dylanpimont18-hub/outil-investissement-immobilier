@@ -10,7 +10,9 @@ import { computeProjectionRegimesFoyer, computeProjectionImpotsFoyer, computeImp
 
 const currentYear = new Date().getFullYear();
 const profileData = { income: 60000, adults: 1, children: 0 };
-const impot = (foncier) => computeImpotFoyer(60000, foncier, { adults: 1, children: 0 }).total;
+// `foncierPrecedent` : revenu foncier imposable de l'année précédente, source de la CSG déductible
+// (6,8 %) retranchée du revenu global de l'année.
+const impot = (foncier, foncierPrecedent = 0) => computeImpotFoyer(60000 - foncierPrecedent * 0.068, foncier, { adults: 1, children: 0 }).total;
 
 function makeAsset({ id = 'bien', dateAchat = `${currentYear - 3}-01`, loyer = 500, travaux = [] } = {}) {
     return {
@@ -26,9 +28,9 @@ const row = (res, annee) => res.years.find(r => r.annee === annee);
     const res = computeProjectionRegimesFoyer([makeAsset()], profileData, { anneeDebut: currentYear, horizon: 10 });
     assert.equal(res.years.length, 11);
     const y = row(res, currentYear);
-    assert.equal(y.micro.impot, impot(4200), 'micro : 70 % de 6 000 €');
+    assert.equal(y.micro.impot, impot(4200, 4200), 'micro : 70 % de 6 000 €, CSG déductible de l\'an passé');
     assert.equal(y.micro.eligible, true);
-    assert.equal(y.reel.impot, impot(5980), 'réel : 6 000 € − forfait 20 € (case 222 de la 2044)');
+    assert.equal(y.reel.impot, impot(5980, 5980), 'réel : 6 000 € − forfait 20 € (case 222 de la 2044)');
     // SCI-IS : 6 000 − 100 000 × 80 % / 30 = 3 333 € de bénéfice → IS 15 % = 500 €.
     assert.equal(y.sciIs.is, 500);
     assert.equal(y.sciIs.impot, impot(0) + 500, 'foyer : IR sur salaires seuls + IS de la SCI');

@@ -41,12 +41,14 @@ const seedCloud = { assets: ASSETS, meta: META };
 // CF de référence attendu, calculé en Node avec le même moteur.
 const attendu = Object.fromEntries(Object.values(ASSETS).map(a => {
     const r = computeOwnedAssetCF(a, resolveScenarioCourant(a).variables, 0, 'reel', PROFILE);
-    return [a.id, { cf: Math.round(r.cfNetNet), periode: libellePeriodeCF(r.periode) }];
+    return [a.id, { cf: Math.round(r.cfNetNet), brut: r.cfNetNet, periode: libellePeriodeCF(r.periode) }];
 }));
 const euros = txt => { const m = String(txt).replace(/\s| | /g, '').match(/([+−-]?)(\d+)/); return m ? (m[1] === '−' || m[1] === '-' ? -1 : 1) * Number(m[2]) : NaN; };
 
 const shot = async (page, nom) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${nom}.png`, fullPage: false }); };
-const somme = Object.values(attendu).reduce((t, v) => t + v.cf, 0);
+// Total exact arrondi une seule fois (comme l'écran), pas la somme de valeurs déjà arrondies : à
+// −145,3 − 256,2 − 133,3 €, la première donne −535 €, la seconde −534 €.
+const somme = Math.round(Object.values(attendu).reduce((t, v) => t + v.brut, 0));
 
 const browser = await chromium.launch();
 try {

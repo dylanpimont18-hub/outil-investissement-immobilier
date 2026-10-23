@@ -1,4 +1,8 @@
 export const CSG_CRDS_RATE = 0.172; // Taux CSG+CRDS sur revenus du capital (2024)
+// Part de la CSG (6,8 points sur 17,2) assise sur les revenus fonciers imposés au barème, déductible
+// du revenu global de l'année SUIVANTE (art. 154 quinquies CGI). L'ignorer surestimait l'impôt
+// d'environ 160 €/an sur 8 000 € de revenu foncier à 30 % de TMI.
+export const CSG_DEDUCTIBLE_RATE = 0.068;
 
 const REGIME_LABELS = {
     'micro-foncier': 'Micro-foncier',
@@ -6,13 +10,29 @@ const REGIME_LABELS = {
     'sci-is': 'SCI à l\'IS'
 };
 
+function normaliserAdultes(adults) {
+    return Math.min(2, Math.max(1, Math.round(Number(adults) || 2)));
+}
+function normaliserEnfants(enfants) {
+    return Math.max(0, Math.round(Number(enfants) || 0));
+}
+
+// Un adulte seul qui a au moins un enfant à charge reçoit une demi-part supplémentaire (art. 194 II
+// CGI, « case T »). Sans elle, 1 adulte / 2 enfants à 45 000 € était imposé sur 2 parts au lieu de
+// 2,5 : TMI de 30 % au lieu de 11 %. Le profil du foyer ne connaît qu'adultes/enfants : un adulte
+// seul est réputé vivre seul (cas de loin le plus fréquent), comme dans Spark Cash-Flow.
+export function estParentIsole(adults, enfants) {
+    return normaliserAdultes(adults) === 1 && normaliserEnfants(enfants) >= 1;
+}
+
 export function getHouseholdTaxParts(adults = 2, enfants = 0) {
-    const adultCount = Math.min(2, Math.max(1, Math.round(Number(adults) || 2)));
-    const childCount = Math.max(0, Math.round(Number(enfants) || 0));
+    const adultCount = normaliserAdultes(adults);
+    const childCount = normaliserEnfants(enfants);
 
     let parts = adultCount;
     if (childCount === 1) parts += 0.5;
     else if (childCount >= 2) parts += 1.0 + (childCount - 2);
+    if (estParentIsole(adultCount, childCount)) parts += 0.5;
     return parts;
 }
 
@@ -32,26 +52,51 @@ const DECOTE_CELIBATAIRE = { seuil: 1982, base: 897 };
 const DECOTE_COUPLE = { seuil: 3277, base: 1483 };
 
 // Plafonnement des effets du quotient familial (art. 197 I 2° CGI), vérifié BOI-IR-LIQ-20-20-20-20260407
-// le 2026-07-29 : l'avantage procuré par les demi-parts liées aux enfants est plafonné à 1 807 €
-// par demi-part (donc 3 614 € par part entière, cas du 3e enfant et suivants). Ne couvre que le cas
-// standard (enfants à charge) — pas les plafonds spécifiques (parent isolé case T à 4 262 €, invalidité,
-// veuvage avec personne à charge...), non modélisés dans le profil du foyer de cette app (adults/children
-// seulement).
+// le 2026-07-29 : l'avantage procuré par chaque demi-part supplémentaire est plafonné à 1 807 €. Le
+// parent isolé (case T, art. 194 II) a un plafond propre de 4 262 € pour la part entière que forment
+// sa demi-part et celle de son premier enfant ; les demi-parts suivantes retombent au plafond commun.
+// Invalidité et veuvage ne sont pas modélisés (le profil du foyer ne les distingue pas).
 const PLAFOND_PAR_DEMI_PART_ENFANT = 1807;
+const PLAFOND_PARENT_ISOLE = 4262;
 
-export function calculateTMI(revenus, foyer = 0) {
+function plafondQuotientFamilial(adultCount, childCount, parts) {
+    const demiPartsSup = Math.max(0, (parts - adultCount) * 2);
+    if (demiPartsSup === 0) return 0;
+    if (estParentIsole(adultCount, childCount)) {
+        return PLAFOND_PARENT_ISOLE + Math.max(0, demiPartsSup - 2) * PLAFOND_PAR_DEMI_PART_ENFANT;
+    }
+    return demiPartsSup * PLAFOND_PAR_DEMI_PART_ENFANT;
+}
+
+// Accepte la forme objet { adults, children } ou, en héritage, un simple nombre d'enfants.
+function lireFoyer(foyer) {
     const hasObjectShape = typeof foyer === 'object' && foyer !== null;
-    const adults = hasObjectShape ? foyer.adults : 2;
-    const enfants = hasObjectShape ? foyer.children : foyer;
-    const parts = getHouseholdTaxParts(adults, enfants);
-    const quotient = Math.max(0, Number(revenus) || 0) / parts;
+    return {
+        adults: normaliserAdultes(hasObjectShape ? foyer.adults : 2),
+        children: normaliserEnfants(hasObjectShape ? foyer.children : foyer),
+    };
+}
+
+// TMI réellement supportée : dès que le plafonnement du quotient familial s'applique, chaque euro
+// supplémentaire est taxé au taux du quotient calculé sur les seules parts d'adultes. Un couple à
+// 80 000 € avec deux enfants voyait s'afficher 11 % là où son taux marginal réel est de 30 %.
+// La TMI ne sert plus qu'à l'affichage : l'impôt se calcule par différence de deux impôts complets
+// (impotRevenuDifferentiel).
+export function calculateTMI(revenus, foyer = 0) {
+    const { adults, children } = lireFoyer(foyer);
+    const parts = getHouseholdTaxParts(adults, children);
+    const revenu = Math.max(0, Number(revenus) || 0);
+    const avantage = appliquerBaremeIR(revenu, adults).irBrut - appliquerBaremeIR(revenu, parts).irBrut;
+    const plafond = plafondQuotientFamilial(adults, children, parts);
+    const partsRetenues = plafond > 0 && avantage > plafond ? adults : parts;
+    const quotient = revenu / partsRetenues;
     const bracket = BAREME_IR.find(b => quotient <= b.seuil);
     return bracket ? bracket.taux : 45;
 }
 
 // Applique le barème progressif tranche par tranche à un quotient (revenu ÷ parts) et remultiplie
-// par le nombre de parts fourni — factorisé pour être appelable deux fois par computeImpotFoyer
-// (une fois avec les parts complètes, une fois avec les parts de base pour le plafonnement).
+// par le nombre de parts fourni — factorisé pour être appelable deux fois par liquiderIR (une fois
+// avec les parts complètes, une fois avec les parts de base pour le plafonnement).
 function appliquerBaremeIR(revenuGlobal, parts) {
     const quotient = parts > 0 ? revenuGlobal / parts : 0;
     const tranches = [];
@@ -75,133 +120,321 @@ function appliquerBaremeIR(revenuGlobal, parts) {
     return { tranches, quotient, irBrut: totalParPart * parts };
 }
 
-// Calcule l'IR au barème progressif tranche par tranche (pas juste la TMI appliquée en taux plat),
-// avec plafonnement du quotient familial et décote — utilisé par l'onglet Impôt pour reconstituer
-// le vrai montant à payer. Limite assumée : ne couvre que le plafonnement standard (enfants à
-// charge), pas les plafonds spécifiques (parent isolé, invalidité, veuvage — voir
-// PLAFOND_PAR_DEMI_PART_ENFANT ci-dessus), le profil du foyer de cette app ne les distingue pas.
-export function computeImpotFoyer(revenuSalarial, revenuFoncierImposable, foyer = {}) {
-    const adults = Math.min(2, Math.max(1, Math.round(Number(foyer.adults) || 2)));
-    const children = Math.max(0, Math.round(Number(foyer.children) || 0));
+// IR net du foyer — barème, plafonnement du quotient familial, décote — NON arrondi. Base commune de
+// computeImpotFoyer (affichage) et de impotRevenuDifferentiel (impôt des revenus locatifs).
+function liquiderIR(revenuGlobal, adults, children) {
     const parts = getHouseholdTaxParts(adults, children);
-    const partsBase = adults; // sans les demi-parts liées aux enfants
-
-    const revenuGlobal = Math.max(0, (Number(revenuSalarial) || 0) + (Number(revenuFoncierImposable) || 0));
-
     const complet = appliquerBaremeIR(revenuGlobal, parts);
     let irBrut = complet.irBrut;
     let plafonnementQF = null;
-
-    if (parts > partsBase) {
-        const base = appliquerBaremeIR(revenuGlobal, partsBase);
+    if (parts > adults) {
+        const base = appliquerBaremeIR(revenuGlobal, adults);
         const avantage = base.irBrut - complet.irBrut;
-        const plafond = (parts - partsBase) * 2 * PLAFOND_PAR_DEMI_PART_ENFANT;
+        const plafond = plafondQuotientFamilial(adults, children, parts);
         const applique = avantage > plafond;
         if (applique) irBrut = base.irBrut - plafond;
-        plafonnementQF = {
-            applique,
-            avantage: Math.round(avantage),
-            plafond: Math.round(plafond),
-            irBrutSansPlafonnement: Math.round(complet.irBrut),
-        };
+        plafonnementQF = { applique, avantage, plafond, irBrutSansPlafonnement: complet.irBrut };
     }
-
     const decoteParams = adults >= 2 ? DECOTE_COUPLE : DECOTE_CELIBATAIRE;
     const decote = irBrut < decoteParams.seuil ? Math.max(0, decoteParams.base - irBrut * DECOTE_TAUX) : 0;
-    const irNet = Math.max(0, Math.round(irBrut - decote));
+    return { parts, complet, irBrut, plafonnementQF, decote, irNet: Math.max(0, irBrut - decote) };
+}
+
+// Calcule l'IR au barème progressif tranche par tranche (pas juste la TMI appliquée en taux plat),
+// avec plafonnement du quotient familial (parent isolé compris) et décote — utilisé par l'onglet
+// Impôt pour reconstituer le vrai montant à payer.
+export function computeImpotFoyer(revenuSalarial, revenuFoncierImposable, foyer = {}) {
+    const { adults, children } = lireFoyer(foyer);
+    const revenuGlobal = Math.max(0, (Number(revenuSalarial) || 0) + (Number(revenuFoncierImposable) || 0));
+    const ir = liquiderIR(revenuGlobal, adults, children);
+    const irNet = Math.max(0, Math.round(ir.irBrut - ir.decote));
     const psFoncier = Math.round(Math.max(0, Number(revenuFoncierImposable) || 0) * CSG_CRDS_RATE);
 
     return {
         revenuSalarial: Math.round(Number(revenuSalarial) || 0),
         revenuFoncierImposable: Math.round(Number(revenuFoncierImposable) || 0),
         revenuGlobal: Math.round(revenuGlobal),
-        parts,
-        quotient: Math.round(complet.quotient),
-        tranches: complet.tranches,
-        plafonnementQF,
-        irBrut: Math.round(irBrut),
-        decote: Math.round(decote),
+        parts: ir.parts,
+        quotient: Math.round(ir.complet.quotient),
+        tranches: ir.complet.tranches,
+        plafonnementQF: ir.plafonnementQF && {
+            applique: ir.plafonnementQF.applique,
+            avantage: Math.round(ir.plafonnementQF.avantage),
+            plafond: Math.round(ir.plafonnementQF.plafond),
+            irBrutSansPlafonnement: Math.round(ir.plafonnementQF.irBrutSansPlafonnement),
+        },
+        irBrut: Math.round(ir.irBrut),
+        decote: Math.round(ir.decote),
         irNet,
         psFoncier,
         total: irNet + psFoncier,
     };
 }
 
-function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationAnnuelles, inputs, tmi, interestYear, insuranceYear, year = 1, carryForwardDeficit = 0) {
-    const tauxGlobalImpot = (tmi / 100) + CSG_CRDS_RATE;
-    const oneOffCharges = year === 1 ? (inputs['travaux'] || 0) + (inputs['frais-bancaires'] || 0) : 0;
+// Coût en IR d'une base imposable ajoutée au revenu du foyer : la DIFFÉRENCE de deux impôts complets
+// (barème tranche par tranche, plafonnement, décote), jamais la base × TMI. Le taux unique ignorait
+// la décote et les franchissements de tranche : pour un couple à 45 000 €, 6 930 € de revenu foncier
+// coûtent 1 107 € d'IR, pas 762 €. Une base négative (déficit imputé sur le revenu global) donne
+// l'économie d'impôt, mesurée de la même façon. Hors prélèvements sociaux.
+// `foyer` : { revenus, adults, children }.
+export function impotRevenuDifferentiel(foyer, base) {
+    const { adults, children } = lireFoyer(foyer);
+    const revenus = Math.max(0, Number(foyer?.revenus) || 0);
+    const apres = Math.max(0, revenus + (Number(base) || 0));
+    return liquiderIR(apres, adults, children).irNet - liquiderIR(revenus, adults, children).irNet;
+}
 
-    if (inputs['regime'] === 'micro-foncier') {
-        return { tax: (loyersEncaisses * 0.7) * tauxGlobalImpot, newCarryForward: 0 };
+// ─── Moteur fiscal annuel d'un revenu locatif ───────────────────────────────
+// Une seule implémentation, partagée par l'étude (computeAnnualTaxEstimate) et les biens détenus
+// (computeImpotAnnuelBien). L'état `etat` passe d'une année à la suivante :
+//  - reportFoncier : pile de millésimes { annee, montant } du déficit foncier, imputable sur les
+//    revenus fonciers des DIX années suivantes (art. 156 I 3° CGI) : le déficit de l'année A sert
+//    encore en A+10 et n'est perdu qu'en A+11. Imputation du plus ancien au plus récent. Un report
+//    cumulé sans fin laissait croire à des années d'impôt nul qui n'existent pas ;
+//  - reportIS : déficit d'une société à l'IS, reportable sans limite de durée (art. 209 I CGI). Il
+//    était purement perdu : une année déficitaire n'allégeait jamais l'IS des années suivantes ;
+//  - csgDeductible : CSG déductible née l'année précédente (CSG_DEDUCTIBLE_RATE).
+export const DUREE_REPORT_DEFICIT_FONCIER = 10;
+export const PLAFOND_MICRO_FONCIER = 15000;
+
+export function etatFiscalInitial() {
+    return { reportFoncier: [], reportIS: 0, csgDeductible: 0 };
+}
+
+// Les appelants historiques passent un déficit reporté scalaire : on le traite comme un millésime de
+// l'année précédente.
+function etatDepuisReport(report, annee) {
+    if (report && typeof report === 'object') return report;
+    const etat = etatFiscalInitial();
+    const montant = Number(report) || 0;
+    if (montant > 0) etat.reportFoncier.push({ annee: annee - 1, montant });
+    return etat;
+}
+
+const totalReport = pile => pile.reduce((s, m) => s + m.montant, 0);
+
+// Retire les millésimes prescrits et renvoie le montant perdu, pour pouvoir le montrer.
+function purgerReportFoncier(pile, annee) {
+    let expire = 0;
+    for (let i = pile.length - 1; i >= 0; i--) {
+        if (annee - pile[i].annee > DUREE_REPORT_DEFICIT_FONCIER) { expire += pile[i].montant; pile.splice(i, 1); }
     }
+    return expire;
+}
 
-    if (inputs['regime'] === 'reel') {
-        const chargesAnnuelles = chargesExploitationAnnuelles + insuranceYear + oneOffCharges;
-        const revenusNets = loyersEncaisses - chargesAnnuelles - interestYear;
+function imputerReportFoncier(pile, montant) {
+    let reste = montant;
+    for (const m of pile) {
+        if (reste <= 0) break;
+        const u = Math.min(m.montant, reste);
+        m.montant -= u;
+        reste -= u;
+    }
+    for (let i = pile.length - 1; i >= 0; i--) if (pile[i].montant <= 0.005) pile.splice(i, 1);
+    return montant - reste;
+}
 
-        if (revenusNets > 0) {
-            // Consommer d'abord le carry-forward disponible avant d'imposer
-            const absorbed = Math.min(carryForwardDeficit, revenusNets);
-            const assiette = revenusNets - absorbed;
-            const remainingCarry = carryForwardDeficit - absorbed;
-            return { tax: assiette * tauxGlobalImpot, newCarryForward: remainingCarry };
+// IS : 15 % jusqu'à 42 500 € de bénéfice, 25 % au-delà (art. 219 CGI).
+export function impotSocieteIS(base) {
+    const b = Math.max(0, base);
+    return Math.min(b, 42500) * 0.15 + Math.max(0, b - 42500) * 0.25;
+}
+
+// Impôt d'une année. `flux` :
+//   loyers               recettes de l'année (case 211)
+//   chargesHorsInterets  charges déductibles hors case 250, travaux déductibles compris
+//   interets             case 250 : intérêts, assurance emprunteur, frais d'emprunt
+//   chargesIS            charges retenues en SCI à l'IS (défaut : chargesHorsInterets)
+//   amortissementIS      dotation de l'année en SCI à l'IS
+// `foyer` : { revenus, adults, children } de CETTE année. `etat` : voir etatFiscalInitial (modifié).
+function impotLocatifAnnee(regime, { annee, loyers, chargesHorsInterets, interets, chargesIS = null, amortissementIS = 0 }, foyer, etat) {
+    // Barème différentiel sur la base, diminuée de la CSG déductible de l'an passé, puis
+    // prélèvements sociaux de l'année ; la CSG déductible de l'année naît de la base.
+    const impotSurBase = base => {
+        const csgImputee = etat.csgDeductible;
+        etat.csgDeductible = Math.max(0, base) * CSG_DEDUCTIBLE_RATE;
+        return { impot: impotRevenuDifferentiel(foyer, base - csgImputee) + Math.max(0, base) * CSG_CRDS_RATE, csgImputee };
+    };
+
+    if (regime === 'sci-is') {
+        // Impôt de la société : ni barème du foyer, ni prélèvements sociaux, ni CSG déductible.
+        etat.csgDeductible = 0;
+        const resultat = loyers - (chargesIS ?? chargesHorsInterets) - interets - amortissementIS;
+        if (resultat <= 0) {
+            etat.reportIS += -resultat;
+            return { impot: 0, regime, baseImposable: 0, deficitReporte: etat.reportIS, deficitExpire: 0, imputeRevenuGlobal: 0, csgImputee: 0 };
         }
-
-        // Déficit : même répartition que la déclaration 2044 (repartirDeficitFoncier, art. 156 I 3°
-        // CGI). Case 250 = intérêts (interestYear, qui inclut chez les appelants du portefeuille les
-        // frais classés « frais d'emprunt ») + assurance emprunteur + frais bancaires de l'année 1 :
-        // imputée d'abord sur les loyers, seule sa part non couverte est reportée ; le reste du
-        // déficit s'impute sur le revenu global jusqu'à 10 700 €, l'excédent est reporté.
-        const fraisBancaires = year === 1 ? (inputs['frais-bancaires'] || 0) : 0;
-        const case250 = interestYear + insuranceYear + fraisBancaires;
-        const rep = repartirDeficitFoncier(loyersEncaisses, chargesAnnuelles + interestYear - case250, case250);
-        return {
-            tax: -(rep.imputableRevenuGlobal * (tmi / 100)),
-            newCarryForward: carryForwardDeficit + rep.reportable
-        };
+        const imputation = Math.min(etat.reportIS, resultat);
+        etat.reportIS -= imputation;
+        const base = resultat - imputation;
+        return { impot: impotSocieteIS(base), regime, baseImposable: base, deficitReporte: etat.reportIS, deficitExpire: 0, imputeRevenuGlobal: 0, csgImputee: 0 };
     }
 
-    if (inputs['regime'] === 'sci-is') {
-        const amortissement = prixNet * 0.80 / 30;
-        const chargesDeductibles = chargesExploitationAnnuelles + insuranceYear + interestYear + oneOffCharges;
-        const benefice = loyersEncaisses - chargesDeductibles - amortissement;
-        if (benefice > 0) {
-            return { tax: Math.min(benefice, 42500) * 0.15 + Math.max(0, benefice - 42500) * 0.25, newCarryForward: 0 };
+    if (regime === 'micro-foncier') {
+        const base = loyers * 0.7;
+        const { impot, csgImputee } = impotSurBase(base);
+        return { impot, regime, baseImposable: base, deficitReporte: totalReport(etat.reportFoncier), deficitExpire: 0, imputeRevenuGlobal: 0, csgImputee };
+    }
+
+    // Foncier réel.
+    const deficitExpire = purgerReportFoncier(etat.reportFoncier, annee);
+    const resultat = loyers - chargesHorsInterets - interets;
+    if (resultat >= 0) {
+        const imputation = imputerReportFoncier(etat.reportFoncier, resultat);
+        const base = resultat - imputation;
+        const { impot, csgImputee } = impotSurBase(base);
+        return { impot, regime, baseImposable: base, deficitReporte: totalReport(etat.reportFoncier), deficitExpire, imputeRevenuGlobal: 0, csgImputee };
+    }
+    // Déficit : la case 250 s'impute d'abord sur les loyers, le reste sur le revenu global dans la
+    // limite de 10 700 €, l'excédent est reporté (repartirDeficitFoncier). L'économie se mesure elle
+    // aussi par différence d'impôts ; la CSG déductible de l'an passé s'impute quand même.
+    const rep = repartirDeficitFoncier(loyers, chargesHorsInterets, interets);
+    if (rep.reportable > 0.005) etat.reportFoncier.push({ annee, montant: rep.reportable });
+    const csgImputee = etat.csgDeductible;
+    etat.csgDeductible = 0;
+    return {
+        impot: impotRevenuDifferentiel(foyer, -(rep.imputableRevenuGlobal + csgImputee)),
+        regime, baseImposable: 0, deficitReporte: totalReport(etat.reportFoncier), deficitExpire,
+        imputeRevenuGlobal: rep.imputableRevenuGlobal, csgImputee,
+    };
+}
+
+// ─── Étude d'acquisition ─────────────────────────────────────────────────────
+
+// Prélèvement forfaitaire unique sur les dividendes : ce que coûte la remontée de la trésorerie d'une
+// SCI à l'IS vers ses associés. 12,8 % d'IR + 18,6 % de prélèvements sociaux depuis le 1er janvier
+// 2026 (LFSS 2026 : +1,4 point sur les revenus du capital, revenus fonciers et plus-values
+// immobilières exclus). Sans lui, la SCI à l'IS était comparée aux régimes de l'IR sur un cash-flow
+// resté dans la société, que l'associé ne touche pas.
+export const PFU_TAUX = 0.314;
+
+// Foyer fiscal de l'étude : main.js fusionne le profil dans les inputs (revenus, adults, children).
+function foyerEtude(inputs) {
+    return { revenus: Math.max(0, Number(inputs.revenus) || 0), adults: inputs.adults || 2, children: inputs.children || 0 };
+}
+
+// Seule la part déductible des travaux (amélioration, réparation, entretien) entre dans l'assiette
+// des revenus fonciers. Construction, reconstruction et agrandissement (art. 31 I 1° a CGI) entrent
+// dans le coût et le financement, pas dans les charges : tout était déduit jusqu'ici.
+function travauxEtude(inputs) {
+    const total = Math.max(0, Number(inputs['travaux']) || 0);
+    const nonDeductibles = Math.min(total, Math.max(0, Number(inputs['travaux-non-deductibles']) || 0));
+    return { total, nonDeductibles, deductibles: total - nonDeductibles };
+}
+
+// Au-delà de 15 000 € de loyers encaissés, le micro-foncier est exclu et le réel s'applique d'office
+// (art. 32 CGI). L'outil continuait de calculer au micro un dossier qui n'y a pas droit.
+export function regimeApplicableEtude(regime, loyersEncaisses) {
+    if (regime === 'micro-foncier' && loyersEncaisses > PLAFOND_MICRO_FONCIER) return 'reel';
+    return regime || 'micro-foncier';
+}
+
+// SCI à l'IS : le bâti s'amortit sur 30 ans, le terrain (20 % du prix de revient) jamais. Les frais
+// d'acquisition (notaire, agence) entrent dans le prix de revient, les travaux non déductibles
+// (agrandissement) s'amortissent comme le bâti, le mobilier sur 7 ans. L'ancien calcul n'amortissait
+// que 80 % du prix seul.
+const SCI_IS_PART_BATI = 0.8;
+const SCI_IS_DUREE_BATI = 30;
+const SCI_IS_DUREE_MOBILIER = 7;
+
+function valeurBruteSciIs(prixNet, inputs) {
+    const frais = prixNet * ((Number(inputs['notaire']) || 0) / 100) + (Number(inputs['agence']) || 0);
+    return prixNet + frais + travauxEtude(inputs).nonDeductibles;
+}
+
+function amortissementSciIsAnnee(prixNet, inputs, year) {
+    const frais = prixNet * ((Number(inputs['notaire']) || 0) / 100) + (Number(inputs['agence']) || 0);
+    const bati = (prixNet + frais) * SCI_IS_PART_BATI + travauxEtude(inputs).nonDeductibles;
+    const mobilier = Math.max(0, Number(inputs['meubles']) || 0);
+    return (year >= 1 && year <= SCI_IS_DUREE_BATI ? bati / SCI_IS_DUREE_BATI : 0)
+        + (year >= 1 && year <= SCI_IS_DUREE_MOBILIER ? mobilier / SCI_IS_DUREE_MOBILIER : 0);
+}
+
+// Cash-flow que l'associé touche réellement : en SCI à l'IS, un cash-flow positif reste dans la
+// société tant qu'il n'est pas distribué, et sa distribution supporte le PFU.
+export function cfDistribue(regime, cf) {
+    return regime === 'sci-is' && cf > 0 ? cf * (1 - PFU_TAUX) : cf;
+}
+
+// Impôt d'une année de l'étude (moteur commun impotLocatifAnnee). `etatOuReport` : état fiscal
+// porté d'une année à l'autre (etatFiscalInitial), ou, pour compatibilité, un déficit reporté.
+// `tmi` n'est plus utilisé : l'impôt se calcule par différence de deux impôts complets du foyer.
+function computeAnnualTaxEstimate(prixNet, loyersEncaisses, chargesExploitationAnnuelles, inputs, tmi, interestYear, insuranceYear, year = 1, etatOuReport = null) {
+    const etat = etatDepuisReport(etatOuReport, year);
+    const regime = regimeApplicableEtude(inputs['regime'], loyersEncaisses);
+    const fraisBancaires = year === 1 ? (Number(inputs['frais-bancaires']) || 0) : 0;
+    const travauxDeductibles = year === 1 ? travauxEtude(inputs).deductibles : 0;
+    const fiscal = impotLocatifAnnee(regime, {
+        annee: year,
+        loyers: loyersEncaisses,
+        chargesHorsInterets: chargesExploitationAnnuelles + travauxDeductibles,
+        // Case 250 : intérêts, assurance emprunteur et frais bancaires (dossier, garantie).
+        interets: interestYear + insuranceYear + fraisBancaires,
+        amortissementIS: amortissementSciIsAnnee(prixNet, inputs, year),
+    }, foyerEtude(inputs), etat);
+    return {
+        tax: fiscal.impot,
+        newCarryForward: fiscal.deficitReporte,
+        deficitExpire: fiscal.deficitExpire,
+        baseImposable: fiscal.baseImposable,
+        regime,
+        etat,
+    };
+}
+
+// Échéancier annuel du prêt de l'étude (année 1 = douze premières mensualités). Assurance assise sur
+// le capital initial (contrat groupe) ou sur le capital restant dû au 1er jour de chaque année
+// (délégation dégressive, même convention que computeAmortizationSchedule). La projection 10 ans et
+// le tableau du prêt ignoraient ce mode et facturaient la cotisation initiale jusqu'au bout.
+function echeancierAnnuelEtude(model, inputs, nbAnnees) {
+    const nMois = Math.max(0, Math.round((inputs['duree'] || 0) * 12));
+    const tauxMensuel = ((inputs['taux-input'] || 0) / 100) / 12;
+    const tauxAssurance = (inputs['assurance'] || 0) / 100;
+    const surCrd = inputs['assurance-mode'] === 'crd';
+    let crd = model.montantFinance;
+    const rows = [];
+    for (let year = 1; year <= nbAnnees; year++) {
+        let interets = 0, capital = 0, assurance = 0;
+        const assuranceMensuelle = ((surCrd ? crd : model.montantFinance) * tauxAssurance) / 12;
+        for (let month = 0; month < 12; month++) {
+            if ((year - 1) * 12 + month >= nMois || crd <= 0.005) break;
+            const interetMois = tauxMensuel > 0 ? crd * tauxMensuel : 0;
+            const capitalMois = Math.max(0, Math.min(crd, model.mensualiteCredit - interetMois));
+            interets += interetMois;
+            capital += capitalMois;
+            assurance += assuranceMensuelle;
+            crd = Math.max(0, crd - capitalMois);
         }
+        rows.push({ year, interets, capital, assurance, debtService: interets + capital + assurance, crdFin: crd });
     }
-
-    return { tax: 0, newCarryForward: 0 };
+    return rows;
 }
 
 export function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
-    const fraisNotaire = prixNet * (inputs['notaire'] / 100);
-    const fraisFixes = inputs['agence'] + inputs['travaux'] + inputs['meubles'] + inputs['frais-bancaires'];
+    const fraisNotaire = prixNet * ((inputs['notaire'] || 0) / 100);
+    const fraisFixes = (inputs['agence'] || 0) + (inputs['travaux'] || 0) + (inputs['meubles'] || 0) + (inputs['frais-bancaires'] || 0);
     const coutTotal = prixNet + fraisNotaire + fraisFixes;
-    const montantFinance = Math.max(0, coutTotal - inputs['apport']);
+    // Sans durée de crédit il n'y a pas de prêt : le coût est intégralement apporté. Un capital
+    // emprunté sans mensualité ni intérêt était un prêt gratuit et perpétuel.
+    const nMois = Math.max(0, Math.round((inputs['duree'] || 0) * 12));
+    const montantFinance = nMois > 0 ? Math.max(0, coutTotal - (inputs['apport'] || 0)) : 0;
 
-    const nMois = inputs['duree'] * 12;
-    const tauxMensuel = (inputs['taux-input'] / 100) / 12;
+    const tauxMensuel = ((inputs['taux-input'] || 0) / 100) / 12;
     let mensualiteCredit = 0;
     if (tauxMensuel > 0 && nMois > 0) mensualiteCredit = (montantFinance * tauxMensuel) / (1 - Math.pow(1 + tauxMensuel, -nMois));
     else if (nMois > 0) mensualiteCredit = montantFinance / nMois;
 
-    const coutAssuranceMensuel = (montantFinance * (inputs['assurance'] / 100)) / 12;
+    // Année 1 : la cotisation est la même dans les deux modes (le capital restant dû au 1er jour est
+    // le capital initial).
+    const coutAssuranceMensuel = (montantFinance * ((inputs['assurance'] || 0) / 100)) / 12;
     const mensualiteTotale = mensualiteCredit + coutAssuranceMensuel;
 
     const loyersAnnuelsTheoriques = loyerMensuel * 12;
-    const loyersEncaisses = loyersAnnuelsTheoriques * (1 - (inputs['vacance'] / 100));
-    const chargesExploitationAnnuelles = (inputs['copro'] * 12) + inputs['fonciere'] + inputs['pno'] + (loyersEncaisses * (inputs['gestion'] / 100));
+    const loyersEncaisses = loyersAnnuelsTheoriques * (1 - ((inputs['vacance'] || 0) / 100));
+    const chargesExploitationAnnuelles = ((inputs['copro'] || 0) * 12) + (inputs['fonciere'] || 0) + (inputs['pno'] || 0) + (loyersEncaisses * ((inputs['gestion'] || 0) / 100));
 
-    let capitalRestant = montantFinance;
-    let interetsAnnee1 = 0;
-    for (let m = 0; m < 12; m++) {
-        if (capitalRestant > 0) {
-            let interetMois = capitalRestant * tauxMensuel;
-            let capMois = mensualiteCredit - interetMois;
-            interetsAnnee1 += interetMois;
-            capitalRestant -= capMois;
-        }
-    }
+    const annee1 = echeancierAnnuelEtude({ montantFinance, mensualiteCredit }, inputs, 1)[0];
+    const interetsAnnee1 = annee1.interets;
 
     const taxResult = computeAnnualTaxEstimate(
         prixNet,
@@ -210,7 +443,7 @@ export function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
         inputs,
         tmi,
         interetsAnnee1,
-        coutAssuranceMensuel * 12,
+        annee1.assurance,
         1
     );
     const impotsAnnee = taxResult.tax;
@@ -232,8 +465,11 @@ export function buildFinancialModel(prixNet, loyerMensuel, inputs, tmi) {
         chargesExploitationAnnuelles,
         interetsAnnee1,
         impotsAnnee,
+        regimeApplique: taxResult.regime,
         cfNet,
-        cfNetNet
+        cfNetNet,
+        // Cash-flow réellement perçu par l'associé (PFU en SCI à l'IS), base des comparaisons de régimes.
+        cfNetNetDistribue: cfDistribue(taxResult.regime, cfNetNet)
     };
 }
 
@@ -243,47 +479,22 @@ export function computeCF(prixVendeur, loyerMensuel, inputs, tmi) {
     return model.cfNetNet;
 }
 
-// CF mensuel moyen sur 3 ans (durée minimale d'engagement du régime réel)
-// Prend en compte : décroissance des intérêts, one-off charges an 1 seulement, report de déficit foncier
+// CF mensuel moyen sur 3 ans (durée minimale d'engagement du régime réel), tel que l'associé le
+// perçoit (après PFU en SCI à l'IS) : sert à comparer les régimes entre eux.
+// Prend en compte : décroissance des intérêts et de l'assurance dégressive, charges ponctuelles de
+// l'année 1 seulement, report de déficit (foncier et IS), CSG déductible.
 function computeAvgCF3Y(prixNet, loyerMensuel, inputs, tmi) {
     const model = buildFinancialModel(prixNet, loyerMensuel, inputs, tmi);
-    const nMois = Math.max(0, Math.round((inputs['duree'] || 0) * 12));
-    const tauxMensuel = (inputs['taux-input'] / 100) / 12;
-    let remainingCapital = model.montantFinance;
-    let totalAnnualCF = 0;
-    let carryForward = 0;
-
-    for (let year = 1; year <= 3; year++) {
-        let interestYear = 0;
-        let insuranceYear = 0;
-        let debtServiceYear = 0;
-        // Base de l'assurance pour cette année : CRD au 1er janvier si le contrat est dégressif,
-        // sinon capital initial (cotisation fixe) — voir computeAmortizationSchedule.
-        const assuranceMensAnnee = inputs['assurance-mode'] === 'crd'
-            ? (remainingCapital * (inputs['assurance'] / 100)) / 12
-            : model.coutAssuranceMensuel;
-
-        for (let month = 0; month < 12; month++) {
-            const monthIndex = ((year - 1) * 12) + month;
-            if (monthIndex >= nMois || remainingCapital <= 0) break;
-            const interestMonth = tauxMensuel > 0 ? remainingCapital * tauxMensuel : 0;
-            let principalMonth = tauxMensuel > 0 ? model.mensualiteCredit - interestMonth : model.mensualiteCredit;
-            principalMonth = Math.max(0, Math.min(remainingCapital, principalMonth));
-            interestYear += interestMonth;
-            insuranceYear += assuranceMensAnnee;
-            debtServiceYear += model.mensualiteCredit + assuranceMensAnnee;
-            remainingCapital = Math.max(0, remainingCapital - principalMonth);
-        }
-
+    const etat = etatFiscalInitial();
+    let total = 0;
+    for (const row of echeancierAnnuelEtude(model, inputs, 3)) {
         const taxResult = computeAnnualTaxEstimate(
             model.prixNet, model.loyersEncaisses, model.chargesExploitationAnnuelles,
-            inputs, tmi, interestYear, insuranceYear, year, carryForward
+            inputs, tmi, row.interets, row.assurance, row.year, etat
         );
-        totalAnnualCF += model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxResult.tax;
-        carryForward = taxResult.newCarryForward;
+        total += cfDistribue(taxResult.regime, model.loyersEncaisses - model.chargesExploitationAnnuelles - row.debtService - taxResult.tax);
     }
-
-    return (totalAnnualCF / 3) / 12;
+    return total / 36;
 }
 
 // --- MÉTRIQUES PROJET (pour comparateur) ---
@@ -318,7 +529,7 @@ export function computeProjectMetrics(projectData) {
     let scoreLabel;
     if (pts >= 5) scoreLabel = 'Élevé'; else if (pts >= 3) scoreLabel = 'Intermédiaire'; else if (pts >= 1) scoreLabel = 'Limite'; else scoreLabel = 'Critique';
 
-    return { prixNet, coutTotal, loyer, rentaBrute, rentaNette, rentaNetNet, cfNet, cfNetNet, coc, grm, dscr, bestRegime, scoreLabel };
+    return { prixNet, coutTotal, loyer, rentaBrute, rentaNette, rentaNetNet, cfNet, cfNetNet, coc, grm, dscr, bestRegime, scoreLabel, regimeApplique: model.regimeApplique };
 }
 
 function getDecisionToneFromThresholds(metrics) {
@@ -1152,64 +1363,43 @@ function buildActionLevers(sensitivity, regimeComparison) {
 
 function buildTenYearProjection(model, inputs, tmi) {
     const horizonYears = 10;
-    const tauxMensuel = (inputs['taux-input'] / 100) / 12;
-    const totalMonths = Math.max(0, Math.round((inputs['duree'] || 0) * 12));
-    let remainingCapital = model.montantFinance;
+    const etat = etatFiscalInitial();
     let cumulativeCashflow = 0;
     let cumulativePrincipal = 0;
-    let carryForwardDeficit = 0;
+    let deficitExpireTotal = 0;
     const years = [];
 
-    for (let year = 1; year <= horizonYears; year++) {
-        let interestYear = 0;
-        let principalYear = 0;
-        let insuranceYear = 0;
-        let debtServiceYear = 0;
-
-        for (let month = 0; month < 12; month++) {
-            const monthIndex = ((year - 1) * 12) + month;
-            if (monthIndex >= totalMonths || remainingCapital <= 0) {
-                break;
-            }
-
-            const interestMonth = tauxMensuel > 0 ? remainingCapital * tauxMensuel : 0;
-            let principalMonth = tauxMensuel > 0 ? (model.mensualiteCredit - interestMonth) : model.mensualiteCredit;
-            principalMonth = Math.max(0, Math.min(remainingCapital, principalMonth));
-
-            interestYear += interestMonth;
-            principalYear += principalMonth;
-            insuranceYear += model.coutAssuranceMensuel;
-            debtServiceYear += model.mensualiteCredit + model.coutAssuranceMensuel;
-            remainingCapital = Math.max(0, remainingCapital - principalMonth);
-        }
-
+    for (const row of echeancierAnnuelEtude(model, inputs, horizonYears)) {
         const taxResult = computeAnnualTaxEstimate(
             model.prixNet,
             model.loyersEncaisses,
             model.chargesExploitationAnnuelles,
             inputs,
             tmi,
-            interestYear,
-            insuranceYear,
-            year,
-            carryForwardDeficit
+            row.interets,
+            row.assurance,
+            row.year,
+            etat
         );
-        carryForwardDeficit = taxResult.newCarryForward;
-        const annualCashflow = model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear - taxResult.tax;
+        deficitExpireTotal += taxResult.deficitExpire || 0;
+        // En SCI à l'IS, cash-flow de la société (avant distribution) : c'est ce qui s'accumule.
+        const annualCashflow = model.loyersEncaisses - model.chargesExploitationAnnuelles - row.debtService - taxResult.tax;
 
         cumulativeCashflow += annualCashflow;
-        cumulativePrincipal += principalYear;
+        cumulativePrincipal += row.capital;
         const traction = cumulativeCashflow + cumulativePrincipal;
 
         years.push({
-            year,
+            year: row.year,
             annualCashflow,
+            impots: taxResult.tax,
+            deficitReporte: taxResult.newCarryForward,
             cumulativeCashflow,
-            principalRepaid: principalYear,
+            principalRepaid: row.capital,
             cumulativePrincipal,
             traction,
             wealthCreated: traction,
-            remainingCapital
+            remainingCapital: row.crdFin
         });
     }
 
@@ -1223,6 +1413,7 @@ function buildTenYearProjection(model, inputs, tmi) {
     return {
         horizonYears,
         years,
+        deficitExpireTotal,
         endingCashflow: finalYear.cumulativeCashflow,
         endingPrincipal: finalYear.cumulativePrincipal,
         endingTraction: finalYear.traction,
@@ -1233,7 +1424,9 @@ function buildTenYearProjection(model, inputs, tmi) {
 const _matrixCache = { key: null, data: null };
 
 function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, thresholds) {
-    const cacheKey = `${prixNet}|${loyer}|${adults}|${children}|${inputs['revenus']}|${inputs['taux-input']}|${inputs['duree']}|${inputs['regime']}|${inputs['nego']}|${inputs['apport']}|${inputs['fonciere']}|${inputs['copro']}|${inputs['pno']}|${inputs['vacance']}|${inputs['frais-bancaires']}|${thresholds.minCf}|${thresholds.minDscr}`;
+    // Clé sur TOUTES les entrées : la liste à la main oubliait travaux, notaire, assurance, gestion,
+    // mobilier... et resservait une matrice périmée quand l'un d'eux changeait.
+    const cacheKey = JSON.stringify([prixNet, loyer, adults, children, inputs, thresholds]);
     if (_matrixCache.key === cacheKey) return _matrixCache.data;
 
     const priceOffsets = [-10000, -5000, 0, 5000, 10000];
@@ -1284,52 +1477,23 @@ function buildPriceRentMatrix(prixNet, loyer, inputs, adults, children, threshol
 
 function buildLoanCashflowTable(model, inputs, tmi) {
     const duree = Math.max(1, Math.round(inputs['duree'] || 0));
-    const tauxMensuel = (inputs['taux-input'] / 100) / 12;
-    const totalMonths = model.montantFinance > 0 ? duree * 12 : 0;
-    let remainingCapital = model.montantFinance;
-    const rows = [];
-    let carryForwardDeficit = 0;
-
-    for (let year = 1; year <= duree; year++) {
-        let interestYear = 0;
-        let insuranceYear = 0;
-        let debtServiceYear = 0;
-
-        for (let month = 0; month < 12; month++) {
-            const monthIndex = ((year - 1) * 12) + month;
-            if (monthIndex >= totalMonths || remainingCapital <= 0) break;
-
-            const interestMonth = tauxMensuel > 0 ? remainingCapital * tauxMensuel : 0;
-            let principalMonth = tauxMensuel > 0 ? (model.mensualiteCredit - interestMonth) : model.mensualiteCredit;
-            principalMonth = Math.max(0, Math.min(remainingCapital, principalMonth));
-
-            interestYear += interestMonth;
-            insuranceYear += model.coutAssuranceMensuel;
-            debtServiceYear += model.mensualiteCredit + model.coutAssuranceMensuel;
-            remainingCapital = Math.max(0, remainingCapital - principalMonth);
-        }
-
+    const etat = etatFiscalInitial();
+    return echeancierAnnuelEtude(model, inputs, duree).map(row => {
         const taxResult = computeAnnualTaxEstimate(
             model.prixNet,
             model.loyersEncaisses,
             model.chargesExploitationAnnuelles,
             inputs,
             tmi,
-            interestYear,
-            insuranceYear,
-            year,
-            carryForwardDeficit
+            row.interets,
+            row.assurance,
+            row.year,
+            etat
         );
-        const taxesYear = taxResult.tax;
-        carryForwardDeficit = taxResult.newCarryForward;
-
-        const cfAvantImpot = (model.loyersEncaisses - model.chargesExploitationAnnuelles - debtServiceYear) / 12;
-        const cfApresImpot = cfAvantImpot - (taxesYear / 12);
-
-        rows.push({ year, cfAvantImpot, cfApresImpot, deficitReporte: Math.round(carryForwardDeficit) });
-    }
-
-    return rows;
+        const cfAvantImpot = (model.loyersEncaisses - model.chargesExploitationAnnuelles - row.debtService) / 12;
+        const cfApresImpot = cfAvantImpot - (taxResult.tax / 12);
+        return { year: row.year, cfAvantImpot, cfApresImpot, deficitReporte: Math.round(taxResult.newCarryForward) };
+    });
 }
 
 export function computeAnalysisViewModel(projectData) {
@@ -1344,14 +1508,22 @@ export function computeAnalysisViewModel(projectData) {
     const metrics = computeProjectMetrics(projectData);
     const model = buildFinancialModel(prixNet, loyer, inputs, tmi);
 
+    // Comparaison sur ce que le foyer perçoit réellement : en SCI à l'IS, après PFU sur la
+    // distribution. Un micro-foncier au-delà du plafond est calculé au réel, et le libellé le dit.
     const regimeComparison = ['micro-foncier', 'reel', 'sci-is']
-        .map(regime => ({
-            id: regime,
-            label: REGIME_LABELS[regime],
-            cfNetNet: computeCF(prixNet, loyer, { ...inputs, regime }, tmi),
-            cfAvg3Y: computeAvgCF3Y(prixNet, loyer, { ...inputs, regime }, tmi),
-            isCurrent: inputs['regime'] === regime
-        }))
+        .map(regime => {
+            const regimeModel = buildFinancialModel(prixNet, loyer, { ...inputs, regime }, tmi);
+            let label = REGIME_LABELS[regime];
+            if (regime === 'sci-is') label += ' (après PFU)';
+            if (regimeModel.regimeApplique !== regime) label += ' — réel d\'office (> 15 000 €)';
+            return {
+                id: regime,
+                label,
+                cfNetNet: regimeModel.cfNetNetDistribue,
+                cfAvg3Y: computeAvgCF3Y(prixNet, loyer, { ...inputs, regime }, tmi),
+                isCurrent: inputs['regime'] === regime
+            };
+        })
         .sort((left, right) => right.cfAvg3Y - left.cfAvg3Y);
 
     const sensitivity = [
@@ -1386,6 +1558,8 @@ export function computeAnalysisViewModel(projectData) {
     return {
         tmi,
         parts,
+        // Régime réellement appliqué aux calculs (micro-foncier rabattu au réel au-delà de 15 000 €).
+        regimeApplique: model.regimeApplique,
         metrics,
         decision,
         confidenceModel,
@@ -1446,13 +1620,14 @@ function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
 
+// Abattements pour durée de détention (art. 150 VC CGI), en années révolues : deux barèmes
+// différents, d'où l'exonération d'IR à 22 ans mais de prélèvements sociaux seulement à 30 ans.
 function getResaleAbatementsYears(year) {
     const y = Math.max(1, Math.floor(year));
 
     let ir = 0;
     if (y <= 5) ir = 0;
     else if (y <= 21) ir = (y - 5) * 0.06;
-    else if (y === 22) ir = 1.0;
     else ir = 1;
 
     let ps = 0;
@@ -1465,36 +1640,62 @@ function getResaleAbatementsYears(year) {
     return { ir: clamp(ir, 0, 1), ps: clamp(ps, 0, 1) };
 }
 
-function computeResaleTax(plusValueTaxable, year, regime, tauxPvInput) {
+// Taxe sur les plus-values immobilières supérieures à 50 000 € (art. 1609 nonies G CGI), assise sur
+// la plus-value imposable à l'IR (après abattement). Barème par paliers, avec lissage à l'entrée de
+// chaque tranche sauf la première (effet de seuil réel de la loi à 50 000 €).
+const SURTAXE_PV_SEUIL = 50000;
+const SURTAXE_PV_BAREME = [
+    { borne: 60000, taux: 0.02, lissage: pv => (60000 - pv) / 20 },
+    { borne: 100000, taux: 0.02, lissage: () => 0 },
+    { borne: 110000, taux: 0.03, lissage: pv => (110000 - pv) / 10 },
+    { borne: 150000, taux: 0.03, lissage: () => 0 },
+    { borne: 160000, taux: 0.04, lissage: pv => (160000 - pv) * 0.15 },
+    { borne: 200000, taux: 0.04, lissage: () => 0 },
+    { borne: 210000, taux: 0.05, lissage: pv => (210000 - pv) * 0.2 },
+    { borne: 250000, taux: 0.05, lissage: () => 0 },
+    { borne: 260000, taux: 0.06, lissage: pv => (260000 - pv) * 0.25 },
+    { borne: Infinity, taux: 0.06, lissage: () => 0 },
+];
+
+export function computeSurtaxePlusValue(plusValueImposable) {
+    if (!(plusValueImposable > SURTAXE_PV_SEUIL)) return 0;
+    const tranche = SURTAXE_PV_BAREME.find(t => plusValueImposable <= t.borne);
+    return Math.max(0, plusValueImposable * tranche.taux - tranche.lissage(plusValueImposable));
+}
+
+// Impôt de plus-value des particuliers : 19 % d'IR et 17,2 % de prélèvements sociaux (les plus-values
+// immobilières sont exclues de la hausse de la LFSS 2026), plus la surtaxe.
+function computeResaleTax(plusValueTaxable, year) {
     if (plusValueTaxable <= 0) return 0;
-
-    if (regime === 'sci-is') {
-        const sciRate = clamp((tauxPvInput || 25) / 100, 0, 1);
-        return plusValueTaxable * sciRate;
-    }
-
     const abatements = getResaleAbatementsYears(year);
     const baseIR = plusValueTaxable * (1 - abatements.ir);
     const basePS = plusValueTaxable * (1 - abatements.ps);
-    return (baseIR * 0.19) + (basePS * CSG_CRDS_RATE);
+    return (baseIR * 0.19) + (basePS * CSG_CRDS_RATE) + computeSurtaxePlusValue(baseIR);
 }
 
+// Gain à la revente, année par année (revente au terme de l'année `year`, détention = year années).
+//  - Particulier (micro-foncier, réel) : prix d'acquisition majoré des frais réels ou du forfait de
+//    7,5 %, et des travaux NON déduits des revenus fonciers (agrandissement) ou du forfait de 15 %
+//    au-delà de 5 ans (art. 150 VB). Les travaux déductibles sont exclus : déduits au réel, réputés
+//    couverts par l'abattement de 30 % au micro — les compter deux fois minorait l'impôt.
+//  - SCI à l'IS : plus-value professionnelle (prix net de frais − valeur nette comptable, donc
+//    amortissements repris), imposée à l'IS, puis PFU sur le boni distribué aux associés. Le barème
+//    des particuliers (abattements, exonérations) ne s'applique pas à une société à l'IS.
 export function computeResaleTimeline(prixNet, capitalRestantSeries, cfCumuleSeries, inputs) {
     const rows = [];
     const basePrice = (inputs['prix-revente-estime'] && inputs['prix-revente-estime'] > 0) ? inputs['prix-revente-estime'] : prixNet;
     const growth = (inputs['appreciation'] || 0) / 100;
     const fraisRate = Math.max(0, (inputs['frais-revente'] || 0) / 100);
-    const tauxPv = Math.max(0, inputs['taux-pv'] || 0);
     const apport = inputs['apport'] || 0;
     const regime = inputs['regime'] || 'micro-foncier';
-    const fraisNotaireAchat = prixNet * ((inputs['notaire'] || 0) / 100);
-    const acquisitionBase = prixNet + fraisNotaireAchat + (inputs['agence'] || 0) + (inputs['travaux'] || 0);
+    const fraisAcquisition = prixNet * ((inputs['notaire'] || 0) / 100) + (inputs['agence'] || 0);
+    const travauxMajorables = travauxEtude(inputs).nonDeductibles;
+    const valeurBruteIS = valeurBruteSciIs(prixNet, inputs) + Math.max(0, Number(inputs['meubles']) || 0);
 
     let firstInterestingYear = null;
     let bestYear = 1;
     let bestGain = -Infinity;
-
-    const amortAnnuelSciIs = prixNet * 0.80 / 30;
+    let amortCumuleIS = 0;
 
     const horizon = Math.min(capitalRestantSeries.length, cfCumuleSeries.length, 25);
     for (let i = 0; i < horizon; i++) {
@@ -1502,18 +1703,23 @@ export function computeResaleTimeline(prixNet, capitalRestantSeries, cfCumuleSer
         const prixVente = basePrice * Math.pow(1 + growth, i);
         const fraisVente = prixVente * fraisRate;
         const prixVenteNetFrais = prixVente - fraisVente;
-        // En SCI-IS, la base fiscale est la valeur nette comptable (après amortissements cumulés)
-        let plusValueTaxable;
-        if (regime === 'sci-is') {
-            const amortCumule = Math.min(amortAnnuelSciIs * year, prixNet * 0.80);
-            const valeurComptableNette = Math.max(0, acquisitionBase - amortCumule);
-            plusValueTaxable = prixVenteNetFrais - valeurComptableNette;
-        } else {
-            plusValueTaxable = prixVenteNetFrais - acquisitionBase;
-        }
-        const impotPv = computeResaleTax(plusValueTaxable, year, regime, tauxPv);
-        const netVendeur = prixVente - fraisVente - impotPv;
         const crd = Math.max(0, capitalRestantSeries[i] || 0);
+        amortCumuleIS += amortissementSciIsAnnee(prixNet, inputs, year);
+
+        let plusValueTaxable, impotPv;
+        if (regime === 'sci-is') {
+            const valeurComptableNette = Math.max(0, valeurBruteIS - amortCumuleIS);
+            plusValueTaxable = prixVenteNetFrais - valeurComptableNette;
+            const impotIS = impotSocieteIS(plusValueTaxable);
+            const boni = Math.max(0, prixVenteNetFrais - impotIS - crd - apport);
+            impotPv = impotIS + boni * PFU_TAUX;
+        } else {
+            const fraisRetenus = Math.max(fraisAcquisition, prixNet * 0.075);
+            const travauxRetenus = year > 5 ? Math.max(travauxMajorables, prixNet * 0.15) : travauxMajorables;
+            plusValueTaxable = prixVenteNetFrais - (prixNet + fraisRetenus + travauxRetenus);
+            impotPv = computeResaleTax(plusValueTaxable, year);
+        }
+        const netVendeur = prixVente - fraisVente - impotPv;
         const cashNetSortie = netVendeur - crd;
         const cfCumule = cfCumuleSeries[i] || 0;
         const gainGlobal = cfCumule + cashNetSortie - apport;
@@ -1823,7 +2029,8 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
 
     let capitalRestant = montantCredit;
     let loanMonthsElapsedTotal = 0; // mois de crédit déjà écoulés, tous exercices confondus
-    let carryForwardDeficit = 0;
+    // Reports de déficit (foncier par millésimes, IS) et CSG déductible, portés d'une année à l'autre.
+    const etatFiscal = etatFiscalInitial();
     const years = [];
     let cumulCF = 0;
     let recettesCum = 0;
@@ -1907,8 +2114,7 @@ export function computeOwnedAssetTimeline(asset, profileData, regimeOverride = n
 
         // Impôt de l'année : source unique computeImpotAnnuelBien (cases de la 2044 de l'année, TMI de
         // CETTE année via le revenu historisé, déficit reporté des années précédentes).
-        const impot = computeImpotAnnuelBien(asset, y, profileData, regimeOverride || 'micro-foncier', carryForwardDeficit);
-        carryForwardDeficit = impot.deficitReporte;
+        const impot = computeImpotAnnuelBien(asset, y, profileData, regimeOverride || 'micro-foncier', etatFiscal);
         const impotsAnnee = impot.impots;
         const baseImposable = impot.baseImposable;
 
@@ -1993,34 +2199,56 @@ function echeancierCreditsTravaux(travaux) {
 // timeline (donc par le CF de référence, le détail du CF et le compte de résultat). Base = les cases
 // de la 2044 de l'année (lignes2044Bien : forfait 20 €, intérêts des crédits travaux, frais
 // d'emprunt en case 250) ; deficitReporte = déficit reportable des années précédentes (réel).
-//  - micro-foncier : 70 % des loyers × (TMI + prélèvements sociaux) ;
-//  - réel : bénéfice d'abord diminué du déficit reporté ; déficit réparti comme la 2044
-//    (repartirDeficitFoncier) : part imputable sur le revenu global → économie au TMI, reste reporté ;
+// Moteur commun impotLocatifAnnee : IR par différence de deux impôts complets du foyer (revenu de
+// CETTE année, barème, plafonnement, décote) + prélèvements sociaux, CSG déductible l'année suivante.
+//  - micro-foncier : base = 70 % des loyers ;
+//  - réel : bénéfice diminué des déficits reportés (millésimes, dix ans) ; déficit réparti comme la
+//    2044 (repartirDeficitFoncier) : part imputable sur le revenu global, reste reporté ;
 //  - SCI-IS : bénéfice hors forfait 20 € (propre à la 2044), moins l'amortissement de l'immeuble
-//    (80 % du prix sur 30 ans), IS 15 % jusqu'à 42 500 € puis 25 %.
-// Retour : { impots, baseImposable, deficitReporte (après l'année) }.
-export function computeImpotAnnuelBien(asset, annee, profileData, regime, deficitReporte = 0) {
+//    (amortissementSciIsBienAnnee), déficit reporté sans limite, IS 15 % puis 25 %.
+// L'impôt d'un bien est mesuré bien par bien sur le revenu du foyer : avec plusieurs biens, la
+// projection « Impôts à venir » (computeProjectionImpotsFoyer) reste la référence au niveau du foyer.
+// `etatOuReport` : état fiscal de l'année précédente (etatFiscalInitial, modifié en place) ou, pour
+// compatibilité, un déficit foncier reporté.
+// Retour : { impots, baseImposable, deficitReporte (après l'année), deficitExpire, etat }.
+export function computeImpotAnnuelBien(asset, annee, profileData, regime, etatOuReport = 0) {
     const l = lignes2044Bien(asset, annee, profileData);
-    const tmi = resolveTmiFoyer(profileData, annee);
-    const tauxGlobal = (tmi / 100) + CSG_CRDS_RATE;
-    if (regime === 'reel') {
-        const resultat = l.case211 - l.chargesHorsInterets - l.case250;
-        if (resultat > 0) {
-            const impute = Math.min(deficitReporte, resultat);
-            const baseImposable = resultat - impute;
-            return { impots: baseImposable * tauxGlobal, baseImposable, deficitReporte: deficitReporte - impute };
-        }
-        const rep = repartirDeficitFoncier(l.case211, l.chargesHorsInterets, l.case250);
-        return { impots: -(rep.imputableRevenuGlobal * (tmi / 100)), baseImposable: 0, deficitReporte: deficitReporte + rep.reportable };
-    }
-    if (regime === 'sci-is') {
-        const amortissement = (asset.acquisition?.prix || 0) * 0.80 / 30;
-        const benefice = l.case211 - (l.chargesHorsInterets - l.case222) - l.case250 - amortissement;
-        const baseImposable = Math.max(0, benefice);
-        return { impots: Math.min(baseImposable, 42500) * 0.15 + Math.max(0, baseImposable - 42500) * 0.25, baseImposable, deficitReporte: 0 };
-    }
-    const baseImposable = l.case211 * 0.7;
-    return { impots: baseImposable * tauxGlobal, baseImposable, deficitReporte: 0 };
+    const etat = etatDepuisReport(etatOuReport, annee);
+    const fiscal = impotLocatifAnnee(regime === 'reel' || regime === 'sci-is' ? regime : 'micro-foncier', {
+        annee,
+        loyers: l.case211,
+        chargesHorsInterets: l.chargesHorsInterets,
+        interets: l.case250,
+        chargesIS: l.chargesHorsInterets - l.case222,
+        amortissementIS: amortissementSciIsBienAnnee(asset, annee),
+    }, foyerAnnee(profileData, annee), etat);
+    return { impots: fiscal.impot, baseImposable: fiscal.baseImposable, deficitReporte: fiscal.deficitReporte, deficitExpire: fiscal.deficitExpire, etat };
+}
+
+// Foyer fiscal d'une année civile : revenu historisé de cette année-là, composition du profil.
+function foyerAnnee(profileData, annee) {
+    return {
+        revenus: resolveRevenuFoyer(profileData, annee),
+        adults: profileData?.adults || 2,
+        children: profileData?.children || 0,
+    };
+}
+
+// Dotation SCI à l'IS d'un bien détenu pour une année civile : 80 % du prix de revient (prix + frais
+// de notaire + frais d'agence), terrain exclu, sur 30 ans, prorata l'année d'achat, bornée par le
+// stock amortissable. L'ancien calcul dotait 80 % du seul prix, en année pleine dès l'achat et sans
+// fin.
+function amortissementSciIsBienAnnee(asset, annee) {
+    const acq = asset.acquisition || {};
+    const base = ((acq.prix || 0) + (acq.fraisNotaire || 0) + (acq.fraisAgence || 0)) * 0.80;
+    if (!(base > 0)) return 0;
+    const annuel = base / 30;
+    const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+    if (annee < anneeAchat) return 0;
+    const premiere = annuel * (13 - moisAchat) / 12;
+    if (annee === anneeAchat) return Math.min(base, premiere);
+    const cumulAvant = premiere + annuel * (annee - anneeAchat - 1);
+    return Math.max(0, Math.min(annuel, base - cumulAvant));
 }
 
 // Flux mensuels d'un bien sur une fenêtre (chantier CF unique) : { debut: {annee, mois}, nbMois }.
@@ -2499,9 +2727,8 @@ function compteResultatVide(annee, regime) {
 // récursion). Sans option, `impots` = impôt de l'année dans computeOwnedAssetTimeline (même
 // régime), seule source de l'impôt d'un bien depuis le chantier CF unique (étape 3).
 export function computeCompteResultat(asset, annee, profileData, regime, options = {}) {
-    // TMI de l'année déclarée (pas le revenu actuel) : un revenu qui évolue ne doit pas retaxer
-    // une année fiscale déjà passée avec le revenu d'aujourd'hui.
-    const tmi = resolveTmiFoyer(profileData, annee);
+    // Revenu du foyer de l'année déclarée (foyerAnnee, pas le revenu actuel) : un revenu qui évolue
+    // ne doit pas retaxer une année fiscale déjà passée avec le revenu d'aujourd'hui.
     const acq = asset.acquisition || {};
     const post = asset.postAchat || {};
     const credit = acq.credit || {};
@@ -2559,33 +2786,21 @@ export function computeCompteResultat(asset, annee, profileData, regime, options
     const travauxCashNonDed = travauxAnneeAll.filter(t => !estFraisDeductible(t.tag) && !t.financeParCredit).reduce((s, t) => s + (t.montant || 0), 0);
 
     const chargesDeductibles = interetsAnnee + assuranceAnnee + fraisEmprunt + taxeFonciere + taxeFonciereFrais + chargesCopro + assurancePNO + gestionLocative + travauxDed;
-    const tauxGlobal = (tmi / 100) + CSG_CRDS_RATE;
 
-    let resultatFoncier, baseImposable, impots;
-    if (regime === 'micro-foncier') {
-        baseImposable = recettesBrutes * 0.7;
-        impots = Math.max(0, baseImposable * tauxGlobal);
-        resultatFoncier = recettesBrutes - chargesDeductibles;
-    } else if (regime === 'reel') {
-        resultatFoncier = recettesBrutes - chargesDeductibles;
-        if (resultatFoncier > 0) {
-            baseImposable = resultatFoncier;
-            impots = resultatFoncier * tauxGlobal;
-        } else {
-            baseImposable = 0;
-            // Même répartition que la 2044 (repartirDeficitFoncier, art. 156 I 3° CGI) : la case 250
-            // (intérêts + assurance emprunteur + frais d'emprunt) s'impute d'abord sur les loyers.
-            const case250 = interetsAnnee + assuranceAnnee + fraisEmprunt;
-            const { imputableRevenuGlobal } = repartirDeficitFoncier(recettesBrutes, chargesDeductibles - case250, case250);
-            impots = -(imputableRevenuGlobal * (tmi / 100));
-        }
-    } else {
-        resultatFoncier = recettesBrutes - chargesDeductibles;
-        baseImposable = Math.max(0, resultatFoncier);
-        impots = baseImposable > 0
-            ? Math.min(baseImposable, 42500) * 0.15 + Math.max(0, baseImposable - 42500) * 0.25
-            : 0;
-    }
+    // Impôt de l'année seule (sans report), par le moteur commun : en mode base il n'est lu par
+    // personne d'autre que l'appelant, sinon il est remplacé ci-dessous par celui de la timeline.
+    // La case 250 (intérêts + assurance emprunteur + frais d'emprunt) s'impute d'abord sur les loyers.
+    const case250 = interetsAnnee + assuranceAnnee + fraisEmprunt;
+    const resultatFoncier = recettesBrutes - chargesDeductibles;
+    const fiscalAnnee = impotLocatifAnnee(regime === 'reel' || regime === 'sci-is' ? regime : 'micro-foncier', {
+        annee,
+        loyers: recettesBrutes,
+        chargesHorsInterets: chargesDeductibles - case250,
+        interets: case250,
+        amortissementIS: amortissementSciIsBienAnnee(asset, annee),
+    }, foyerAnnee(profileData, annee), etatFiscalInitial());
+    let baseImposable = fiscalAnnee.baseImposable;
+    let impots = fiscalAnnee.impot;
     // Impôt unique (chantier CF unique, étape 3) : celui de la timeline pour cette année et ce
     // régime (forfait 20 €, déficit reporté, amortissement SCI-IS compris), identique au CF affiché.
     if (!options.base) {
@@ -2758,7 +2973,7 @@ export function computeRevenuFoncierPortefeuille(assets, annee, profileData, reg
 export function computeDeficitFoncierHistorique(asset, profileData) {
     const currentYear = new Date().getFullYear();
     const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
-    const EXPIRATION_ANS = 10;
+    const EXPIRATION_ANS = DUREE_REPORT_DEFICIT_FONCIER;
 
     const lignes = []; // { annee, montantInitial, utilise } — ordre chronologique = ordre FIFO
     // Pas d'années projetées, seulement le vécu. Résultat de chaque année = celui de la 2044
@@ -2772,7 +2987,7 @@ export function computeDeficitFoncierHistorique(asset, profileData) {
             let restantAAbsorber = revenusNets;
             for (const ligne of lignes) {
                 if (restantAAbsorber <= 0) break;
-                if (y - ligne.annee >= EXPIRATION_ANS) continue; // déficit déjà expiré cette année-là
+                if (y - ligne.annee > EXPIRATION_ANS) continue; // déficit prescrit : imputable jusqu'en A+10 inclus
                 const disponible = ligne.montantInitial - ligne.utilise;
                 if (disponible <= 0) continue;
                 const absorbe = Math.min(disponible, restantAAbsorber);
@@ -2792,8 +3007,9 @@ export function computeDeficitFoncierHistorique(asset, profileData) {
             montantInitial: Math.round(l.montantInitial),
             utilise: Math.round(l.utilise),
             restant: Math.round(Math.max(0, l.montantInitial - l.utilise)),
+            // Dernière année d'imputation : le déficit de A sert sur les revenus de A+1 à A+10.
             expire: l.annee + EXPIRATION_ANS,
-            expired: anciennete >= EXPIRATION_ANS
+            expired: anciennete > EXPIRATION_ANS
         };
     });
     const stockTotal = lignesFormatees.filter(l => !l.expired).reduce((s, l) => s + l.restant, 0);
@@ -2869,17 +3085,14 @@ export function computePortfolioAlerts(assets, profileData, regime, revenusMensu
             }
         }
 
-        // Déficit foncier reportable proche de son expiration (10 ans), calculé automatiquement
-        // (computeDeficitFoncierHistorique) plutôt que lu depuis une saisie manuelle. Seuil aligné
-        // sur celui de la table "Déficits fonciers reportables" (owned-portfolio.js,
-        // renderAccordionPostAchat) qui marque l'entrée "Expiré" dès anciennete >= 10 — l'alerte ne
-        // doit donc pas se déclencher à anciennete === 10, sous peine d'annoncer "expire dans 0 an"
-        // pour une ligne déjà affichée comme expirée juste en dessous.
+        // Déficit foncier reportable proche de sa prescription, calculé automatiquement
+        // (computeDeficitFoncierHistorique). Le déficit de l'année A reste imputable jusqu'en A+10
+        // inclus (la table « Déficits fonciers reportables » ne le marque « Expiré » qu'au-delà) :
+        // alerte pendant ses trois dernières années d'imputation, avec l'année limite.
         for (const d of computeDeficitFoncierHistorique(asset, profileData).lignes) {
             const anciennete = now.getFullYear() - d.annee;
-            if (d.restant > 0 && anciennete >= 8 && anciennete <= 9) {
-                const anneesRestantes = 10 - anciennete;
-                alerts.push({ type: 'deficit-expire', severity: 'warning', assetId: asset.id, msg: `${asset.nom} — Déficit foncier ${d.annee} : ${d.restant.toLocaleString('fr-FR')} € non imputés, expire dans ${anneesRestantes} an${anneesRestantes > 1 ? 's' : ''}` });
+            if (d.restant > 0 && anciennete >= 8 && anciennete <= DUREE_REPORT_DEFICIT_FONCIER) {
+                alerts.push({ type: 'deficit-expire', severity: 'warning', assetId: asset.id, msg: `${asset.nom} — Déficit foncier ${d.annee} : ${d.restant.toLocaleString('fr-FR')} € non imputés, imputables jusqu'en ${d.expire} seulement` });
             }
         }
 
@@ -2903,31 +3116,43 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
     // recettes de l'année d'achat alors qu'interetsAnnee/assuranceAnnee ci-dessous (tirés de
     // l'échéancier réel) sont déjà correctement partiels sur cette même année.
     const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
-    const moisPossedeAnnee = annee === anneeAchat ? (13 - moisAchat) : 12;
-    const loyersAnnuels = loyer * moisPossedeAnnee * (1 - vacancePct / 100);
     const { schedule } = computeAmortizationSchedule(credit.montant || 0, credit.taux || 0, credit.duree || 0, asset.dateAchat, credit.assurance || 0, credit.assuranceMode);
-    const yearRow = schedule.find(r => r.annee === annee);
-    const interetsAnnee = yearRow?.interets || 0;
 
-    // Proratisées comme le loyer ci-dessus (moisPossedeAnnee) — même correctif que
+    // Flux fonciers d'une année civile. Proratisés l'année d'achat (moisPossedeAnnee), comme
     // computeOwnedAssetTimeline/computeCompteResultat/computeCFBreakdown.
-    const taxeFonciere = (post.taxeFonciere ?? 0) * moisPossedeAnnee / 12;
-    const chargesCopro = (post.chargesCopro ?? 0) * moisPossedeAnnee;
-    const assurancePNO = (post.assurancePNO ?? 0) * moisPossedeAnnee / 12;
-    const gestionLocative = loyersAnnuels * ((post.gestionLocative ?? 0) / 100);
-    const assuranceAnnee = yearRow?.assurance || 0;
-    const chargesBase = taxeFonciere + chargesCopro + assurancePNO + gestionLocative + assuranceAnnee;
+    const fluxAnnee = y => {
+        const moisPossedeAnnee = y === anneeAchat ? (13 - moisAchat) : (y < anneeAchat ? 0 : 12);
+        const loyers = loyer * moisPossedeAnnee * (1 - vacancePct / 100);
+        const yearRow = schedule.find(r => r.annee === y);
+        const chargesHorsInterets = (post.taxeFonciere ?? 0) * moisPossedeAnnee / 12
+            + (post.chargesCopro ?? 0) * moisPossedeAnnee
+            + (post.assurancePNO ?? 0) * moisPossedeAnnee / 12
+            + loyers * ((post.gestionLocative ?? 0) / 100);
+        return { loyers, chargesHorsInterets, interets: (yearRow?.interets || 0) + (yearRow?.assurance || 0) };
+    };
 
     let deficitCree = 0, economieFiscale3ans = 0;
     const applicable = deductible && regime === 'reel';
 
     if (applicable) {
-        const totalChargesAvecTravaux = chargesBase + interetsAnnee + montantTravaux;
-        const resultatFoncier = loyersAnnuels - totalChargesAvecTravaux;
-        if (resultatFoncier < 0) {
-            deficitCree = Math.abs(resultatFoncier);
-            // TMI de l'année simulée (annee), pas l'actuel : le déficit se crée cette année-là.
-            economieFiscale3ans = Math.min(10700, deficitCree) * (resolveTmiFoyer(profileData, annee) / 100);
+        const f = fluxAnnee(annee);
+        const resultatFoncier = f.loyers - f.chargesHorsInterets - f.interets - montantTravaux;
+        if (resultatFoncier < 0) deficitCree = Math.abs(resultatFoncier);
+        // Économie sur l'année des travaux et les deux suivantes : impôt SANS moins impôt AVEC,
+        // mesurés au barème du foyer (différence d'impôts complets) avec prélèvements sociaux, report
+        // du déficit et CSG déductible. L'ancien calcul (min(10 700, déficit) × TMI) ignorait la part
+        // reportée, l'impôt évité sur le bénéfice qu'auraient dégagé les loyers, et les prélèvements.
+        const etatSans = etatFiscalInitial();
+        const etatAvec = etatFiscalInitial();
+        for (let y = annee; y <= annee + 2; y++) {
+            const fy = fluxAnnee(y);
+            const foyer = foyerAnnee(profileData, y);
+            const sans = impotLocatifAnnee('reel', { annee: y, ...fy }, foyer, etatSans).impot;
+            const avec = impotLocatifAnnee('reel', {
+                annee: y, ...fy,
+                chargesHorsInterets: fy.chargesHorsInterets + (y === annee ? montantTravaux : 0),
+            }, foyer, etatAvec).impot;
+            economieFiscale3ans += sans - avec;
         }
     }
 
@@ -2965,7 +3190,9 @@ export function computeSimulationTravaux(asset, montantTravaux, annee, deductibl
 // que donnerait le régime réel ; la comparaison avec le micro-foncier et la SCI à l'IS est faite par
 // computeProjectionRegimesFoyer (plus bas), l'optimisation du calendrier des travaux par
 // computeOptimisationTravaux — tous trois partagent creerContexteFoyer / rejouerFoncierReel.
-const DEFICIT_FONCIER_EXPIRATION_ANS = 10;
+// Le déficit de l'année A s'impute sur les revenus des dix années suivantes : jusqu'en A+10 inclus,
+// perdu en A+11. L'ancienne règle le perdait dès A+10, un an trop tôt.
+const DEFICIT_FONCIER_EXPIRATION_ANS = DUREE_REPORT_DEFICIT_FONCIER;
 
 
 const composantesVides = () => ({ loyers: 0, chargesHorsTravaux: 0, forfaitGestion: 0, interets: 0, travaux: 0 });
@@ -3023,6 +3250,7 @@ function simulesParAnnee(simules, anneeDebut, anneeFin) {
 function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map() } = {}) {
     const { parAnnee, anneeMin, anneeDebut, anneeFin, profileData, foyer } = ctx;
     const stock = []; // { annee, restant } — ordre chronologique = ordre FIFO
+    let csgDeductible = 0;
     const rows = [];
     for (let y = anneeMin; y <= anneeFin; y++) {
         const agg = parAnnee.get(y) || composantesVides();
@@ -3031,11 +3259,11 @@ function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map
         const travauxSimules = projete ? (simules.get(y) || 0) : 0;
         const travaux = travauxSaisis + travauxSimules;
 
-        // Les reports créés il y a 10 ans ou plus ne sont plus imputables : ce qui en reste est perdu.
+        // Les reports de plus de 10 ans ne sont plus imputables : ce qui en reste est perdu cette année.
         const deficitPerdu = stock
-            .filter(l => y - l.annee === DEFICIT_FONCIER_EXPIRATION_ANS)
+            .filter(l => y - l.annee === DEFICIT_FONCIER_EXPIRATION_ANS + 1)
             .reduce((s, l) => s + l.restant, 0);
-        const stockActif = stock.filter(l => y - l.annee < DEFICIT_FONCIER_EXPIRATION_ANS && l.restant > 0);
+        const stockActif = stock.filter(l => y - l.annee <= DEFICIT_FONCIER_EXPIRATION_ANS && l.restant > 0);
 
         const resultatAvantInterets = agg.loyers - agg.chargesHorsTravaux - travaux;
         const resultatFoncier = resultatAvantInterets - agg.interets;
@@ -3058,11 +3286,14 @@ function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map
             if (deficitReporte > 0) stock.push({ annee: y, restant: deficitReporte });
         }
         const stockFin = stock
-            .filter(l => y - l.annee < DEFICIT_FONCIER_EXPIRATION_ANS)
+            .filter(l => y - l.annee <= DEFICIT_FONCIER_EXPIRATION_ANS)
             .reduce((s, l) => s + l.restant, 0);
 
         const revenuSalarial = resolveRevenuFoyer(profileData, y);
-        const impot = computeImpotFoyer(revenuSalarial, revenuFoncierImposable - imputeRevenuGlobal, foyer);
+        // CSG déductible née du revenu foncier imposé l'an passé : déduite du revenu global de l'année.
+        const impot = computeImpotFoyer(revenuSalarial - csgDeductible, revenuFoncierImposable - imputeRevenuGlobal, foyer);
+        const csgDeductibleImputee = csgDeductible;
+        csgDeductible = revenuFoncierImposable * CSG_DEDUCTIBLE_RATE;
         const impotSalairesSeuls = computeImpotFoyer(revenuSalarial, 0, foyer).total;
 
         rows.push({
@@ -3070,7 +3301,7 @@ function rejouerFoncierReel(ctx, { travauxFutursSaisis = true, simules = new Map
             loyers: agg.loyers, chargesHorsTravaux: agg.chargesHorsTravaux, forfaitGestion: agg.forfaitGestion, interets: agg.interets,
             travaux, travauxSaisis, travauxSimules,
             resultatFoncier, imputeRevenuGlobal, reportUtilise, deficitReporte, deficitPerdu, stockFin,
-            revenuFoncierImposable, revenuSalarial,
+            revenuFoncierImposable, revenuSalarial, csgDeductibleImputee,
             irNet: impot.irNet, psFoncier: impot.psFoncier, impotTotal: impot.total, impotSalairesSeuls,
         });
     }
@@ -3223,7 +3454,7 @@ export function computeOptimisationTravaux(assets, profileData, options = {}) {
 //     + IS de la société (les loyers ne passent plus par l'IR du foyer).
 // Limites (affichées en UI) : frais de structure de la SCI, coût de transfert des biens existants,
 // fiscalité des dividendes et de sortie non modélisés ; on compare l'impôt, pas le cash-flow.
-const PLAFOND_MICRO_FONCIER = 15000;
+// PLAFOND_MICRO_FONCIER : voir le moteur fiscal annuel, en tête de fichier.
 const REGIMES_ORDRE = ['micro-foncier', 'reel', 'sci-is'];
 
 export function computeProjectionRegimesFoyer(assets, profileData, options = {}) {
@@ -3236,23 +3467,19 @@ export function computeProjectionRegimesFoyer(assets, profileData, options = {})
     const simMap = simulesParAnnee(normaliserTravauxSimules(options.travauxSimules, anneeDebut), anneeDebut, anneeFin);
     const reelRows = rejouerFoncierReel(ctx, { travauxFutursSaisis: true, simules: simMap });
 
-    // Amortissement de l'immeuble par année civile, tous biens confondus.
+    // Amortissement de l'immeuble par année civile, tous biens confondus : même dotation que le
+    // cash-flow d'un bien (amortissementSciIsBienAnnee, frais d'acquisition compris).
     const amortParAnnee = new Map();
     for (const asset of ctx.list) {
-        const base = (asset.acquisition?.prix || 0) * 0.80;
-        const annuel = base / 30;
-        const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
-        let restant = base;
-        for (let y = anneeAchat; y <= anneeFin && restant > 0.005; y++) {
-            const mois = y === anneeAchat ? 13 - moisAchat : 12;
-            const a = Math.min(restant, annuel * mois / 12);
-            amortParAnnee.set(y, (amortParAnnee.get(y) || 0) + a);
-            restant -= a;
+        const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
+        for (let y = anneeAchat; y <= anneeFin; y++) {
+            amortParAnnee.set(y, (amortParAnnee.get(y) || 0) + amortissementSciIsBienAnnee(asset, y));
         }
     }
 
     const years = [];
     let reportIS = 0;
+    let csgMicro = 0; // CSG déductible du micro-foncier, imputée l'année suivante
     for (const r of reelRows) {
         const amortissement = amortParAnnee.get(r.annee) || 0;
         // Charges réelles seulement : le forfait de 20 €/local (case 222) est propre aux revenus
@@ -3263,14 +3490,16 @@ export function computeProjectionRegimesFoyer(assets, profileData, options = {})
             const absorbe = Math.min(reportIS, resultat);
             reportIS -= absorbe;
             const assiette = resultat - absorbe;
-            is = Math.min(assiette, 42500) * 0.15 + Math.max(0, assiette - 42500) * 0.25;
+            is = impotSocieteIS(assiette);
         } else {
             reportIS += -resultat;
         }
+        const microImposable = r.loyers * 0.7;
+        const csgMicroImputee = csgMicro;
+        csgMicro = microImposable * CSG_DEDUCTIBLE_RATE;
         if (r.annee < anneeDebut) continue;
 
-        const microImposable = r.loyers * 0.7;
-        const microImpot = computeImpotFoyer(r.revenuSalarial, microImposable, ctx.foyer).total;
+        const microImpot = computeImpotFoyer(r.revenuSalarial - csgMicroImputee, microImposable, ctx.foyer).total;
         years.push({
             annee: r.annee,
             revenuSalarial: Math.round(r.revenuSalarial),

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
     computeDeclaration2044, computeCompteResultat, computeOwnedAssetTimeline, computeOwnedAssetCF,
-    estFraisDeductible, NATURES_FRAIS_DEDUCTIBLES, resolveTmiFoyer,
+    estFraisDeductible, NATURES_FRAIS_DEDUCTIBLES, impotRevenuDifferentiel, CSG_DEDUCTIBLE_RATE,
 } from '../calculs.js';
 
 // B9 (bilan 2026-10-12) : deux natures de frais en plus de « déductible » (travaux, case 224) —
@@ -78,12 +78,13 @@ const frais = (tag, montant, mois = '03', an = annee) => ({ id: `${tag}-${montan
     assert.equal(d.deficit.reportFoncier10ans, l.case250 - 8400, "part non couverte de la case 250 (frais d'emprunt compris) : reportable");
     assert.equal(d.deficit.imputableRevenuGlobal, 1431, 'autres charges : imputables sur le revenu global');
 
-    // Compte de résultat (réel) : l'économie d'impôt estimée ne porte que sur la part imputable
-    // (1 431 € : depuis le chantier CF unique, l'impôt du compte de résultat est celui de la 2044,
-    // forfait de 20 € compris — il était de 1 411 € avant).
+    // Compte de résultat (réel) : l'économie d'impôt ne porte que sur la part imputable (1 431 €,
+    // forfait de 20 € compris), plus la CSG déductible née du bénéfice de l'année précédente. Elle se
+    // mesure par différence de deux impôts complets du foyer (barème, décote), pas en 1 431 × TMI.
     const cr = computeCompteResultat(asset, annee, profileData, 'reel');
-    const tmi = resolveTmiFoyer(profileData, annee);
-    assert.ok(Math.abs(cr.impots + 1431 * tmi / 100) <= 1, `impôt du compte de résultat = −1 431 × TMI (${cr.impots})`);
+    const basePrecedente = computeOwnedAssetTimeline(asset, profileData, 'reel').years.find(y => y.year === annee - 1).baseImposable;
+    const attendu = impotRevenuDifferentiel({ revenus: 60000, adults: 2, children: 0 }, -(1431 + basePrecedente * CSG_DEDUCTIBLE_RATE));
+    assert.ok(Math.abs(cr.impots - attendu) <= 1, `impôt du compte de résultat = économie au barème sur 1 431 € + CSG déductible (${cr.impots} vs ${Math.round(attendu)})`);
 
     // Intérêts + frais d'emprunt couverts par les loyers : tout le déficit (sous 10 700 €) est imputable.
     const couvert = computeDeclaration2044([makeAsset([frais('deductible', 8000), frais('frais-emprunt', 2000)])], annee, profileData).deficit;

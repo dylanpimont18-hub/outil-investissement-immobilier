@@ -93,10 +93,15 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     // strictement meilleur (moins de mensualités payées cette année-là) que le scénario janvier.
     assert.ok(cf2024Juin > cf2024Janvier, `CF 2024 démarré en juin (${Math.round(cf2024Juin)}€) doit être meilleur que démarré en janvier (${Math.round(cf2024Janvier)}€) — moins de mensualités payées`);
 
-    // Mais l'année suivante (2025), les deux ont 12 mois pleins de crédit : le CF doit être identique.
-    const cf2025Janvier = yearsJanvier.find(y => y.year === 2025).cfAnnuel;
-    const cf2025Juin = yearsJuin.find(y => y.year === 2025).cfAnnuel;
-    assert.ok(Math.abs(cf2025Janvier - cf2025Juin) < 1, `2025 (année pleine dans les deux cas) doit donner le même CF, trouvé ${cf2025Janvier} vs ${cf2025Juin}`);
+    // Mais l'année suivante (2025), les deux ont 12 mois pleins de crédit : le CF AVANT IMPÔT doit être
+    // identique. L'impôt, lui, diffère légitimement : la CSG déductible imputée en 2025 naît du revenu
+    // foncier de 2024, plus élevé pour un achat en janvier (12 mois de loyers contre 7).
+    const y2025Janvier = yearsJanvier.find(y => y.year === 2025);
+    const y2025Juin = yearsJuin.find(y => y.year === 2025);
+    const cf2025Janvier = y2025Janvier.cfAnnuel + y2025Janvier.impotsAnnee;
+    const cf2025Juin = y2025Juin.cfAnnuel + y2025Juin.impotsAnnee;
+    assert.ok(Math.abs(cf2025Janvier - cf2025Juin) < 1, `2025 (année pleine dans les deux cas) doit donner le même CF avant impôt, trouvé ${cf2025Janvier} vs ${cf2025Juin}`);
+    assert.ok(y2025Janvier.impotsAnnee < y2025Juin.impotsAnnee, 'plus de CSG déductible reportée de 2024 pour un achat en janvier : impôt 2025 plus bas');
     console.log('Test 4 OK — CF 2024 (achat en juin) =', Math.round(cf2024Juin), '€ > CF 2024 (achat en janvier) =', Math.round(cf2024Janvier), '€ ; 2025 identique dans les deux cas');
 }
 

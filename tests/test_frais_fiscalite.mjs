@@ -46,7 +46,11 @@ const profileData = { income: 60000, adults: 1, children: 0 }; // TMI=30% (sans 
     // Les années suivantes (2027+, pas de nouveaux travaux) doivent redevenir identiques
     const row2027Sans = yearsSans.find(y => y.year === 2027);
     const row2027Avec = yearsAvec.find(y => y.year === 2027);
-    assert.equal(row2027Avec.cfAnnuel, row2027Sans.cfAnnuel, "l'année suivante (sans nouveau frais) ne doit plus être affectée");
+    // Seul effet résiduel en 2027 : la CSG déductible reportée de 2026 (6,8 % de la base imposable de
+    // 2026), plus faible de 8 000 × 6,8 % avec les travaux — soit 163 € d'IR à 30 %.
+    assert.equal(row2027Avec.cfAnnuel + row2027Avec.impotsAnnee, row2027Sans.cfAnnuel + row2027Sans.impotsAnnee, "l'année suivante, le CF avant impôt ne doit plus être affecté");
+    const ecartImpot2027 = row2027Avec.impotsAnnee - row2027Sans.impotsAnnee;
+    assert.ok(Math.abs(ecartImpot2027 - 8000 * 0.068 * 0.30) < 1, `impôt 2027 : seul l'effet de la CSG déductible (${ecartImpot2027})`);
 
     console.log('Test 1 OK — travaux déductibles réduisent le CF 2026 de', ecartBrut, '€ (< 8000€ brut, déduction fiscale active)');
 }
