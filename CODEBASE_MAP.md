@@ -291,6 +291,7 @@ Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
 Impression groupée des factures (2026-10-22) — module **pur** (aucun DOM ni réseau, testé par `tests/test_factures_pdf.mjs`), importé par `owned-portfolio.js`. pdf-lib est injecté (`PDFLib`) et les octets des justificatifs viennent du rappel `chargerJustificatif(item)`.
 - `anneesDisponibles(assets, assetId)` — années des frais, décroissant
 - `selectionnerFrais(assets, {assetId, annee, nature})` — filtre bien/année/nature, tri chronologique
+- `raisonEchecChargement(err)` (interne, 2026-10-23) — cause lisible + code d'un justificatif non chargé (absent du stockage, accès refusé, `http_N`, téléchargement bloqué, PDF illisible), affichée sur la page d'avertissement ; l'erreur est aussi passée à `console.warn`
 - `buildRecapFactures(items, {libellesNatures})` — totaux, déductible, par nature/bien
 - `genererPdfFactures({PDFLib, items, entete, libellesNatures, chargerJustificatif, onProgress})` — PDF unique : récapitulatif (Helvetica, colonne « Justificatif » = page de départ de chaque facture, calculée par une mise en page à blanc `dryRun`) puis justificatifs dans le même ordre (PDF copiés page à page avec étiquette « Facture n / N », photos sur une page A4 avec légende, fichier illisible → page d'avertissement, nombre de pages annoncé conservé) ; retourne `{ bytes, echecs, pages, pagesRecap }`
 - `detecterTypeFichier(bytes)` — pdf/png/jpg d'après les octets
