@@ -7,6 +7,9 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+- Impression des factures : les justificatifs n'étaient jamais intégrés au PDF en production (« Load failed » sur iPhone) : le bucket Firebase Storage n'avait aucune règle CORS, le navigateur bloquait leur lecture. Règle ajoutée (lecture GET seule, origines de l'app), conservée dans `scripts/storage-cors.json`.
+
 ### Changed
 - Impression des factures : quand une facture ne peut pas être récupérée, sa page d'avertissement donne la vraie cause et son code (fichier absent du stockage, accès refusé, téléchargement bloqué, PDF illisible) au lieu de « introuvable ou illisible », et l'erreur est écrite dans la console.
 

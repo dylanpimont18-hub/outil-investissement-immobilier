@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "https://spark-investissement.web.app",
+      "https://spark-investissement.firebaseapp.com",
+      "http://127.0.0.1:8090"
+    ],
+    "method": ["GET"],
+    "responseHeader": ["Content-Type", "Content-Length"],
+    "maxAgeSeconds": 3600
+  }
+]

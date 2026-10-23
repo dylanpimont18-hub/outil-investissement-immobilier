@@ -476,6 +476,9 @@ Lance en séquence tous les `tests/*.mjs` (Node), s'arrête au premier échec (e
 
 ---
 
+## scripts/storage-cors.json
+Règle CORS du bucket Storage `spark-investissement.firebasestorage.app` (2026-10-23) : GET seul depuis web.app, firebaseapp.com et 127.0.0.1:8090. **Indispensable** à tout `fetch()` d'un fichier Storage (impression des factures) ; sans elle le navigateur bloque la lecture (« Load failed » / « Failed to fetch »), alors que l'aperçu `<embed>`/`<img>` marche. Firebase CLI ne la gère pas : appliquée par l'API JSON de Cloud Storage (PATCH du bucket, champ `cors`) ou `gcloud storage buckets update gs://spark-investissement.firebasestorage.app --cors-file=scripts/storage-cors.json`.
+
 ## scripts/serve-static.mjs
 Serveur statique de développement sans dépendance, lié à 127.0.0.1 (jamais 8080). Sert l'app et les tests Playwright avec MIME explicites et les mêmes réécritures que `firebase.json` (`/` → `index.html`, `/portefeuille` → `owned.html`). Point d'entrée de `npm run serve`.
 - `[port]` (argument 1) — port d'écoute, défaut 8090 (ou variable `PORT`)
