@@ -314,6 +314,20 @@ function pageIndisponible(PDFLib, doc, fonts, legende, raison) {
     page.drawText(texteSur(fonts.regular, raison), { x: MARGE, y: H - 80, size: 10, font: fonts.regular, color: rgb(...GRIS) });
 }
 
+// Cause lisible d'un justificatif non chargé, avec le code technique (sinon impossible de distinguer
+// un fichier absent du stockage, un accès refusé, un téléchargement bloqué ou un PDF corrompu).
+function raisonEchecChargement(err) {
+    const code = err?.code || err?.message || String(err);
+    let cause;
+    if (code === 'storage/object-not-found') cause = 'Fichier absent du stockage.';
+    else if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') cause = 'Accès au fichier refusé (reconnectez-vous).';
+    else if (/^http_\d+/.test(code)) cause = `Le serveur a refusé le téléchargement (${code.slice(5)}).`;
+    else if (err?.name === 'TypeError') cause = 'Téléchargement bloqué (connexion ou sécurité du navigateur).';
+    else if (/pdf|parse|header|xref|trailer/i.test(code)) cause = 'PDF illisible.';
+    else cause = 'Fichier illisible.';
+    return `${cause} Code : ${code}. Ouvrez-le depuis l'application.`;
+}
+
 // Assemble le PDF. `chargerJustificatif(item)` → Promise<Uint8Array|ArrayBuffer>. `onProgress(n, N)`
 // suit le téléchargement des justificatifs. Retourne { bytes, echecs: [{ numero, raison }] }.
 export async function genererPdfFactures({ PDFLib, items, entete = [], libellesNatures = LIBELLES_NATURES_DEFAUT, chargerJustificatif, onProgress = () => {}, concurrence = 3 }) {
@@ -343,7 +357,8 @@ export async function genererPdfFactures({ PDFLib, items, entete = [], libellesN
                     sources[i] = { type: 'erreur', raison: 'Format de fichier non reconnu.', pages: 1 };
                 }
             } catch (err) {
-                sources[i] = { type: 'erreur', raison: 'Fichier introuvable ou illisible : ouvrez-le depuis l\'application.', pages: 1 };
+                console.warn('[factures-pdf] justificatif non chargé', item.travail.pdfFilename, err);
+                sources[i] = { type: 'erreur', raison: raisonEchecChargement(err), pages: 1 };
             }
             onProgress(++faits, aCharger.length);
         }

@@ -105,6 +105,26 @@ await test('justificatif introuvable : page d\'avertissement, nombre de pages co
     assert.equal(res.echecs[0].numero, 2);
 });
 
+await test('échec de téléchargement : la page d\'avertissement donne la vraie cause et son code', async () => {
+    const items = selectionnerFrais(ASSETS, { annee: 2026 }).filter(i => i.travail.pdfFilename);
+    const erreurs = [
+        Object.assign(new Error('Firebase Storage: Object does not exist.'), { code: 'storage/object-not-found' }),
+        Object.assign(new Error('Firebase Storage: User does not have permission.'), { code: 'storage/unauthorized' }),
+        new TypeError('Failed to fetch'),
+        new Error('http_403'),
+    ];
+    for (const err of erreurs) {
+        const res = await genererPdfFactures({ PDFLib, items: items.slice(0, 1), chargerJustificatif: async () => { throw err; } });
+        assert.equal(res.echecs.length, 1);
+        const code = err.code || err.message;
+        assert.ok(res.echecs[0].raison.includes(code), `code « ${code} » dans « ${res.echecs[0].raison} »`);
+    }
+    const r = await genererPdfFactures({ PDFLib, items: items.slice(0, 1), chargerJustificatif: async () => { throw erreurs[0]; } });
+    assert.match(r.echecs[0].raison, /absent du stockage/);
+    const pdf = await genererPdfFactures({ PDFLib, items: items.slice(0, 1), chargerJustificatif: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]) });
+    assert.match(pdf.echecs[0].raison, /PDF illisible/);
+});
+
 await test('récapitulatif sur plusieurs pages (beaucoup de frais, caractères hors Helvetica)', async () => {
     const travaux = Array.from({ length: 120 }, (_, i) => ({ id: 'x' + i, date: '2026-05-01', description: `Frais n°${i} ✓ 🔧 avec une description très longue qui doit être tronquée proprement dans la colonne`, montant: 10 + i, tag: 'deductible', pdfFilename: null }));
     const items = selectionnerFrais([{ id: 'b', nom: 'Bien spécial', postAchat: { travaux } }]);

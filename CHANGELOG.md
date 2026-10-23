@@ -7,6 +7,9 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+- Impression des factures : quand une facture ne peut pas être récupérée, sa page d'avertissement donne la vraie cause et son code (fichier absent du stockage, accès refusé, téléchargement bloqué, PDF illisible) au lieu de « introuvable ou illisible », et l'erreur est écrite dans la console.
+
 ## [1.0.27] - 2026-10-23
 
 ### Fixed
