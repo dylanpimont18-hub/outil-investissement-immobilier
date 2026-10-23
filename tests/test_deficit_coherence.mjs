@@ -145,7 +145,7 @@ function attendre(r, { total, imputable, reportable }, nom) {
 // Cas du reviewer : loyers 6 000, taxe foncière 10 000, case 250 = 2 720, TMI 30 %. 2044 : intérêts
 // couverts par les loyers → déficit 10 000 + 20 + 2 720 − 6 000 = 6 740 entièrement imputable.
 // L'ancien computeAnnualTaxEstimate n'imputait que 10 000 − 6 000 = 4 000 et reportait 2 720 en silence.
-// La timeline ne déduit pas le forfait de 20 € de la 2044 (comme le compte de résultat) : 6 720.
+// Depuis le chantier CF unique (étape 3), la timeline lit les cases de la 2044 : 6 740, forfait 20 € compris.
 {
     const annee = currentYear - 1;
     const profil = { income: 60000, adults: 1, children: 0 };
@@ -164,7 +164,7 @@ function attendre(r, { total, imputable, reportable }, nom) {
     assert.deepEqual([decl.deficit.imputableRevenuGlobal, decl.deficit.reportFoncier10ans], [6740, 0]);
     const row = computeOwnedAssetTimeline(avecFrais, profil, 'reel').years.find(r => r.year === annee);
     const imputeTimeline = -row.impotsAnnee / (tmi / 100);
-    assert.ok(Math.abs(imputeTimeline - (decl.deficit.imputableRevenuGlobal - 20)) < 0.01,
+    assert.ok(Math.abs(imputeTimeline - decl.deficit.imputableRevenuGlobal) < 0.01,
         `timeline : ${imputeTimeline} € imputés, 2044 : ${decl.deficit.imputableRevenuGlobal} € (forfait 20 € compris)`);
 
     // Même chose avec de vrais intérêts d'emprunt (crédit) : intérêts + assurance < loyers.
@@ -174,8 +174,8 @@ function attendre(r, { total, imputable, reportable }, nom) {
     const d2 = computeDeclaration2044([avecCredit], annee, profil);
     const r2 = computeOwnedAssetTimeline(avecCredit, profil, 'reel').years.find(r => r.year === annee);
     assert.equal(d2.deficit.reportFoncier10ans, 0, 'case 250 couverte par les loyers : rien de reporté');
-    assert.ok(Math.abs(-r2.impotsAnnee / (tmi / 100) - (d2.deficit.imputableRevenuGlobal - 20)) <= 2,
-        `timeline ${-r2.impotsAnnee / (tmi / 100)} vs 2044 ${d2.deficit.imputableRevenuGlobal} − 20 (arrondis par case)`);
+    assert.ok(Math.abs(-r2.impotsAnnee / (tmi / 100) - d2.deficit.imputableRevenuGlobal) <= 2,
+        `timeline ${-r2.impotsAnnee / (tmi / 100)} vs 2044 ${d2.deficit.imputableRevenuGlobal} (arrondis par case)`);
     console.log(`Test 6 OK — timeline : ${Math.round(imputeTimeline)} € imputés = 2044 ${decl.deficit.imputableRevenuGlobal} € − forfait 20 €`);
 }
 

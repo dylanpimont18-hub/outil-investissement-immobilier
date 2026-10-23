@@ -19,7 +19,7 @@ import {
     computeDeclaration2044, parseDateAchat, computeDeficitFoncierHistorique,
     computeRevenuFoncierPortefeuille, computeImpotFoyer, resolveRevenuFoyer, resolveTmiFoyer,
     ratioRemboursement, computeProjectionImpotsFoyer, computeOptimisationTravaux, computeProjectionRegimesFoyer,
-    resolveScenarioCourant, estFraisDeductible
+    resolveScenarioCourant, estFraisDeductible, computeCFBreakdownReference, libellePeriodeCF, periodeCFReference
 } from './calculs.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
@@ -2196,7 +2196,7 @@ function renderOwnedDashboard(list, profileData, regime) {
     }, 0);
     const totalCF = list.reduce((s, a) => {
         const sc = getOwnedDefaultScenario(a);
-        return s + computeOwnedAssetCF(a, { ...sc.variables, regime }, tmi).cfNetNet;
+        return s + computeOwnedAssetCF(a, { ...sc.variables, regime }, tmi, null, profileData).cfNetNet;
     }, 0);
     const cfTone = totalCF >= 0 ? 'positive' : 'negative';
     const endettTone = endettement.tauxEndettement > 35 ? 'negative' : endettement.tauxEndettement > 30 ? 'watch' : 'positive';
@@ -2230,7 +2230,7 @@ function renderOwnedDashboard(list, profileData, regime) {
                 <span class="owned-dashboard-kpi__value">${totalPatNet !== 0 ? totalPatNet.toLocaleString('fr-FR') + ' €' : '—'}</span>
             </div>
             <div class="owned-dashboard-kpi">
-                <span class="owned-dashboard-kpi__label">CF net-net / mois</span>
+                <span class="owned-dashboard-kpi__label" title="${escapeHtml(libellePeriodeCF(periodeCFReference()))}, hors frais ponctuels">CF net-net / mois · 12 prochains mois</span>
                 <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--${cfTone}">${totalCF >= 0 ? '+' : ''}${Math.round(totalCF).toLocaleString('fr-FR')} €</span>
             </div>
             <div class="owned-dashboard-kpi">
@@ -2677,7 +2677,7 @@ export function buildPortfolioSummaryForAI() {
 
     const biens = list.map(asset => {
         const sc = getOwnedDefaultScenario(asset);
-        const cf = computeOwnedAssetCF(asset, { ...sc.variables, regime }, tmi);
+        const cf = computeOwnedAssetCF(asset, { ...sc.variables, regime }, tmi, null, profileData);
         const pn = computePatrimoineNet(asset);
         return {
             id: asset.id,
@@ -2688,6 +2688,7 @@ export function buildPortfolioSummaryForAI() {
             loyerMensuel: asset.acquisition?.loyerInitial || 0,
             credit: asset.acquisition?.credit,
             cfNetNetMensuel: Math.round(cf.cfNetNet),
+            cfPeriode: libellePeriodeCF(cf.periode) + ', hors frais ponctuels',
             patrimoineNet: Math.round(pn.patrimoineNet || 0),
             crd: Math.round(pn.crd || 0)
         };
@@ -2782,7 +2783,7 @@ function renderOwnedMap(list = null) {
 
     for (const asset of located) {
         const sc = getOwnedDefaultScenario(asset);
-        const cf = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+        const cf = computeOwnedAssetCF(asset, sc.variables, tmi, regime, state.profileData);
         const positif = cf.cfNetNet >= 0;
         const marker = L.circleMarker([asset.lat, asset.lng], {
             radius: 10,
@@ -2792,7 +2793,7 @@ function renderOwnedMap(list = null) {
             weight: 2,
         });
 
-        const cfLabel = `${positif ? '+' : ''}${Math.round(cf.cfNetNet).toLocaleString('fr-FR')} €/mois`;
+        const cfLabel = `${positif ? '+' : ''}${Math.round(cf.cfNetNet).toLocaleString('fr-FR')} €/mois (12 prochains mois)`;
         marker.bindPopup(`
             <div class="owned-map-popup">
                 <div class="owned-map-popup__title">${escapeHtml(asset.nom || 'Sans nom')}</div>
@@ -2838,7 +2839,7 @@ function renderOwnedPortfolioList() {
         } else {
             const results = list.map(a => {
                 const sc = getOwnedDefaultScenario(a);
-                return computeOwnedAssetCF(a, sc.variables, tmi, regime);
+                return computeOwnedAssetCF(a, sc.variables, tmi, regime, state.profileData);
             });
             const totalCF = results.reduce((s, r) => s + r.cfNetNet, 0);
             const totalInvest = list.reduce((s, a) =>
@@ -2852,7 +2853,7 @@ function renderOwnedPortfolioList() {
             const cfTone = totalCF >= 0 ? 'positive' : 'negative';
             nodes.ownedKpiBanner.innerHTML = `
                 <div class="owned-kpi-card">
-                    <span class="owned-kpi-card__label">CF net-net / mois</span>
+                    <span class="owned-kpi-card__label" title="${escapeHtml(libellePeriodeCF(periodeCFReference()))}, hors frais ponctuels">CF net-net / mois · 12 prochains mois</span>
                     <span class="owned-kpi-card__value owned-kpi-card__value--${cfTone}">
                         ${totalCF >= 0 ? '+' : ''}${Math.round(totalCF).toLocaleString('fr-FR')} €
                     </span>
@@ -2895,13 +2896,14 @@ function renderOwnedPortfolioList() {
                 openOwnedAddModal();
             });
         } else {
-            const yr = state.ownedYearFilter || 1;
-            const YEAR_OPTIONS = [1, 3, 5, 10];
+            // 'actuel' (défaut) = CF de référence, 12 prochains mois (chantier CF unique) ; An N = projection.
+            const yr = state.ownedYearFilter ?? 'actuel';
+            const YEAR_OPTIONS = ['actuel', 1, 3, 5, 10];
             const yearSelectorHtml = `
                 <div class="owned-year-selector">
                     <span class="owned-year-selector__label">Métriques en</span>
                     <div class="owned-year-selector__btns">
-                        ${YEAR_OPTIONS.map(y => `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-year="${y}">An ${y}</button>`).join('')}
+                        ${YEAR_OPTIONS.map(y => `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-year="${y}"${y === 'actuel' ? ' title="CF de référence : moyenne des 12 prochains mois, hors frais ponctuels"' : ''}>${y === 'actuel' ? '12 mois' : `An ${y}`}</button>`).join('')}
                     </div>
                 </div>`;
 
@@ -2920,6 +2922,13 @@ function renderOwnedPortfolioList() {
 
             // Métriques pré-calculées pour chaque bien (affichage + tri)
             const rowData = list.map(asset => {
+                const investissementTotal = (asset.acquisition?.prix || 0) + (asset.acquisition?.fraisAgence || 0) + (asset.acquisition?.fraisNotaire || 0);
+                if (yr === 'actuel') {
+                    // CF de référence : mêmes chiffres que le dashboard, la carte, la fiche et le rapport.
+                    const r = computeOwnedAssetCF(asset, getOwnedDefaultScenario(asset).variables, tmi, regime, state.profileData);
+                    const rentaNette = investissementTotal > 0 ? ((r.loyerEffectif - r.chargesExploitationMensuelles) * 12 / investissementTotal) * 100 : 0;
+                    return { asset, cfMens: r.cfNetNet, dscr: r.dscr, rentaNette, cfAnnuel: r.cfNetNet * 12, targetAbsYear: r.periode.debut.annee };
+                }
                 const { years: timeline } = computeOwnedAssetTimeline(asset, state.profileData, regime);
                 const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
                 const targetAbsYear = anneeAchat + yr - 1;
@@ -2934,7 +2943,6 @@ function renderOwnedPortfolioList() {
                 // temporelles différentes affichées côte à côte sur la même ligne (bug remonté par
                 // l'utilisateur, 2026-08-03).
                 const bd = computeCFBreakdown(asset, state.profileData, regime, yr);
-                const investissementTotal = (asset.acquisition?.prix || 0) + (asset.acquisition?.fraisAgence || 0) + (asset.acquisition?.fraisNotaire || 0);
                 const noiAnnuel = bd ? (bd.loyersEncaisses - bd.charges) : 0;
                 const rentaNette = investissementTotal > 0 ? (noiAnnuel / investissementTotal) * 100 : 0;
                 const dscr = bd && bd.mensualiteCredit > 0 ? noiAnnuel / bd.mensualiteCredit : 0;
@@ -2948,6 +2956,7 @@ function renderOwnedPortfolioList() {
             }
 
             const sortArrow = key => sort?.criterion === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+            const basePeriodeListe = yr === 'actuel' ? '12 mois' : `An ${yr}`;
             const sortHeaderAttr = (key, tooltip) => `data-sort-header="${key}" role="button" tabindex="0" title="${tooltip ? tooltip + ' ' : ''}Trier par ${SORT_LABELS[key]}"`;
 
             nodes.ownedListTable.innerHTML = yearSelectorHtml + sortSelectorHtml + `
@@ -2957,7 +2966,7 @@ function renderOwnedPortfolioList() {
                             <th class="owned-col-drag"></th>
                             <th></th>
                             <th>Bien</th>
-                            <th style="text-align:right" class="owned-col-sortable" ${sortHeaderAttr('cf')}>CF net/mois${sortArrow('cf')}</th>
+                            <th style="text-align:right" class="owned-col-sortable" ${sortHeaderAttr('cf')}>CF net-net/mois <span class="owned-col-periode">(${basePeriodeListe})</span>${sortArrow('cf')}</th>
                             <th style="text-align:right" class="owned-col-hideable owned-col-sortable" ${sortHeaderAttr('rendement')}>Rendement net${sortArrow('rendement')}</th>
                             <th style="text-align:right" class="owned-col-hideable owned-col-sortable" ${sortHeaderAttr('dscr', 'DSCR : capacité de remboursement par le loyer (loyers ÷ mensualité crédit). Au-dessus de 1, le loyer couvre le crédit.')}>DSCR${sortArrow('dscr')}</th>
                             <th>Statut</th>
@@ -3030,7 +3039,7 @@ function renderOwnedPortfolioList() {
     <td colspan="8">
         <div class="owned-expanded-content">
             <div class="owned-expanded-metric">
-                <span class="owned-expanded-label">CF net/mois</span>
+                <span class="owned-expanded-label">CF net-net/mois (${basePeriodeListe})</span>
                 <span class="owned-expanded-value owned-expanded-value--${cfTone}">${cfMens >= 0 ? '+' : ''}${Math.round(cfMens).toLocaleString('fr-FR')} €</span>
             </div>
             <div class="owned-expanded-metric">
@@ -3062,7 +3071,7 @@ function renderOwnedPortfolioList() {
             // Year selector events
             nodes.ownedListTable.querySelectorAll('.owned-year-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    state.ownedYearFilter = Number(btn.dataset.year);
+                    state.ownedYearFilter = parseOwnedYear(btn.dataset.year);
                     renderOwnedPortfolioList();
                 });
             });
@@ -3241,7 +3250,7 @@ function _renderOwnedListMobile(list) {
         <div class="owned-mobile-list">
             ${list.map(asset => {
                 const sc = getOwnedDefaultScenario(asset);
-                const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+                const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime, state.profileData);
                 const cfMens = r.cfNetNet;
                 const cfTone = cfMens >= 0 ? 'positive' : 'negative';
                 const cfSign = cfMens >= 0 ? '+' : '−';
@@ -3276,7 +3285,7 @@ function renderOwnedCfConsolidatedSection(list, tmi, regime) {
 function renderOwnedRepartitionBarHTML(list, tmi, regime) {
     const cfs = list.map(asset => {
         const sc = getOwnedDefaultScenario(asset);
-        const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+        const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime, state.profileData);
         return { name: asset.nom, cf: r.cfNetNet };
     });
     const totalAbs = cfs.reduce((s, c) => s + Math.abs(c.cf), 0);
@@ -3623,16 +3632,23 @@ function renderOwnedVerdictBlock(asset) {
 
     const regime = getOwnedRegime();
     const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
-    const defaultYrVerdict = Math.max(1, new Date().getFullYear() - anneeAchat + 1);
-    const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYrVerdict;
-    const YEAR_OPTIONS = [1, 3, 5, 10];
+    // Défaut 'actuel' = CF de référence (12 prochains mois, chantier CF unique), le même chiffre que
+    // la liste et le dashboard ; avant, l'année civile en cours ÷ 12 (diluée l'année d'achat).
+    const yr = (state.ownedYearFilters?.[asset.id]) ?? 'actuel';
+    const YEAR_OPTIONS = ['actuel', 1, 3, 5, 10];
 
-    // Métriques selon l'année sélectionnée
-    const { years: timeline } = computeOwnedAssetTimeline(asset, state.profileData, regime);
-    const targetAbsYear = anneeAchat + yr - 1;
-    const yearRow = timeline.find(y => y.year === targetAbsYear) || timeline[timeline.length - 1];
-    const cfAnnuel = yearRow ? yearRow.cfAnnuel : 0;
-    const cfNetNet = Math.round(cfAnnuel / 12);
+    let cfNetNet, basePeriode;
+    if (yr === 'actuel') {
+        const r = computeOwnedAssetCF(asset, getOwnedDefaultScenario(asset).variables, getOwnedTmi(), regime, state.profileData);
+        cfNetNet = Math.round(r.cfNetNet);
+        basePeriode = libellePeriodeCF(r.periode);
+    } else {
+        const { years: timeline } = computeOwnedAssetTimeline(asset, state.profileData, regime);
+        const targetAbsYear = anneeAchat + yr - 1;
+        const yearRow = timeline.find(y => y.year === targetAbsYear) || timeline[timeline.length - 1];
+        cfNetNet = Math.round((yearRow ? yearRow.cfAnnuel : 0) / 12);
+        basePeriode = libelleAnneeCF(asset, yr);
+    }
 
     const effort = Math.max(0, -cfNetNet);
 
@@ -3644,18 +3660,18 @@ function renderOwnedVerdictBlock(asset) {
         <div class="owned-year-selector" style="margin-bottom:8px">
             <span class="owned-year-selector__label">Vue</span>
             <div class="owned-year-selector__btns">
-                ${YEAR_OPTIONS.map(y => { const absYear = anneeAchat + y - 1; return `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-verdict-year="${y}">An ${y} <span style="font-size:.65em;opacity:.6">${absYear}</span></button>`; }).join('')}
+                ${YEAR_OPTIONS.map(y => ownedYearButtonHTML(y, yr, anneeAchat, 'data-verdict-year')).join('')}
             </div>
         </div>`;
 
     el.innerHTML = yearSelectorHtml + `
         <div class="owned-verdict__grid">
             <div class="owned-verdict__metric">
-                <span class="owned-verdict__label">CF net / mois (an ${yr})</span>
+                <span class="owned-verdict__label">CF net-net / mois · ${escapeHtml(basePeriode)}</span>
                 <span class="owned-verdict__value owned-verdict__value--${cfTone}">${cfSign}${cfNetNet.toLocaleString('fr-FR')} €</span>
             </div>
             <div class="owned-verdict__metric">
-                <span class="owned-verdict__label">Effort épargne (an ${yr})</span>
+                <span class="owned-verdict__label">Effort d'épargne / mois</span>
                 <span class="owned-verdict__value owned-verdict__value--${effortTone}">${effort.toLocaleString('fr-FR')} €/mois</span>
             </div>
         </div>
@@ -3663,7 +3679,7 @@ function renderOwnedVerdictBlock(asset) {
 
     el.querySelectorAll('[data-verdict-year]').forEach(btn => {
         btn.addEventListener('click', () => {
-            state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: Number(btn.dataset.verdictYear) };
+            state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: parseOwnedYear(btn.dataset.verdictYear) };
             savePref({ ownedYearFilters: state.ownedYearFilters }).catch(() => {});
             renderOwnedVerdictBlock(asset);
             const freshPost = getOwnedAsset(asset.id);
@@ -5305,7 +5321,7 @@ function renderOwnedSynthese(asset) {
 
     const tmi = getOwnedTmi();
     const currentRegime = getOwnedRegime();
-    const optRegime = getOptimalRegime(asset, tmi);
+    const optRegime = getOptimalRegime(asset, tmi, state.profileData);
     const optGain = optRegime.optimal ? (optRegime.optimalCF || 0) - (optRegime.allCFs[currentRegime] || 0) : 0;
     const REGIME_LABELS_SHORT = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier réel', 'sci-is': 'SCI-IS' };
     const hasOptAlert = optRegime.optimal && optRegime.optimal !== currentRegime && optGain > 20;
@@ -5349,13 +5365,13 @@ function renderOwnedCalculTab(asset) {
     const apport = Math.max(0, investTotal - montant);
 
     // Métriques scénario courant — régime global
-    const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime);
+    const r = computeOwnedAssetCF(asset, sc.variables, tmi, regime, state.profileData);
     // Mensualité = échéance du mois civil courant (même source que le CF, la liste et le rapport du
     // bien) : avant, l'assurance de l'année civile ÷ 12 était diluée l'année d'achat (bilan B3,
     // 470 € ici contre 492 € dans le rapport). Crédit soldé ou pas encore démarré : 0 €.
     const assuranceMens = r.assuranceMensuelle;
     const mensualiteTotale = r.mensualiteTotale;
-    const echeanceLabel = `${String(r.echeance.mois).padStart(2, '0')}/${r.echeance.annee}`;
+    const periodeCF = libellePeriodeCF(r.periode);
     const cfAvantTone = r.cfNet >= 0 ? 'positive' : 'negative';
     const cfApresTone = r.cfNetNet >= 0 ? 'positive' : 'negative';
     const dscrTone = r.dscr > 0 && r.dscr < 1 ? 'negative' : r.dscr >= 1.1 ? 'positive' : '';
@@ -5368,7 +5384,7 @@ function renderOwnedCalculTab(asset) {
     ];
     const currentRegime = regime;
     const defisca = REGIMES.map(({ key, label }) => {
-        const rd = computeOwnedAssetCF(asset, { ...sc.variables, regime: key }, tmi);
+        const rd = computeOwnedAssetCF(asset, { ...sc.variables, regime: key }, tmi, null, state.profileData);
         return { key, label, impots: rd.impotsAnnee, cfNetNet: rd.cfNetNet };
     });
 
@@ -5377,22 +5393,23 @@ function renderOwnedCalculTab(asset) {
     const patTone = patNet.patrimoineNet !== null ? (patNet.patrimoineNet >= 0 ? 'positive' : 'negative') : '';
 
     // Régime optimal (pour le badge sur les cartes défiscalisation)
-    const optRegime = getOptimalRegime(asset, tmi);
+    const optRegime = getOptimalRegime(asset, tmi, state.profileData);
 
     // Détail CF net-net — sélecteur d'année, état partagé avec le bloc Verdict (state.ownedYearFilters)
     const { annee: anneeAchat } = parseDateAchat(asset.dateAchat);
-    const defaultYear = Math.max(1, new Date().getFullYear() - anneeAchat + 1);
-    const yr = (state.ownedYearFilters?.[asset.id]) ?? defaultYear;
-    const YEAR_OPTIONS = [1, 3, 5, 10];
+    const yr = (state.ownedYearFilters?.[asset.id]) ?? 'actuel';
+    const YEAR_OPTIONS = ['actuel', 1, 3, 5, 10];
     const yearSelectorHtml = `
         <div class="owned-year-selector" style="margin-bottom:8px">
             <span class="owned-year-selector__label">Vue</span>
             <div class="owned-year-selector__btns">
-                ${YEAR_OPTIONS.map(y => { const absYear = anneeAchat + y - 1; return `<button class="owned-year-btn${y === yr ? ' owned-year-btn--active' : ''}" data-calcul-year="${y}">An ${y} <span style="font-size:.65em;opacity:.6">${absYear}</span></button>`; }).join('')}
+                ${YEAR_OPTIONS.map(y => ownedYearButtonHTML(y, yr, anneeAchat, 'data-calcul-year')).join('')}
             </div>
         </div>`;
-    const breakdown = computeCFBreakdown(asset, state.profileData, regime, yr);
-    const breakdownHtml = breakdown ? renderCFBreakdownHTML(breakdown, yr) : '';
+    const breakdown = yr === 'actuel'
+        ? computeCFBreakdownReference(asset, state.profileData, regime)
+        : computeCFBreakdown(asset, state.profileData, regime, yr);
+    const breakdownHtml = breakdown ? renderCFBreakdownHTML(breakdown, yr === 'actuel' ? libellePeriodeCF(breakdown.periode) : libelleAnneeCF(asset, yr)) : '';
 
     topEl.innerHTML = `
         <div class="owned-section-title">Indicateurs clés</div>
@@ -5400,7 +5417,7 @@ function renderOwnedCalculTab(asset) {
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Mensualité crédit</span>
                 <span class="owned-synthese__card-value">${Math.round(mensualiteTotale).toLocaleString('fr-FR')} €/mois</span>
-                ${mensualiteTotale > 0 ? `<span class="owned-synthese__card-sub">${assuranceMens > 0 ? `dont ${Math.round(assuranceMens).toLocaleString('fr-FR')} € assurance · ` : ''}échéance de ${echeanceLabel}</span>` : ''}
+                ${mensualiteTotale > 0 ? `<span class="owned-synthese__card-sub">${assuranceMens > 0 ? `dont ${Math.round(assuranceMens).toLocaleString('fr-FR')} € assurance · ` : ''}moyenne des 12 prochains mois</span>` : ''}
             </div>
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Investissement total</span>
@@ -5412,12 +5429,14 @@ function renderOwnedCalculTab(asset) {
                 <span class="owned-synthese__card-value owned-synthese__card-value--${cfAvantTone}">
                     ${r.cfNet >= 0 ? '+' : ''}${Math.round(r.cfNet).toLocaleString('fr-FR')} €/mois
                 </span>
+                <span class="owned-synthese__card-sub">${escapeHtml(periodeCF)}</span>
             </div>
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">CF après impôt</span>
                 <span class="owned-synthese__card-value owned-synthese__card-value--${cfApresTone}">
                     ${r.cfNetNet >= 0 ? '+' : ''}${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €/mois
                 </span>
+                <span class="owned-synthese__card-sub">${escapeHtml(periodeCF)}, hors frais ponctuels</span>
             </div>
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label">Renta brute</span>
@@ -5439,7 +5458,7 @@ function renderOwnedCalculTab(asset) {
                 }
             </div>
         </div>
-        <div class="owned-synthese__title" style="margin-top:16px">Défiscalisation — comparaison des régimes
+        <div class="owned-synthese__title" style="margin-top:16px">Défiscalisation — comparaison des régimes (12 prochains mois)
             <button class="btn btn--ghost btn--sm" data-action="open-simu-travaux" style="margin-left:auto;font-size:0.75rem">🔧 Simuler des travaux</button>
         </div>
         <div class="owned-synthese__defisca">
@@ -5454,7 +5473,7 @@ function renderOwnedCalculTab(asset) {
                 <div class="owned-synthese__defisca-card${isActive ? ' owned-synthese__defisca-card--active' : ''}">
                     <span class="owned-synthese__defisca-name">${d.label}${isActive ? ' ✓' : ''}${isOptimal && !isActive ? ` <span class="owned-badge owned-badge--optimal"${optimalTooltip}>Optimal</span>` : ''}${isOptimal && isActive ? ` <span class="owned-badge owned-badge--optimal"${optimalTooltip}>✓ Optimal</span>` : ''}</span>
                     <div class="owned-synthese__defisca-row">
-                        <span>Impôts/an</span>
+                        <span>Impôts sur 12 mois</span>
                         <span>${Math.round(d.impots).toLocaleString('fr-FR')} €</span>
                     </div>
                     <div class="owned-synthese__defisca-row">
@@ -5471,7 +5490,7 @@ function renderOwnedCalculTab(asset) {
 
     topEl.querySelectorAll('[data-calcul-year]').forEach(btn => {
         btn.addEventListener('click', () => {
-            state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: Number(btn.dataset.calculYear) };
+            state.ownedYearFilters = { ...(state.ownedYearFilters || {}), [asset.id]: parseOwnedYear(btn.dataset.calculYear) };
             savePref({ ownedYearFilters: state.ownedYearFilters }).catch(() => {});
             renderOwnedCalculTab(asset);
             if (!IS_MOBILE_PAGE) renderOwnedVerdictBlock(asset);
@@ -5718,12 +5737,32 @@ function renderAccordionAcquisition(asset) {
     }
 }
 
-function renderCFBreakdownHTML(bd, yr) {
+// Sélecteur « 12 mois / An 1 / An 3 / An 5 / An 10 » (chantier CF unique) : 'actuel' = CF de référence.
+function parseOwnedYear(v) {
+    return v === 'actuel' ? 'actuel' : Number(v);
+}
+function ownedYearButtonHTML(y, yr, anneeAchat, attr) {
+    const active = y === yr ? ' owned-year-btn--active' : '';
+    if (y === 'actuel') {
+        return `<button class="owned-year-btn${active}" ${attr}="actuel" title="CF de référence : moyenne des 12 prochains mois, hors frais ponctuels">12 mois</button>`;
+    }
+    return `<button class="owned-year-btn${active}" ${attr}="${y}">An ${y} <span style="font-size:11px;opacity:.6">${anneeAchat + y - 1}</span></button>`;
+}
+// Libellé d'une année civile de détention : « An 1 · 2026, 5 mois détenus » / « An 3 · 2028 ».
+function libelleAnneeCF(asset, yr) {
+    const { annee: anneeAchat, mois: moisAchat } = parseDateAchat(asset.dateAchat);
+    const annee = anneeAchat + yr - 1;
+    const mois = yr === 1 ? 13 - moisAchat : 12;
+    return `An ${yr} · ${annee}${mois < 12 ? `, ${mois} mois détenu${mois > 1 ? 's' : ''}` : ''}`;
+}
+
+// basePeriode : libellé de la période (« 12 prochains mois (…) » ou « An 1 · 2026, 5 mois détenus »).
+function renderCFBreakdownHTML(bd, basePeriode) {
     const fmt = v => Math.abs(v).toLocaleString('fr-FR') + ' €';
     const cfCls = bd.cfNetNet >= 0 ? 'pos' : bd.cfNetNet >= -50 ? 'watch' : 'neg';
     const cfSign = bd.cfNetNet >= 0 ? '+' : '−';
     return `<div class="cf-breakdown">
-        <div class="cf-breakdown__title">Décomposition CF annuel — an ${yr}</div>
+        <div class="cf-breakdown__title">Décomposition du CF — ${escapeHtml(basePeriode)}</div>
         <div class="cf-breakdown__row">
             <span class="cf-breakdown__op"></span>
             <span class="cf-breakdown__label">Loyer brut théorique</span>
@@ -5761,10 +5800,10 @@ function renderCFBreakdownHTML(bd, yr) {
         </div>
         <div class="cf-breakdown__row cf-breakdown__row--total">
             <span class="cf-breakdown__op">=</span>
-            <span class="cf-breakdown__label">CF net-net annuel</span>
+            <span class="cf-breakdown__label">CF net-net sur la période</span>
             <span class="cf-breakdown__value cf-breakdown__value--${cfCls}">${cfSign}${fmt(bd.cfNetNet)}</span>
         </div>
-        <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;padding-left:24px">
+        <div style="font-size:12px;color:var(--text-tertiary);margin-top:6px;padding-left:24px">
             soit ${cfSign}${Math.abs(Math.round(bd.cfNetNet / 12)).toLocaleString('fr-FR')} €/mois
         </div>
     </div>`;
@@ -6160,7 +6199,7 @@ function renderAccordionSimulateur(asset) {
     const globalRegime = getOwnedRegime();
     const results = scenarios.map(sc =>
         computeOwnedAssetCF(asset, sc.variables, tmi,
-            sc.variables.regime ? null : globalRegime)
+            sc.variables.regime ? null : globalRegime, state.profileData)
     );
 
     function cellInput(sc, varDef) {
@@ -6191,9 +6230,9 @@ function renderAccordionSimulateur(asset) {
                             <th class="${sc.id === 'realiste' ? 'col-realiste' : ''}">
                                 <input type="text" value="${escapeHtml(sc.nom)}"
                                     data-sc-nom="${escapeHtml(sc.id)}"
-                                    style="background:transparent;border:none;color:inherit;font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;width:90px;text-align:center;cursor:text"
+                                    style="background:transparent;border:none;color:inherit;font-weight:700;font-size:0.75rem;text-transform:uppercase;letter-spacing:.06em;width:90px;text-align:center;cursor:text"
                                     title="Renommer le scénario">
-                                ${scenarios.length > 1 ? `<button class="owned-sim-delete-sc" data-sc-id="${escapeHtml(sc.id)}" title="Supprimer" aria-label="Supprimer le scénario ${escapeHtml(sc.nom)}" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:.7rem;padding:0 2px">✕</button>` : ''}
+                                ${scenarios.length > 1 ? `<button class="owned-sim-delete-sc" data-sc-id="${escapeHtml(sc.id)}" title="Supprimer" aria-label="Supprimer le scénario ${escapeHtml(sc.nom)}" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:0.75rem;padding:0 2px">✕</button>` : ''}
                             </th>
                         `).join('')}
                         <th><button class="owned-sim-add-btn" type="button">+ Scénario</button></th>
@@ -6421,7 +6460,7 @@ async function callOwnedDiagnosticIA(assetId) {
     const tmi = getOwnedTmi();
 
     const scenarios = (asset.scenarios || []).map(sc => {
-        const r = computeOwnedAssetCF(asset, sc.variables, tmi);
+        const r = computeOwnedAssetCF(asset, sc.variables, tmi, null, state.profileData);
         return { nom: sc.nom, cfNetNet: Math.round(r.cfNetNet) };
     });
 

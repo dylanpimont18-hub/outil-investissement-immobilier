@@ -194,38 +194,38 @@ function makeAssetBilan() {
     const data = buildAssetReportData(asset, { profileData, regime });
     const c = data.actuel;
     const lignes = c.cascade;
-    assert.ok(Array.isArray(lignes) && lignes.length >= 4, 'cascade : loyer, charges, mensualité, frais ponctuels');
+    // Chantier CF unique : la situation actuelle = CF de référence (12 prochains mois, hors frais
+    // ponctuels). Avant, une 4e ligne « Frais ponctuels de l'année (÷ 12) » retirait les frais cash.
+    assert.ok(Array.isArray(lignes) && lignes.length === 3, 'cascade : loyer, charges, mensualités');
     const somme = lignes.reduce((s, l) => s + l.montant, 0);
     assert.ok(Math.abs(somme - c.cfNet) < 1, `somme des lignes (${somme.toFixed(2)}) = CF avant impôt (${c.cfNet.toFixed(2)})`);
     // Arrondis affichés : la somme des montants arrondis retombe sur le total arrondi à 1 € près
     const sommeArrondie = lignes.reduce((s, l) => s + Math.round(l.montant), 0);
     assert.ok(Math.abs(sommeArrondie - Math.round(c.cfNet)) <= 1, 'somme des lignes affichées = total affiché, à 1 € près');
-
-    const frais = lignes.find(l => /Frais ponctuels/.test(l.label));
-    assert.ok(frais, 'ligne « Frais ponctuels de l\'année non financés (÷ 12) » présente');
-    assert.equal(Math.round(frais.montant * 12), -(1250 + 334), 'frais cash de l\'année uniquement (pas le frais financé par le crédit)');
+    assert.ok(!lignes.some(l => /Frais ponctuels/.test(l.label)), 'plus de ligne frais ponctuels : hors CF de référence');
 
     const tmi = resolveTmiFoyer(profileData, Y);
-    const cf = computeOwnedAssetCF(asset, resolveScenarioCourant(asset).variables, tmi, regime);
+    const cf = computeOwnedAssetCF(asset, resolveScenarioCourant(asset).variables, tmi, regime, profileData);
     assert.ok(Math.abs(c.mensualite - cf.mensualiteTotale) < 0.01, 'mensualité du rapport = mensualité de computeOwnedAssetCF');
-    const ligneMens = lignes.find(l => /Mensualité/.test(l.label));
+    assert.ok(Math.abs(c.cfNetNet - cf.cfNetNet) < 0.01, 'CF net-net du rapport = CF de référence');
+    const ligneMens = lignes.find(l => /Mensualités/.test(l.label));
     assert.ok(Math.abs(-ligneMens.montant - cf.mensualiteTotale) < 0.01, 'la ligne mensualité de la cascade = mensualité affichée');
-    assert.match(ligneMens.label, /échéance de \d{2}\/\d{4}/, 'la base de la mensualité (mois courant) est écrite');
-    assert.ok(Math.abs(cf.assuranceMensuelle - c.assuranceMensuelle) < 0.01, 'assurance du mois courant exposée');
-    assert.ok(cf.assuranceMensuelle > 0, 'assurance dégressive du mois courant > 0');
+    assert.match(c.periode, /^12 prochains mois \(\d{2}\/\d{4} – \d{2}\/\d{4}\)$/, 'la période du CF est écrite');
+    assert.ok(Math.abs(cf.assuranceMensuelle - c.assuranceMensuelle) < 0.01, 'assurance moyenne exposée');
+    assert.ok(cf.assuranceMensuelle > 0, 'assurance emprunteur > 0');
 
     const md = buildAssetReportMarkdown(data);
-    assert.match(md, /Frais ponctuels de l'année non financés \(÷ 12\)/, 'Markdown : ligne frais ponctuels');
+    assert.ok(md.includes(`## Situation actuelle (par mois, ${c.periode})`), 'Markdown : période dans le titre');
     const { documentHTML } = buildAssetReportHTML(data);
-    assert.ok(documentHTML.includes('Frais ponctuels de l&#39;année non financés (÷ 12)'), 'HTML : ligne frais ponctuels');
-    console.log('Test 8 OK — B3 : cascade = CF avant impôt, mensualité identique à computeOwnedAssetCF');
+    assert.ok(documentHTML.includes('12 prochains mois ('), 'HTML : période dans le titre');
+    console.log('Test 8 OK — B3 : cascade = CF avant impôt, CF et mensualité identiques à computeOwnedAssetCF (12 prochains mois)');
 }
 
 // --- Test 9 : computeOwnedAssetCF n'exige plus de vacance dans le scénario (repli = Exploitation) ---
 {
     const asset = makeAssetBilan();
     const tmi = resolveTmiFoyer(profileData, Y);
-    const sansVacance = computeOwnedAssetCF(asset, { regime: 'micro-foncier' }, tmi);
+    const sansVacance = computeOwnedAssetCF(asset, { regime: 'micro-foncier' }, tmi, null, profileData);
     assert.equal(Math.round(sansVacance.loyerEffectif), 675, 'scénario sans vacance → vacance Exploitation (0 %)');
     console.log('Test 9 OK — repli de vacance de computeOwnedAssetCF = onglet Exploitation');
 }

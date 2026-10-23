@@ -2241,8 +2241,8 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
 const BANK_DOSSIER_METRIC_DEFS = [
     { key: 'mensualiteTotale', label: 'Mensualité crédit', kind: 'currency' },
     { key: 'investissementTotal', label: 'Investissement total', kind: 'currency' },
-    { key: 'cfAvantImpot', label: 'CF avant impôt', kind: 'signedCurrency' },
-    { key: 'cfNetNet', label: 'CF après impôt', kind: 'signedCurrency' },
+    { key: 'cfAvantImpot', label: 'CF avant impôt (12 prochains mois, /mois)', kind: 'signedCurrency' },
+    { key: 'cfNetNet', label: 'CF après impôt (12 prochains mois, /mois)', kind: 'signedCurrency' },
     { key: 'rentaBrute', label: 'Rendement brut', kind: 'percent' },
     { key: 'dscr', label: 'DSCR', kind: 'ratio' },
     { key: 'patrimoineNet', label: 'Patrimoine net', kind: 'currency' }
@@ -2288,7 +2288,7 @@ function buildBankDossierAssetSection(asset, { sections, highlights, profileData
     let indicateursHTML = '';
     if (sections.indicateurs) {
         const scenario = getOwnedDefaultScenarioForPdf(asset);
-        const cf = computeOwnedAssetCF(asset, scenario.variables || {}, tmi, regime);
+        const cf = computeOwnedAssetCF(asset, scenario.variables || {}, tmi, regime, profileData);
         const patrimoine = computePatrimoineNet(asset);
         const investissementTotal = (acq.prix || 0) + (acq.fraisAgence || 0) + (acq.fraisNotaire || 0);
         const values = {
@@ -2548,7 +2548,7 @@ function buildBankDossierExecutiveSummary(assets, allAssets, { profileData, regi
     let totalPatrimoineNet = 0;
     for (const asset of assets) {
         const scenario = getOwnedDefaultScenarioForPdf(asset);
-        const cf = computeOwnedAssetCF(asset, scenario.variables || {}, tmi, regime);
+        const cf = computeOwnedAssetCF(asset, scenario.variables || {}, tmi, regime, profileData);
         totalCfNetNet += cf.cfNetNet;
         totalPatrimoineNet += computePatrimoineNet(asset).patrimoineNet || 0;
     }
@@ -2569,7 +2569,7 @@ function buildBankDossierExecutiveSummary(assets, allAssets, { profileData, regi
             <article class="metric-card metric-card--accent ${cfTone}">
                 <span class="label">Cash-flow net-net cumulé</span>
                 <strong>${escapeDecisionPdfHtml(formatDecisionPdfSignedCurrency(totalCfNetNet))}/mois</strong>
-                <span class="metric-note">${assets.length} bien${assets.length > 1 ? 's' : ''} présenté${assets.length > 1 ? 's' : ''}</span>
+                <span class="metric-note">${assets.length} bien${assets.length > 1 ? 's' : ''} présenté${assets.length > 1 ? 's' : ''} · moyenne des 12 prochains mois, hors frais ponctuels</span>
             </article>
             <article class="metric-card metric-card--accent">
                 <span class="label">Patrimoine net cumulé</span>

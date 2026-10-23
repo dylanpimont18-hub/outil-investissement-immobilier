@@ -8,7 +8,7 @@
 // Le PDF et le Markdown sont tous deux rendus depuis le MÊME modèle : ils ne peuvent pas diverger.
 import {
     computeOwnedAssetCF, computeOwnedAssetTimeline, computeAmortizationSchedule,
-    resolveTmiFoyer, resolveLoyerVacance, resolveScenarioCourant, parseDateAchat, estFraisDeductible
+    resolveTmiFoyer, resolveLoyerVacance, resolveScenarioCourant, parseDateAchat, estFraisDeductible, libellePeriodeCF
 } from './calculs.js';
 
 const HORIZON_ANS = 10;
@@ -49,24 +49,22 @@ export function buildAssetReportData(asset, { profileData = {}, regime = 'micro-
     // avec la vacance de l'onglet Exploitation, régime du portefeuille, TMI de l'année en cours)
     // pour que le rapport affiche les chiffres de l'app.
     const scenario = resolveScenarioCourant(asset);
-    const cf = computeOwnedAssetCF(asset, scenario.variables, tmi, regime);
+    const cf = computeOwnedAssetCF(asset, scenario.variables, tmi, regime, profileData);
     const charges = _resolveChargesActuelles(post, currentYear);
     const { loyer, vacancePct: vacanceExploitation } = resolveLoyerVacance(asset);
     const rentaNette = investissementTotal > 0
         ? ((cf.loyerEffectif - cf.chargesMensuelles) * 12 / investissementTotal) * 100
         : 0;
     // Cascade mensuelle loyer → CF avant impôt : chaque ligne vient de computeOwnedAssetCF, la
-    // somme retombe exactement sur cf.cfNet (test « somme des lignes = total »). La mensualité est
-    // celle de l'échéance du mois civil courant (assurance dégressive incluse), comme l'onglet Calcul.
-    const echeanceLabel = `${String(cf.echeance.mois).padStart(2, '0')}/${cf.echeance.annee}`;
+    // somme retombe exactement sur cf.cfNet (test « somme des lignes = total »). Moyennes des 12
+    // prochains mois (CF de référence, chantier CF unique) : mensualités avec assurance (crédits
+    // travaux compris), hors frais ponctuels.
+    const periodeLabel = libellePeriodeCF(cf.periode);
     const cascade = [
         { label: `Loyer encaissé (vacance ${_nf1.format(vacanceExploitation)} %)`, montant: cf.loyerEffectif },
         { label: "Charges d'exploitation", montant: -cf.chargesExploitationMensuelles },
-        { label: `Mensualité crédit avec assurance (échéance de ${echeanceLabel})`, montant: -cf.mensualiteTotale }
+        { label: 'Mensualités crédit avec assurance', montant: -cf.mensualiteTotale }
     ];
-    if (cf.fraisPonctuelsMensuels > 0) {
-        cascade.push({ label: "Frais ponctuels de l'année non financés (÷ 12)", montant: -cf.fraisPonctuelsMensuels });
-    }
 
     // ── Travaux et dépenses (plus récent d'abord)
     const lignesTravaux = (post.travaux || [])
@@ -140,9 +138,8 @@ export function buildAssetReportData(asset, { profileData = {}, regime = 'micro-
             vacancePct: vacanceExploitation,
             loyerEffectif: cf.loyerEffectif,
             cascade,
-            fraisPonctuelsMensuels: cf.fraisPonctuelsMensuels,
             assuranceMensuelle: cf.assuranceMensuelle,
-            echeance: echeanceLabel,
+            periode: periodeLabel,
             taxeFonciere: charges.taxeFonciere,
             chargesCopro: charges.chargesCopro,
             assurancePNO: charges.assurancePNO,
@@ -164,7 +161,7 @@ export function buildAssetReportData(asset, { profileData = {}, regime = 'micro-
         projection,
         hypotheses: [
             `Régime fiscal : ${REGIME_LABELS[regime] || regime} (régime choisi pour le portefeuille), TMI ${tmi} % pour l'année en cours.`,
-            `Situation actuelle (par mois, au rythme actuel) : vacance locative ${_nf1.format(vacanceExploitation)} % (onglet Exploitation), mensualité de l'échéance de ${echeanceLabel}, frais ponctuels payés cette année et non financés répartis sur 12 mois.`,
+            `Situation actuelle : moyenne mensuelle des ${periodeLabel}, vacance locative ${_nf1.format(vacanceExploitation)} % (onglet Exploitation), hors frais ponctuels (travaux, factures exceptionnelles), impôt estimé de chaque année concernée.`,
             `Prévisionnel : vacance locative ${_nf1.format(vacanceExploitation)} %, loyer et charges maintenus au dernier montant connu (aucune indexation ni revalorisation).`,
             `Revenus du foyer maintenus au dernier montant connu pour le calcul de l'impôt des années futures.`,
             `Cash-flow cumulé calculé à partir du 1er janvier ${firstYear} (l'historique depuis l'achat n'est pas inclus).`,
@@ -264,12 +261,12 @@ export function buildAssetReportMarkdown(data) {
         L.push('Aucun crédit renseigné.', '');
     }
 
-    L.push('## Situation actuelle (par mois)', '');
+    L.push(`## Situation actuelle (par mois, ${c.periode})`, '');
     L.push('| Indicateur | Valeur |', '|---|---:|');
     L.push(`| Loyer (hors charges) | ${eur(c.loyer)} |`);
     for (const l of c.cascade) L.push(`| ${mdCell(l.label)} | ${eurSigned(l.montant)} |`);
     L.push(`| **= Cash-flow net (avant impôts)** | **${eurSigned(c.cfNet)}** |`);
-    L.push(`| Impôts (estimation, par an) | ${eur(c.impotsAnnuels)} |`);
+    L.push(`| Impôts (estimation, sur 12 mois) | ${eur(c.impotsAnnuels)} |`);
     L.push(`| **Cash-flow net-net (après impôts)** | **${eurSigned(c.cfNetNet)}** |`);
     L.push(`| Rentabilité brute | ${pct(c.rentaBrute)} |`);
     L.push(`| Rentabilité nette de charges | ${pct(c.rentaNette)} |`);
@@ -436,7 +433,7 @@ export function buildAssetReportHTML(data) {
     </header>
 
     <section>
-        <h2>Situation actuelle</h2>
+        <h2>Situation actuelle <small>par mois, ${escapeHtml(c.periode)}</small></h2>
         <div class="kpis">
             <div class="kpi"><span>CF net-net / mois</span><strong class="${tone(c.cfNetNet)}">${escapeHtml(eurSigned(c.cfNetNet))}</strong></div>
             <div class="kpi"><span>Rentabilité brute</span><strong>${escapeHtml(pct(c.rentaBrute))}</strong></div>
@@ -447,7 +444,7 @@ export function buildAssetReportHTML(data) {
             ${_kv('Loyer (hors charges)', `${eur(c.loyer)} / mois`)}
             ${c.cascade.map(l => _kv(l.label, `${eurSigned(l.montant)} / mois`)).join('')}
             ${_kv('= Cash-flow net (avant impôts)', `${eurSigned(c.cfNet)} / mois`, true)}
-            ${_kv('Impôts (estimation)', `${eur(c.impotsAnnuels)} / an`)}
+            ${_kv('Impôts (estimation)', `${eur(c.impotsAnnuels)} sur 12 mois`)}
             ${_kv('Cash-flow net-net (après impôts)', `${eurSigned(c.cfNetNet)} / mois`, true)}
         </table>
         <p class="note">Charges : taxe foncière ${escapeHtml(eur(c.taxeFonciere))}/an · copropriété ${escapeHtml(eur(c.chargesCopro))}/mois · assurance PNO ${escapeHtml(eur(c.assurancePNO))}/an · gestion ${escapeHtml(_nf1.format(c.gestionPct))} % des loyers.</p>

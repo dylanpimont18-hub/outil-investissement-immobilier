@@ -14,7 +14,7 @@
 //     (dont intérêts), résultat foncier ; micro-foncier → recettes, abattement 30 %, base 70 % ;
 //     SCI-IS → base non calculée (amortissement non géré, comme la modale Déclaration) ;
 //   - CRD = échéancier à la fin de l'année du rapport ; patrimoine « non renseigné » sans valeur ;
-//   - chaque CF dit sa base (année civile ÷ 12, ou rythme actuel du mois en cours).
+//   - chaque CF dit sa base (année civile ÷ 12, ou CF de référence des 12 prochains mois).
 import {
     computeOwnedAssetCF, computeOwnedAssetTimeline, computeCompteResultat,
     computeAmortizationSchedule, parseDateAchat, resolveScenarioCourant
@@ -73,7 +73,7 @@ export function buildRapportAnnuelData(assets, annee, { profileData = {}, regime
             patrimoine.nbValorises++;
         }
 
-        const courant = computeOwnedAssetCF(asset, { ...resolveScenarioCourant(asset).variables, regime }, tmi);
+        const courant = computeOwnedAssetCF(asset, { ...resolveScenarioCourant(asset).variables, regime }, tmi, null, profileData);
         biens.push({
             nom: asset.nom || 'Bien sans nom',
             cfAnnee: row ? row.cfAnnuel : 0,
@@ -166,14 +166,14 @@ export function buildRapportAnnuelTexte(data) {
     for (const b of biens) {
         const detention = b.moisDetenus < 12 ? ` (détenu ${b.moisDetenus} mois)` : '';
         L.push(`  ${String(b.nom)}`);
-        L.push(`    CF ${annee} : ${eurSigned(b.cfAnnee)}${detention} │ CF au rythme actuel : ${eurSigned(b.cfRythmeActuel)}/mois`);
+        L.push(`    CF ${annee} : ${eurSigned(b.cfAnnee)}${detention} │ CF des 12 prochains mois : ${eurSigned(b.cfRythmeActuel)}/mois`);
         L.push(`    Rdt brut : ${_nf1.format(b.rentaBrute || 0)} % │ Patrimoine net : ${b.patrimoineNet === null ? 'non renseigné' : eur(b.patrimoineNet)}`);
     }
     if (data.nbPosterieurs) {
         L.push(`  (${data.nbPosterieurs} bien${data.nbPosterieurs > 1 ? 's' : ''} acquis après ${annee}, non inclus)`);
     }
     L.push('');
-    L.push(`  « CF au rythme actuel » : mois en cours (loyer, mensualité et frais de l'année en cours), régime ${data.regimeLabel}.`);
+    L.push(`  « CF des 12 prochains mois » : CF de référence de l'application (moyenne mensuelle des 12 mois à venir, hors frais ponctuels, impôt estimé compris), régime ${data.regimeLabel}.`);
     L.push(SEP);
     return L.join('\n');
 }

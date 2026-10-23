@@ -99,7 +99,7 @@ const opts = { profileData, regime: 'reel', tmi: 30 };
     assert.equal(data.biens.length, 1, 'un bien acheté après l\'année du rapport n\'y figure pas');
     const texte = buildRapportAnnuelTexte(data);
     assert.match(texte, /CF net-net mensuel moyen \(année ÷ 12\)/);
-    assert.match(texte, /au rythme actuel/);
+    assert.match(texte, /CF des 12 prochains mois/); // CF de référence (chantier CF unique), ex. « au rythme actuel »
     assert.match(texte, /détenu 5 mois/);
     assert.match(texte, /1 bien acquis après/);
     console.log('Test 5 OK — CF libellés par leur base, biens postérieurs exclus');

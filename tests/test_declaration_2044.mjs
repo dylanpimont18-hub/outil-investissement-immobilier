@@ -79,10 +79,11 @@ const frais = (tag, montant, mois = '03', an = annee) => ({ id: `${tag}-${montan
     assert.equal(d.deficit.imputableRevenuGlobal, 1431, 'autres charges : imputables sur le revenu global');
 
     // Compte de résultat (réel) : l'économie d'impôt estimée ne porte que sur la part imputable
-    // (1 411 € : le compte de résultat ne déduit pas le forfait de 20 € propre à la 2044).
+    // (1 431 € : depuis le chantier CF unique, l'impôt du compte de résultat est celui de la 2044,
+    // forfait de 20 € compris — il était de 1 411 € avant).
     const cr = computeCompteResultat(asset, annee, profileData, 'reel');
     const tmi = resolveTmiFoyer(profileData, annee);
-    assert.ok(Math.abs(cr.impots + 1411 * tmi / 100) <= 1, `impôt du compte de résultat = −1 411 × TMI (${cr.impots})`);
+    assert.ok(Math.abs(cr.impots + 1431 * tmi / 100) <= 1, `impôt du compte de résultat = −1 431 × TMI (${cr.impots})`);
 
     // Intérêts + frais d'emprunt couverts par les loyers : tout le déficit (sous 10 700 €) est imputable.
     const couvert = computeDeclaration2044([makeAsset([frais('deductible', 8000), frais('frais-emprunt', 2000)])], annee, profileData).deficit;
@@ -120,7 +121,7 @@ const frais = (tag, montant, mois = '03', an = annee) => ({ id: `${tag}-${montan
     assert.equal(b.travauxCashAnnee, a.travauxCashAnnee, 'même décaissement');
     assert.equal(b.cfAnnuel, a.cfAnnuel);
 
-    const cf = t => computeOwnedAssetCF(makeAsset(t), { regime: 'reel' }, 30);
+    const cf = t => computeOwnedAssetCF(makeAsset(t), { regime: 'reel' }, 30, null, profileData);
     const c = cf([frais('deductible', 1084, '01', currentYear)]);
     const d = cf([frais('taxe-fonciere', 334, '01', currentYear), frais('frais-emprunt', 750, '01', currentYear)]);
     const e = cf([frais('non-deductible', 1084, '01', currentYear)]);

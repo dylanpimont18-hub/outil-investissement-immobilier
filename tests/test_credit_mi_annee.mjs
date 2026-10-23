@@ -10,7 +10,7 @@ import {
 // la première (et potentiellement la dernière) année d'amortissement devient alors une tranche
 // partielle de moins de 12 mois, au lieu d'être comptée comme une année pleine.
 
-const tmi = 30; // pour les appels à computeOwnedAssetCF (taux courant, TMI figé inchangé)
+const tmi = 30; // paramètre historique de computeOwnedAssetCF, ignoré depuis le chantier CF unique (TMI lu dans profileData)
 // pour les fonctions qui reconstruisent une année fiscale précise (résolvent le TMI par année) :
 // income 60000€/1 part, sans historique, résout aussi à TMI=30% quelle que soit l'année.
 const profileData = { income: 60000, adults: 1, children: 0 };
@@ -111,8 +111,8 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     console.log('Test 5 OK — creditDetail cohérent : intérêts', bd.creditDetail.interets, '+ capital', bd.creditDetail.capital, '+ assurance', bd.creditDetail.assurance, '=', sommeDetail, '≈ mensualiteCredit', bd.mensualiteCredit);
 }
 
-// --- Test 6 : computeOwnedAssetCF lit le MOIS civil courant de l'échéancier (pas seulement
-// "l'année a une ligne") : un crédit démarré il y a des années et encore loin d'être soldé doit
+// --- Test 6 : computeOwnedAssetCF lit l'échéancier MOIS par MOIS (12 prochains mois depuis le
+// chantier CF unique, le mois courant avant ; pas seulement "l'année a une ligne") : un crédit démarré il y a des années et encore loin d'être soldé doit
 // être actif ; un crédit démarré il y a des années et déjà totalement remboursé depuis longtemps
 // ne doit plus peser sur le CF courant. Ancrés sur des marges de plusieurs années pour rester vrais
 // quel que soit le mois civil réel d'exécution du test (pas de dépendance au calendrier).
@@ -122,13 +122,13 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     const moisDemarrage = String(((now.getMonth() + 6) % 12) + 1).padStart(2, '0'); // décalé du mois courant, sans intérêt particulier
     const creditActifLoin = { montant: 120000, duree: 15, taux: 3, assurance: 0 };
     const assetActif = makeAsset({ dateAchat: `${anneeDemarrageActif}-${moisDemarrage}`, credit: creditActifLoin });
-    const rActif = computeOwnedAssetCF(assetActif, {}, tmi);
+    const rActif = computeOwnedAssetCF(assetActif, {}, tmi, null, profileData);
     assert.ok(rActif.mensualiteTotale > 0, `un crédit démarré il y a 3 ans sur 15 ans doit être détecté actif ce mois-ci (mensualiteTotale=${rActif.mensualiteTotale})`);
 
     const anneeDemarrageSolde = now.getFullYear() - 10;
     const creditSolde = { montant: 12000, duree: 2, taux: 3, assurance: 0 };
     const assetSolde = makeAsset({ dateAchat: `${anneeDemarrageSolde}-${moisDemarrage}`, credit: creditSolde });
-    const rSolde = computeOwnedAssetCF(assetSolde, {}, tmi);
+    const rSolde = computeOwnedAssetCF(assetSolde, {}, tmi, null, profileData);
     assert.equal(rSolde.mensualiteTotale, 0, `un crédit de 2 ans démarré il y a 10 ans doit être détecté soldé ce mois-ci (mensualiteTotale=${rSolde.mensualiteTotale})`);
 
     console.log('Test 6 OK — crédit encore actif (démarré il y a 3 ans/15 ans) : mensualiteTotale =', Math.round(rActif.mensualiteTotale), '€/mois ; crédit soldé (démarré il y a 10 ans/2 ans) : mensualiteTotale =', rSolde.mensualiteTotale, '€/mois');
@@ -199,8 +199,9 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     console.log('Test 10 OK — computePatrimoineNet interpole le CRD au mois courant =', crd, '€');
 }
 
-// --- Test 11 : computeOwnedAssetCF / computeEndettementGlobal — assurance dégressive lue au mois
-// courant de l'échéancier, pas diluée par une division /12 d'un total d'année civile partielle ---
+// --- Test 11 : computeOwnedAssetCF / computeEndettementGlobal — assurance dégressive lue mois par
+// mois dans l'échéancier (12 prochains mois / mois courant), pas diluée par une division /12 d'un
+// total d'année civile partielle ---
 {
     const now = new Date();
     const dateAchatPartiel = `${now.getFullYear()}-${String(Math.max(1, now.getMonth())).padStart(2, '0')}`; // le mois dernier
@@ -211,13 +212,16 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     const nowKey = now.getFullYear() * 12 + (now.getMonth() + 1);
     const rowCourant = scheduleMonthly.find(r => (r.annee * 12 + r.mois) === nowKey);
 
-    const r = computeOwnedAssetCF(asset, {}, tmi);
-    // mensualiteTotale (crédit + assurance) doit correspondre à intérêts+capital+assurance du mois
-    // civil courant tel que sorti de l'échéancier — pas à yearRow.assurance/12 (dilué sur une année
-    // civile partielle, sous-estimant l'assurance réelle).
-    const mensualiteAttendue = rowCourant.interets + rowCourant.capital + rowCourant.assurance;
-    assert.ok(Math.abs(r.mensualiteTotale - mensualiteAttendue) <= 1, `mensualiteTotale (${r.mensualiteTotale}€) doit correspondre au mois courant de l'échéancier (${mensualiteAttendue}€ = ${rowCourant.interets}+${rowCourant.capital}+${rowCourant.assurance})`);
+    const r = computeOwnedAssetCF(asset, {}, tmi, null, profileData);
+    // Depuis le chantier CF unique, mensualiteTotale = moyenne des 12 mois qui suivent le mois courant
+    // (CF de référence), lue mois par mois dans l'échéancier — jamais yearRow.assurance/12 (dilué sur
+    // une année civile partielle, sous-estimant l'assurance réelle).
+    const prochains = scheduleMonthly.filter(row => { const k = row.annee * 12 + row.mois; return k > nowKey && k <= nowKey + 12; });
+    const mensualiteMoyenne = prochains.reduce((s, row) => s + row.interets + row.capital + row.assurance, 0) / 12;
+    assert.ok(Math.abs(r.mensualiteTotale - mensualiteMoyenne) <= 1, `mensualiteTotale (${r.mensualiteTotale}€) = moyenne des 12 prochains mois de l'échéancier (${mensualiteMoyenne}€)`);
 
+    // computeEndettementGlobal (taux d'endettement) garde l'échéance du mois courant.
+    const mensualiteAttendue = rowCourant.interets + rowCourant.capital + rowCourant.assurance;
     const endettement = computeEndettementGlobal([asset], 5000);
     assert.ok(Math.abs(endettement.totalMensualites - mensualiteAttendue) <= 1, `computeEndettementGlobal (${endettement.totalMensualites}€) doit lui aussi correspondre au mois courant (${mensualiteAttendue}€)`);
     console.log('Test 11 OK — assurance du mois courant =', Math.round(rowCourant.assurance), '€, mensualiteTotale computeOwnedAssetCF =', Math.round(r.mensualiteTotale), '€/mois ≈ computeEndettementGlobal =', Math.round(endettement.totalMensualites), '€/mois');
@@ -250,7 +254,9 @@ function makeAsset({ prix = 150000, loyer = 900, dateAchat, credit } = {}) {
     const row2024 = years.find(y => y.year === 2024);
     // Même proratisation appliquée à computeOwnedAssetTimeline (pas seulement computeCompteResultat) :
     // loyer 7 mois (6300€) − charges proratisées (700+350+140=1190€), taxées à tmi(30%)+CSG(17,2%).
-    const cfAnnuelAttendu = 6300 - 1190 - (6300 - 1190) * (0.30 + 0.172);
+    // Depuis le chantier CF unique (étape 3), l'impôt suit la 2044 : forfait de 20 € (case 222) déduit
+    // de l'assiette, mais pas de la trésorerie.
+    const cfAnnuelAttendu = 6300 - 1190 - (6300 - 1190 - 20) * (0.30 + 0.172);
     assert.ok(Math.abs(row2024.cfAnnuel - cfAnnuelAttendu) < 1, `cfAnnuel 2024 attendu ${cfAnnuelAttendu.toFixed(2)}€ (charges proratisées), trouvé ${row2024.cfAnnuel}€`);
 
     console.log('Test 12 OK — taxe foncière/PNO/copro proratisées sur l\'année d\'achat : 2024 (7 mois) =', cr2024.taxeFonciere, '€/', cr2024.chargesCopro, '€/', cr2024.assurancePNO, '€ vs 2025 (année pleine) =', cr2025.taxeFonciere, '€/', cr2025.chargesCopro, '€');

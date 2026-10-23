@@ -42,7 +42,8 @@ function makeAsset({ prix = 100000, loyer = 800, taxeFonciere = 0, credit = null
 {
     const asset = makeAsset({ loyer: 800, taxeFonciere: 500 });
     const bd = computeCFBreakdown(asset, profileData, 'reel', 1);
-    const expected = Math.round((9600 - 500) * tauxGlobalImpot);
+    // Forfait de 20 € (case 222 de la 2044) déduit depuis le chantier CF unique (étape 3).
+    const expected = Math.round((9600 - 500 - 20) * tauxGlobalImpot);
     assert.equal(bd.impots, expected, `réel doit taxer (loyers - charges réelles), trouvé impots=${bd.impots}, attendu ${expected}`);
     assert.ok(bd.impots > Math.round((9600 * 0.7) * tauxGlobalImpot), 'avec seulement 500€ de charges réelles (< abattement micro-foncier de 2880€), le réel doit être moins favorable que le micro-foncier ici');
     console.log('Test 2 OK — réel : impôt =', bd.impots, '€ (loyers − charges réelles réduites), moins favorable que micro-foncier sur ce cas');
@@ -64,7 +65,8 @@ function makeAsset({ prix = 100000, loyer = 800, taxeFonciere = 0, credit = null
 
     // Une fois le report de 3300€ épuisé (absorbé en année 2), l'année 3 retombe à la taxation pleine.
     const bdY3 = computeCFBreakdown(asset, profileData, 'reel', 3);
-    assert.equal(bdY3.impots, Math.round(6000 * tauxGlobalImpot), `année 3 : le report est épuisé, l'impôt doit redevenir plein (${Math.round(6000 * tauxGlobalImpot)}), trouvé ${bdY3.impots}`);
+    // Loyers 6 000 − forfait 20 € (case 222, chantier CF unique étape 3).
+    assert.equal(bdY3.impots, Math.round(5980 * tauxGlobalImpot), `année 3 : le report est épuisé, l'impôt doit redevenir plein (${Math.round(5980 * tauxGlobalImpot)}), trouvé ${bdY3.impots}`);
 
     console.log('Test 3 OK — réel, plafond 10 700€ : an 1 =', bdY1.impots, '€ (imputation plafonnée), an 2 =', bdY2.impots, '€ (report partiel), an 3 =', bdY3.impots, '€ (report épuisé, taxation pleine)');
 }
@@ -80,16 +82,21 @@ function makeAsset({ prix = 100000, loyer = 800, taxeFonciere = 0, credit = null
     // entièrement absorbé par le déficit reporté des années précédentes.
     for (let ty = 1; ty <= 9; ty++) {
         const bd = computeCFBreakdown(asset, profileData, 'reel', ty);
-        assert.equal(bd.impots, 0, `année ${2024 + ty - 1} (targetYear ${ty}) : impôt attendu nul (déficit ou absorption par le report), trouvé ${bd.impots}`);
+        // Depuis le chantier CF unique (étape 3), l'impôt suit la 2044 : le forfait de 20 € (case 222)
+        // est une charge « hors intérêts », imputable sur le revenu global même quand les intérêts
+        // dépassent les loyers (−20 × 30 % = −6 €) ; aucune année n'est imposée positivement.
+        const attendu = ty <= 5 ? -6 : 0;
+        assert.equal(bd.impots, attendu, `année ${2024 + ty - 1} (targetYear ${ty}) : impôt attendu ${attendu} (déficit ou absorption par le report), trouvé ${bd.impots}`);
     }
 
     // Année 10 (2033) : le report accumulé est enfin épuisé, l'impôt redevient positif mais reste
     // inférieur à ce qu'il serait sans aucun mécanisme de report (preuve que le report a bien joué).
     const bdY10 = computeCFBreakdown(asset, profileData, 'reel', 10);
     assert.ok(bdY10.impots > 0, `année 2033 : le report doit être épuisé et l'impôt redevenir positif, trouvé ${bdY10.impots}`);
-    assert.equal(bdY10.impots, 648, `année 2033 : impôt attendu 648€ (déficit d'intérêts cumulé enfin absorbé), trouvé ${bdY10.impots}`);
+    // 601 € (648 € avant le chantier CF unique : forfait de 20 €/an déduit, impôt lu dans la timeline et non plus reconstruit par différence sur des montants arrondis).
+    assert.equal(bdY10.impots, 601, `année 2033 : impôt attendu 601€ (déficit d'intérêts cumulé enfin absorbé), trouvé ${bdY10.impots}`);
 
-    console.log('Test 4 OK — réel, déficit lié aux intérêts : 9 années à impôt nul (2024-2032), report épuisé en 2033 (impôt =', bdY10.impots, '€)');
+    console.log('Test 4 OK — réel, déficit lié aux intérêts : 9 années sans impôt positif (2024-2032), report épuisé en 2033 (impôt =', bdY10.impots, '€)');
 }
 
 // --- Test 5 : SCI-IS, bénéfice positif — amortissement du bâti (80% / 30 ans) + barème 15%/25% ---

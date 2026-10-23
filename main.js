@@ -246,7 +246,7 @@ const state = {
     analysisPopupBlocked: false,
     activeOwnedAssetId: null,
     ownedRegime: 'micro-foncier',
-    ownedYearFilter: 1,
+    ownedYearFilter: 'actuel', // 'actuel' = CF de référence (12 prochains mois) ; 1/3/5/10 = An N
     ownedYearFilters: {},
     ownedOrder: [],
     ownedCompact: false,
@@ -1487,7 +1487,7 @@ function renderProfileCreditsList() {
             <div class="profile-credit-row">
                 <span class="profile-credit-row__label">${escapeHtml(c.libelle || 'Crédit')}</span>
                 <span class="profile-credit-row__amount">−${(c.mensualite || 0).toLocaleString('fr-FR')} €/mois</span>
-                ${c.dateFin ? `<span style="font-size:11px;color:var(--text-tertiary)">jusqu'à ${c.dateFin}</span>` : ''}
+                ${c.dateFin ? `<span style="font-size:12px;color:var(--text-tertiary)">jusqu'à ${c.dateFin}</span>` : ''}
                 <button class="profile-credit-row__edit" data-edit-credit="${escapeHtml(c.id)}">Modifier</button>
                 <button class="profile-credit-row__edit" data-delete-credit="${escapeHtml(c.id)}" style="color:var(--color-negative,#ef4444)" title="Supprimer" aria-label="Supprimer le crédit ${escapeHtml(c.libelle || '')}">✕</button>
             </div>`).join('');
@@ -2687,6 +2687,7 @@ function initGlossaire() {
                 { name: 'CF brut', def: 'Loyers mensuels moins mensualité de crédit, avant charges et impôts.', formula: 'Loyer mensuel − Mensualité de crédit' },
                 { name: 'CF net', def: 'Cash-flow après déduction des charges (crédit, charges courantes, vacance, gestion). Hors impôts.', formula: 'CF net = Loyers × (1 - vacance) - crédit annuel - charges' },
                 { name: 'CF net-net', def: 'Cash-flow après impôts. Indicateur final de ce qui reste en poche chaque mois.', formula: 'CF net-net = CF net - impôts' },
+                { name: 'CF des 12 prochains mois (portefeuille)', def: 'Le CF net-net affiché pour un bien détenu (liste, tableau de bord, fiche, rapports) : moyenne mensuelle des 12 mois à venir, loyer et crédit réels de chaque mois, impôt estimé de chaque année compris. Les frais ponctuels (travaux, factures exceptionnelles) en sont exclus : ils apparaissent dans les vues par année (An 1, An 3…).', formula: 'Somme des flux des 12 prochains mois ÷ 12' },
                 { name: 'Rendement brut', def: 'Benchmark rapide, ne tient pas compte des charges ni des impôts.', formula: 'Loyers annuels / Prix d\'achat total × 100' },
                 { name: 'Rendement net', def: 'Rendement après vacance et charges d\'exploitation, hors crédit et impôts. Plus représentatif que le rendement brut.', formula: '(Loyers encaissés − Charges d\'exploitation annuelles) / Coût total du projet × 100' },
                 { name: 'GRM (Gross Rent Multiplier)', def: 'Nombre d\'années de loyers bruts pour rembourser le bien. Plus bas = mieux.', formula: 'Prix d\'achat / Loyers annuels bruts' },
