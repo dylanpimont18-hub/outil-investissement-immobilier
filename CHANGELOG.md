@@ -7,6 +7,8 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [1.0.27] - 2026-10-23
+
 ### Fixed
 - Cash-flow : la mensualité d'un crédit dédié à des travaux est désormais comptée dans le cash-flow par année (fiche du bien, graphiques, rapport annuel, rapport du bien, PDF bancaire). Elle n'était retirée que dans la liste et le tableau de bord.
 - Impôt d'un bien : un seul calcul, celui de la déclaration 2044, pour le cash-flow par année, le compte de résultat et le détail du cash-flow. Au réel, le forfait de 20 € et les intérêts des crédits travaux sont désormais déduits partout, et le déficit reporté des années précédentes est pris en compte dans le compte de résultat.
@@ -15,8 +17,6 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 ### Changed
 - Cash-flow d'un bien détenu : un seul chiffre de référence, le même dans la liste, le tableau de bord, la fiche, l'onglet Calcul, la carte, les alertes, le rapport du bien, le rapport annuel, le dossier bancaire et l'Assistant. C'est la moyenne mensuelle des 12 prochains mois (loyer et crédit réels de chaque mois, impôt estimé compris), hors frais ponctuels. Avant, un même bien pouvait afficher jusqu'à cinq valeurs différentes (mois en cours × 12, année civile ÷ 12, frais de l'année étalés…).
 - Liste, fiche et onglet Calcul s'ouvrent sur la vue « 12 mois » ; les vues An 1, An 3, An 5, An 10 restent disponibles et disent leur base (« An 1 · 2026, 3 mois détenus »). Chaque cash-flow affiché indique sa période.
-
-### Changed
 - Lisibilité : plus aucun texte sous 11 px (les libellés de 8 à 10 px, et les années de 7 px des boutons « An 1 / An 3 », passent à 11-12 px). Couleurs de texte vertes, rouges, orange et indigo foncées en thème clair pour être lisibles sur fond clair (le taux d'endettement vert était à 1,75:1, il faut 4,5:1), or foncé pour le texte doré, titres en petites majuscules et aides moins pâles, boutons pleins avec un texte lisible (Enregistrer, Guidé/Complet, Diagnostic IA, onglet actif du menu). Police à chasse fixe réservée aux nombres. Le menu de gauche et les Actions rapides ne passent plus sous le bandeau du haut au défilement. iPhone : le nom du bien a sa propre ligne et les quatre onglets de la fiche tiennent à l'écran.
 - Thème clair moins « blanc » : fond de page pierre claire, cartes et champs ivoire, textes, bordures et ombres en tons chauds (comme le thème sombre), bandeau du haut et halo de fond assortis. Avant, fond et cartes étaient à 2 % de luminosité d'écart, dans un blanc bleuté.
 
