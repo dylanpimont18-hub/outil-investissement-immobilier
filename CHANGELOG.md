@@ -7,6 +7,14 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [1.0.28] - 2026-10-27
+
+### Added
+- Onglet Travaux d'un bien : nouvelle vue « Par corps d'état ». Chaque facture est détaillée article par article (désignation, quantité, prix, total) et classée par corps d'état (électricité, plomberie, peinture…), avec le total de chaque corps d'état, des filtres, et un menu pour reclasser un article. La main-d'œuvre est rangée dans son corps d'état avec l'étiquette « MO ». Les écarts entre les articles et le montant payé (TVA, remise) et les frais sans justificatif restent visibles, pour que le total soit celui des frais. Chaque nouvelle facture est détaillée automatiquement ; un bouton détaille les factures déjà enregistrées (PC).
+
+### Changed
+- Limite d'analyses IA de factures portée de 30 à 100 par heure.
+
 ### Fixed
 - Impôt (étude et biens détenus) : l'impôt d'un revenu locatif est désormais la différence de deux impôts complets du foyer (barème, plafonnement du quotient familial, décote), et non plus la base multipliée par la TMI. Sur un couple à 45 000 €, 6 930 € de revenu foncier coûtent 1 107 € d'IR, et non 762 €.
 - Impôt : la CSG déductible (6,8 %) née des revenus fonciers d'une année est retranchée du revenu imposable de l'année suivante, dans l'étude, le cash-flow des biens et les projections du foyer.
