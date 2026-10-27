@@ -29,8 +29,12 @@ import {
     watchAuth, cloudSignIn, watchOwnedAssets, cloudSetAsset, cloudDeleteAssetDoc,
     watchPortfolioMeta, cloudSaveMeta, cloudUploadDocument, cloudDocumentUrl,
     cloudDeleteDocument, cloudDeleteAllDocuments, cloudGeocode, cloudExtraireFraisFacture,
-    cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword
+    cloudExtraireDossierBien, cloudDiagnosticPortefeuille, cloudChangePassword, cloudDecortiquerFacture
 } from './owned-cloud.js';
+import {
+    CORPS_ETAT, nettoyerArticles, fusionnerReclassements, corpsEtatLibres, travauxADecortiquer,
+    regrouperParCorpsEtat, reclasserArticle
+} from './corps-etat.js';
 import { watchPrefs, savePref, cloudListArchives, cloudUploadArchive, cloudReadArchive } from './cloud-store.js';
 import { nomArchiveUnique } from './archives-regles.js';
 import { anneesDisponibles, selectionnerFrais, nomFichierFactures, formatEuros, formatDateFr, genererPdfFactures } from './factures-pdf.js';
@@ -371,6 +375,9 @@ export function addOwnedTravail(assetId, travail) {
     };
     all[assetId].postAchat.travaux.push(entry);
     saveOwnedAssets(all);
+    // Toute facture ajoutée avec justificatif est décortiquée par corps d'état en arrière-plan
+    // (onglet Travaux, vue « Par corps d'état ») ; un échec n'affecte jamais le frais enregistré.
+    if (entry.pdfFilename) _planifierDecorticage(assetId, entry.id);
     return entry;
 }
 
@@ -394,7 +401,12 @@ function updateOwnedTravail(assetId, travailId, patch) {
         pdfFilename: patch.pdfFilename !== undefined ? patch.pdfFilename : current.pdfFilename,
         financeParCredit: patch.financeParCredit !== undefined ? !!patch.financeParCredit : current.financeParCredit
     };
+    // Justificatif remplacé ou retiré : le détail par corps d'état décrivait l'ancien, on l'efface
+    // (et on décortique le nouveau).
+    const justificatifChange = list[idx].pdfFilename !== current.pdfFilename;
+    if (justificatifChange) delete list[idx].detail;
     saveOwnedAssets(all);
+    if (justificatifChange && list[idx].pdfFilename) _planifierDecorticage(assetId, travailId);
     return list[idx];
 }
 
@@ -4248,6 +4260,309 @@ function _extractDossierTravaux(rows) {
         }));
 }
 
+// ─── FACTURES DÉCORTIQUÉES PAR CORPS D'ÉTAT ──────────────────────────────────────────────────
+// Chaque frais avec justificatif est envoyé (toutes ses pages) à la Cloud Function
+// decortiquerFacture ; les articles reviennent classés par corps d'état et sont stockés dans
+// `travail.detail` (forme et regroupement : corps-etat.js). Vue de lecture, hors calculs. Voir
+// docs/superpowers/specs/2026-10-27-factures-par-corps-etat-design.md.
+// File d'attente en mémoire : 3 analyses simultanées sur PC, 1 sur iPhone (mémoire limitée pour
+// rasteriser les PDF) ; un plafond IA atteint annule le reste de la file (frais laissés « à
+// décortiquer », rien n'est écrit pour eux).
+const DECORTICAGE_MAX_PAGES = 8;              // = MAX_PAGES_DECORTICAGE de functions/index.js
+const DECORTICAGE_MAX_PAGES_MOBILE = 3;
+const DECORTICAGE_MAX_BASE64 = 9_000_000;     // = MAX_TOTAL_BASE64_DECORTICAGE de functions/index.js
+const DECORTICAGE_LARGEUR_MAX = 1600;         // px : lisible pour l'IA, léger à envoyer
+const _decorticageEnCours = new Set();        // ids des frais en file ou en cours d'analyse
+const _decorticageFile = [];
+let _decorticageActifs = 0;
+
+function _planifierDecorticage(assetId, travailId) {
+    if (_decorticageEnCours.has(travailId)) return Promise.resolve('ignore');
+    _decorticageEnCours.add(travailId);
+    setTimeout(() => _rafraichirVueCorpsEtat(assetId), 0);
+    return new Promise(resolve => {
+        _decorticageFile.push({ assetId, travailId, resolve });
+        _pomperDecorticage();
+    });
+}
+
+function _pomperDecorticage() {
+    const max = IS_MOBILE_PAGE ? 1 : 3;
+    while (_decorticageActifs < max && _decorticageFile.length) {
+        const job = _decorticageFile.shift();
+        _decorticageActifs++;
+        _decortiquerTravail(job.assetId, job.travailId)
+            .catch(() => 'echec')
+            .then(resultat => {
+                _decorticageActifs--;
+                _decorticageEnCours.delete(job.travailId);
+                if (resultat === 'plafond') {
+                    for (const j of _decorticageFile.splice(0)) {
+                        _decorticageEnCours.delete(j.travailId);
+                        j.resolve('plafond');
+                    }
+                }
+                _rafraichirVueCorpsEtat(job.assetId);
+                job.resolve(resultat);
+                _pomperDecorticage();
+            });
+    }
+}
+
+async function _chargerJustificatifFichier(assetId, pdfFilename) {
+    const url = await cloudDocumentUrl(assetId, pdfFilename);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`http_${res.status}`);
+    const blob = await res.blob();
+    const type = /\.pdf$/i.test(pdfFilename) ? 'application/pdf'
+        : /\.png$/i.test(pdfFilename) ? 'image/png'
+        : /\.jpe?g$/i.test(pdfFilename) ? 'image/jpeg'
+        : blob.type;
+    return new File([blob], pdfFilename, { type });
+}
+
+function _canvasVersJpeg(canvas) {
+    return new Promise((resolve, reject) => canvas.toBlob(b => (b ? resolve(b) : reject(new Error('jpeg_failed'))), 'image/jpeg', 0.85));
+}
+
+// Pages d'une facture prêtes pour l'IA : un PDF est rasterisé page par page (au plus `maxPages`),
+// une image est réduite si elle dépasse DECORTICAGE_LARGEUR_MAX. Les pages au-delà du budget de
+// taille sont abandonnées (analyse « partielle »). → { images: [{base64, mimeType}], pagesTotal }
+async function _preparerPagesFacture(file, maxPages) {
+    const blobs = [];
+    let pagesTotal = 1;
+    if (file.type === 'application/pdf') {
+        const pdfjs = await _loadPdfjs();
+        const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+        pagesTotal = pdf.numPages;
+        if (pagesTotal > maxPages) return { images: [], pagesTotal };
+        for (let n = 1; n <= pagesTotal; n++) {
+            const page = await pdf.getPage(n);
+            const base = page.getViewport({ scale: 1 });
+            const viewport = page.getViewport({ scale: Math.min(2, DECORTICAGE_LARGEUR_MAX / base.width) });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(viewport.width);
+            canvas.height = Math.round(viewport.height);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            blobs.push(await _canvasVersJpeg(canvas));
+            canvas.width = canvas.height = 0;
+        }
+        pdf.destroy?.();
+    } else {
+        const bitmap = await createImageBitmap(file);
+        if (bitmap.width <= DECORTICAGE_LARGEUR_MAX && file.size < 3_000_000) {
+            blobs.push(file);
+        } else {
+            const ratio = Math.min(1, DECORTICAGE_LARGEUR_MAX / bitmap.width);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(bitmap.width * ratio);
+            canvas.height = Math.round(bitmap.height * ratio);
+            canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            blobs.push(await _canvasVersJpeg(canvas));
+        }
+        bitmap.close?.();
+    }
+    const images = [];
+    let taille = 0;
+    for (const blob of blobs) {
+        const base64 = await _fileToBase64(blob);
+        if (taille + base64.length > DECORTICAGE_MAX_BASE64) break;
+        taille += base64.length;
+        images.push({ base64, mimeType: blob.type === 'image/png' ? 'image/png' : 'image/jpeg' });
+    }
+    return { images, pagesTotal };
+}
+
+// → 'ok' | 'echec' | 'plafond' | 'reporte' (iPhone, facture trop longue) | 'ignore'
+async function _decortiquerTravail(assetId, travailId) {
+    const travail = getOwnedAsset(assetId)?.postAchat?.travaux?.find(t => t.id === travailId);
+    if (!travail?.pdfFilename) return 'ignore';
+    const { pdfFilename } = travail;
+    const maxPages = IS_MOBILE_PAGE ? DECORTICAGE_MAX_PAGES_MOBILE : DECORTICAGE_MAX_PAGES;
+    let pages;
+    try {
+        pages = await _preparerPagesFacture(await _chargerJustificatifFichier(assetId, pdfFilename), maxPages);
+    } catch {
+        return _enregistrerDetail(assetId, travailId, pdfFilename, { statut: 'echec', raison: 'justificatif illisible' });
+    }
+    if (!pages.images.length) {
+        if (IS_MOBILE_PAGE) return 'reporte';
+        const raison = pages.pagesTotal > maxPages ? `facture trop longue (${pages.pagesTotal} pages, ${maxPages} max)` : 'justificatif trop volumineux';
+        return _enregistrerDetail(assetId, travailId, pdfFilename, { statut: 'echec', raison });
+    }
+    let res;
+    try {
+        res = await cloudDecortiquerFacture(pages.images);
+    } catch (err) {
+        if (err?.code === 'functions/resource-exhausted') return 'plafond';
+        return _enregistrerDetail(assetId, travailId, pdfFilename, { statut: 'echec', raison: 'service IA indisponible, réessaie plus tard' });
+    }
+    return _enregistrerDetail(assetId, travailId, pdfFilename, {
+        statut: pages.images.length < pages.pagesTotal ? 'partiel' : 'ok',
+        pages: pages.images.length,
+        articlesBruts: res?.articles
+    });
+}
+
+// Écrit le résultat sur l'état COURANT du bien (il a pu changer pendant l'analyse) ; abandonne si le
+// frais a disparu ou si son justificatif a été remplacé entre-temps.
+function _enregistrerDetail(assetId, travailId, pdfFilename, { statut, raison = '', pages = 0, articlesBruts = [] }) {
+    const all = loadOwnedAssets();
+    const travaux = all[assetId]?.postAchat?.travaux || [];
+    const t = travaux.find(x => x.id === travailId);
+    if (!t || t.pdfFilename !== pdfFilename) return 'ignore';
+    const articles = statut === 'echec' ? [] : nettoyerArticles(articlesBruts, corpsEtatLibres(travaux));
+    t.detail = {
+        statut,
+        analyseLe: new Date().toISOString().slice(0, 10),
+        pages,
+        ...(raison ? { raison } : {}),
+        articles: fusionnerReclassements(t.detail?.articles, articles)
+    };
+    saveOwnedAssets(all);
+    return statut === 'echec' ? 'echec' : 'ok';
+}
+
+function _rafraichirVueCorpsEtat(assetId) {
+    if (state.activeOwnedAssetId !== assetId) return;
+    const asset = getOwnedAsset(assetId);
+    if (asset) _renderVueCorpsEtat(asset);
+}
+
+const CE_RAISONS = {
+    'sans-justificatif': 'Pas de justificatif',
+    'a-decortiquer': 'Pas encore décortiquée',
+    'en-cours': 'Analyse en cours…',
+    'echec': "Échec de l'analyse",
+    'aucun-article': 'Aucun article lu sur la facture'
+};
+
+function _renderVueCorpsEtat(asset) {
+    const content = nodes.ownedTravauxContent || document.getElementById('owned-travaux-content');
+    const root = content?.querySelector('[data-ce-root]');
+    if (!root) return;
+    const travaux = asset.postAchat?.travaux || [];
+    const vue = regrouperParCorpsEtat(travaux, { enCours: _decorticageEnCours });
+    const aFaire = travauxADecortiquer(travaux).filter(t => !_decorticageEnCours.has(t.id));
+    const enCours = travaux.filter(t => _decorticageEnCours.has(t.id)).length;
+    const libres = corpsEtatLibres(travaux);
+    const optionsCe = [...CORPS_ETAT.map(c => [c.cle, c.libelle]), ...libres.map(l => [l, l])];
+    const filtre = state.ownedCeFiltre || 'tous';
+    const fmt = n => escapeHtml(formatEuros(n));
+    const fmtNb = n => (n === null || n === undefined ? '—' : escapeHtml(String(n).replace('.', ',')));
+    const refFacture = f => `${f.date ? escapeHtml(formatDateFr(f.date)) + ' · ' : ''}${escapeHtml(f.description || 'Facture')}`;
+    const boutonFacture = f => (f.pdfFilename
+        ? `<button type="button" class="owned-ce__facture" data-preview-pdf="${escapeHtml(f.pdfFilename)}" title="Voir le justificatif">${refFacture(f)}</button>`
+        : `<span class="owned-ce__facture">${refFacture(f)}</span>`);
+    const peutRelancer = !IS_MOBILE_PAGE;
+
+    const sections = [];
+    vue.groupes.forEach(g => {
+        sections.push({ cle: g.ce, libelle: g.libelle, total: g.total, compte: `${g.nbArticles} article${g.nbArticles > 1 ? 's' : ''}`, lignes: g.lignes.map(a => `
+            <div class="owned-ce__row">
+                <span class="owned-ce__d">${escapeHtml(a.d)}${a.mo ? ' <span class="owned-ce__mo" title="Main-d\'œuvre">MO</span>' : ''}</span>
+                <span class="owned-ce__q" data-label="Qté">${fmtNb(a.q)}</span>
+                <span class="owned-ce__pu" data-label="P.U.">${a.pu === null ? '—' : fmt(a.pu)}</span>
+                <span class="owned-ce__t">${fmt(a.t)}</span>
+                ${boutonFacture(a.facture)}
+                <select class="variables-input owned-ce__select" data-ce-reclasser data-travail-id="${escapeHtml(a.facture.travailId)}" data-index="${a.index}" aria-label="Corps d'état de ${escapeHtml(a.d)}">
+                    ${optionsCe.map(([v, l]) => `<option value="${escapeHtml(v)}" ${v === a.ce ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+                </select>
+            </div>`).join('') });
+    });
+    if (vue.ecarts.lignes.length) {
+        sections.push({ cle: '__ecart', libelle: 'Écart (TVA / remise)', total: vue.ecarts.total, compte: `${vue.ecarts.lignes.length} facture${vue.ecarts.lignes.length > 1 ? 's' : ''}`, lignes: vue.ecarts.lignes.map(e => `
+            <div class="owned-ce__row owned-ce__row--info">
+                <span class="owned-ce__d">Articles ${fmt(e.sommeArticles)} / facture ${fmt(e.montantFrais)}${e.partiel ? ' — pages non lues' : ''}</span>
+                <span class="owned-ce__t">${fmt(e.montant)}</span>
+                ${boutonFacture(e.facture)}
+                ${peutRelancer ? `<button type="button" class="btn btn--ghost btn--sm owned-ce__relancer" data-ce-relancer="${escapeHtml(e.facture.travailId)}">Relancer l'analyse</button>` : '<span></span>'}
+            </div>`).join('') });
+    }
+    if (vue.nonDetaille.lignes.length) {
+        sections.push({ cle: '__non-detaille', libelle: 'Non détaillé', total: vue.nonDetaille.total, compte: `${vue.nonDetaille.lignes.length} frais`, lignes: vue.nonDetaille.lignes.map(l => {
+            const relancable = peutRelancer && (l.raison === 'a-decortiquer' || l.raison === 'echec' || l.raison === 'aucun-article');
+            const raison = l.raison === 'a-decortiquer' && IS_MOBILE_PAGE ? 'À décortiquer depuis le PC' : CE_RAISONS[l.raison];
+            return `
+            <div class="owned-ce__row owned-ce__row--info">
+                <span class="owned-ce__d">${escapeHtml(raison)}${l.detailRaison ? ` (${escapeHtml(l.detailRaison)})` : ''}</span>
+                <span class="owned-ce__t">${fmt(l.montant)}</span>
+                ${boutonFacture(l)}
+                ${relancable ? `<button type="button" class="btn btn--ghost btn--sm owned-ce__relancer" data-ce-relancer="${escapeHtml(l.travailId)}">${l.raison === 'a-decortiquer' ? 'Décortiquer' : "Relancer l'analyse"}</button>` : '<span></span>'}
+            </div>`;
+        }).join('') });
+    }
+    const filtreValide = filtre === 'tous' || sections.some(s => s.cle === filtre) ? filtre : 'tous';
+
+    root.innerHTML = !travaux.length
+        ? '<p class="owned-ce__vide">Aucun frais enregistré.</p>'
+        : `
+        <div class="owned-ce">
+            <div class="owned-ce__toolbar">
+                <span class="owned-ce__total">Total des frais <strong>${fmt(vue.total)}</strong></span>
+                <span class="owned-ce__progress" aria-live="polite">${enCours ? `Analyse en cours : ${enCours} facture${enCours > 1 ? 's' : ''}…` : ''}</span>
+                ${!IS_MOBILE_PAGE && aFaire.length ? `<button type="button" class="btn btn--ghost btn--sm" data-action="decortiquer-factures">Décortiquer les factures (${aFaire.length})</button>` : ''}
+            </div>
+            <div class="owned-ce__chips" role="group" aria-label="Filtrer par corps d'état">
+                <button type="button" class="owned-ce__chip" data-ce-filtre="tous" aria-pressed="${filtreValide === 'tous'}">Tous</button>
+                ${sections.map(s => `<button type="button" class="owned-ce__chip" data-ce-filtre="${escapeHtml(s.cle)}" aria-pressed="${filtreValide === s.cle}">${escapeHtml(s.libelle)}</button>`).join('')}
+            </div>
+            <div class="owned-ce__table">
+                <div class="owned-ce__cols" aria-hidden="true"><span>Article</span><span>Qté</span><span>P.U.</span><span>Total</span><span>Facture</span><span>Corps d'état</span></div>
+                ${sections.map(s => `
+                <section class="owned-ce__group${s.cle.startsWith('__') ? ' owned-ce__group--info' : ''}" data-ce-group="${escapeHtml(s.cle)}" ${filtreValide === 'tous' || filtreValide === s.cle ? '' : 'hidden'}>
+                    <div class="owned-ce__head"><span class="owned-ce__head-nom">${escapeHtml(s.libelle)}</span><span class="owned-ce__head-compte">${s.compte}</span><strong>${fmt(s.total)}</strong></div>
+                    ${s.lignes}
+                </section>`).join('')}
+            </div>
+        </div>`;
+
+    root.querySelectorAll('[data-ce-filtre]').forEach(chip => {
+        chip.addEventListener('click', () => {
+            state.ownedCeFiltre = chip.dataset.ceFiltre;
+            root.querySelectorAll('[data-ce-filtre]').forEach(c => c.setAttribute('aria-pressed', String(c === chip)));
+            root.querySelectorAll('[data-ce-group]').forEach(g => {
+                g.hidden = state.ownedCeFiltre !== 'tous' && g.dataset.ceGroup !== state.ownedCeFiltre;
+            });
+        });
+    });
+    root.querySelectorAll('[data-preview-pdf]').forEach(btn => {
+        btn.addEventListener('click', () => openDocumentPreview(asset.id, btn.dataset.previewPdf));
+    });
+    root.querySelectorAll('[data-ce-reclasser]').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const all = loadOwnedAssets();
+            const list = all[asset.id]?.postAchat?.travaux || [];
+            const t = list.find(x => x.id === sel.dataset.travailId);
+            if (!t?.detail) return;
+            t.detail = reclasserArticle(t.detail, Number(sel.dataset.index), sel.value, corpsEtatLibres(list));
+            saveOwnedAssets(all);
+            _renderVueCorpsEtat(getOwnedAsset(asset.id));
+        });
+    });
+    root.querySelectorAll('[data-ce-relancer]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const resultat = await _planifierDecorticage(asset.id, btn.dataset.ceRelancer);
+            if (resultat === 'plafond') showToast("Limite d'analyses IA atteinte pour l'heure — réessaie plus tard", 'negative');
+            else if (resultat === 'echec') showToast('Analyse impossible pour cette facture', 'negative');
+        });
+    });
+    root.querySelector('[data-action="decortiquer-factures"]')?.addEventListener('click', async () => {
+        const resultats = await Promise.all(aFaire.map(t => _planifierDecorticage(asset.id, t.id)));
+        const nb = r => resultats.filter(x => x === r).length;
+        if (nb('plafond')) {
+            showToast(`${nb('ok')} facture${nb('ok') > 1 ? 's décortiquées' : ' décortiquée'} — limite d'analyses IA atteinte, relance dans une heure (les factures déjà traitées sont gardées)`, 'negative');
+        } else if (nb('echec')) {
+            showToast(`${nb('ok')} facture${nb('ok') > 1 ? 's décortiquées' : ' décortiquée'}, ${nb('echec')} en échec`, 'negative');
+        } else {
+            showToast(`${nb('ok')} facture${nb('ok') > 1 ? 's décortiquées' : ' décortiquée'}`);
+        }
+    });
+}
+
 function renderOwnedTravauxTab(asset) {
     const el = nodes.ownedTravauxContent || document.getElementById('owned-travaux-content');
     if (!el) return;
@@ -4294,8 +4609,17 @@ function renderOwnedTravauxTab(asset) {
         </details>`;
     }).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun frais enregistré.</p>';
 
+    const vueCorps = state.ownedTravauxVue === 'corps';
     el.innerHTML = `
-        <div class="owned-section-title">Frais &amp; justificatifs</div>
+        <div class="owned-travaux-head">
+            <div class="owned-section-title">Frais &amp; justificatifs</div>
+            <div class="mode-toggle mode-toggle--sm" role="group" aria-label="Affichage des frais">
+                <button type="button" class="mode-toggle__btn" data-travaux-vue-btn="liste" aria-pressed="${vueCorps ? 'false' : 'true'}">Liste des frais</button>
+                <button type="button" class="mode-toggle__btn" data-travaux-vue-btn="corps" aria-pressed="${vueCorps ? 'true' : 'false'}">Par corps d'état</button>
+            </div>
+        </div>
+        <div data-ce-root ${vueCorps ? '' : 'hidden'}></div>
+        <div data-travaux-liste ${vueCorps ? 'hidden' : ''}>
         <div class="owned-travaux-toolbar">
             <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…">
             <button type="button" class="btn btn--ghost btn--sm" data-action="print-factures" ${(post.travaux || []).length ? '' : 'disabled'}>Imprimer les factures</button>
@@ -4303,6 +4627,7 @@ function renderOwnedTravauxTab(asset) {
         </div>
         ${yearBlocksHtml}
         ${totalDed > 0 ? `<div class="owned-travaux-totals"><span>Déductible ${currentYear} : <strong>${Math.round(totalDed).toLocaleString('fr-FR')} €</strong></span></div>` : ''}
+        </div>
         <div class="owned-travaux-add-row">
             <div class="owned-travaux-dropzone" data-travaux-dropzone tabindex="0" role="button" aria-label="Déposer une facture ou une photo">
                 <input type="file" accept="application/pdf,image/jpeg,image/png" multiple data-travaux-file-input hidden>
@@ -4336,6 +4661,19 @@ function renderOwnedTravauxTab(asset) {
     el.querySelector('[data-action="print-factures"]')?.addEventListener('click', () => {
         openImpressionFacturesModal({ assetId: state.activeOwnedAssetId });
     });
+
+    // Bascule « Liste des frais » / « Par corps d'état » : choix gardé en mémoire de session
+    // (state), pas de persistance.
+    el.querySelectorAll('[data-travaux-vue-btn]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const corps = btn.dataset.travauxVueBtn === 'corps';
+            state.ownedTravauxVue = corps ? 'corps' : 'liste';
+            el.querySelectorAll('[data-travaux-vue-btn]').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+            el.querySelector('[data-ce-root]').hidden = !corps;
+            el.querySelector('[data-travaux-liste]').hidden = corps;
+        });
+    });
+    _renderVueCorpsEtat(asset);
 
     el.querySelectorAll('[data-preview-pdf]').forEach(btn => {
         btn.addEventListener('click', () => {

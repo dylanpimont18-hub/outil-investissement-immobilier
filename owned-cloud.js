@@ -122,6 +122,18 @@ export async function cloudExtraireFraisFacture(base64, mimeType) {
     return data;
 }
 
+// ─── Décorticage IA d'une facture par corps d'état : Cloud Function ──────────
+// functions/index.js, decortiquerFacture — voir spec
+// docs/superpowers/specs/2026-10-27-factures-par-corps-etat-design.md. `images` = une
+// {base64, mimeType} par page ; renvoie {articles: [{designation, quantite, prixUnitaire, total,
+// corpsEtat, mainOeuvre}], confiance}, aucune ecriture ici.
+const _decortiquerFacture = httpsCallable(functions, 'decortiquerFacture', { timeout: 130_000 });
+
+export async function cloudDecortiquerFacture(images) {
+    const { data } = await _decortiquerFacture({ images });
+    return data;
+}
+
 // ─── Extraction IA multi-documents (import de dossier bien) : Cloud Function ─
 // functions/index.js, extraireDossierBien — voir spec
 // docs/superpowers/specs/2026-09-22-import-dossier-bien.md. Un appel par document ; la fusion

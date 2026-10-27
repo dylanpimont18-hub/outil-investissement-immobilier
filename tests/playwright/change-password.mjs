@@ -65,6 +65,7 @@ export async function cloudDeleteDocument() {}
 export async function cloudDeleteAllDocuments() {}
 export async function cloudExtraireFraisFacture() { throw new Error('not stubbed'); }
 export async function cloudExtraireDossierBien() { throw new Error('not stubbed'); }
+export async function cloudDecortiquerFacture() { return { articles: [], confiance: 'basse' }; }
 export async function cloudDiagnosticPortefeuille() { return { recommendations: [] }; }
 export async function cloudChatPortefeuille() { return { reply: '' }; }
 export async function cloudGeocode() { return null; }

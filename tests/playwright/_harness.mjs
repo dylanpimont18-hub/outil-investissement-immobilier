@@ -58,6 +58,16 @@ export async function cloudDeleteDocument() {}
 export async function cloudDeleteAllDocuments() {}
 export async function cloudExtraireFraisFacture() { return { fournisseur: '', description: '', montant: 0, date: '', tagSuggestion: 'a-classifier', confiance: 'basse' }; }
 export async function cloudExtraireDossierBien() { throw new Error('not stubbed'); }
+// Décorticage : seed.decorticage = { articles, confiance } (défaut : aucun article) ou { error: 'code' } ;
+// S.decorticages journalise chaque appel (nombre de pages, types).
+S.decorticages = [];
+export async function cloudDecortiquerFacture(images) {
+    S.decorticages.push(images.map(i => i.mimeType));
+    if (S.decorticageDelay) await new Promise(r => setTimeout(r, S.decorticageDelay));
+    const d = seed.decorticage || {};
+    if (d.error) { const e = new Error(d.error); e.code = 'functions/' + d.error; throw e; }
+    return { articles: d.articles || [], confiance: d.confiance || 'haute' };
+}
 export async function cloudDiagnosticPortefeuille() { return { recommendations: [] }; }
 export async function cloudChatPortefeuille() { return { reply: '' }; }
 export async function cloudGeocode() { return { lat: null, lng: null }; }

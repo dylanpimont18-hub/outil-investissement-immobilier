@@ -15,10 +15,12 @@ const ALLOWED_CONFIANCE = ['haute', 'moyenne', 'basse'];
 // Limite le crédit Mammouth AI consommable par un compte compromis/abusif : pas de
 // persistance nécessaire (usage familial, faux négatifs après redémarrage acceptables),
 // une fenêtre glissante en mémoire suffit et évite une dépendance Firestore/admin SDK.
-// Partagée entre extraireFraisFacture et extraireDossierBien (même Map, même plafond) :
-// un dossier de 15-20 documents s'ajoute à l'usage Travaux normal, d'où le plafond à 30
-// (relevé depuis 10 le 2026-09-22 avec l'accord explicite de l'utilisateur).
-const RATE_LIMIT_MAX_CALLS = 30;
+// Partagée entre extraireFraisFacture, extraireDossierBien et decortiquerFacture (même Map, même
+// plafond) : un dossier de 15-20 documents s'ajoute à l'usage Travaux normal, d'où le plafond à 30
+// (relevé depuis 10 le 2026-09-22 avec l'accord explicite de l'utilisateur), puis à 100 le
+// 2026-10-27 (demande de l'utilisateur) : chaque facture ajoutée est aussi décortiquée, et la
+// ré-analyse des factures existantes en enchaîne des dizaines.
+const RATE_LIMIT_MAX_CALLS = 100;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 heure
 const MAX_BASE64_LENGTH = 7_000_000; // ~5 Mo de fichier source (base64 gonfle de ~33%)
 const _callTimestampsByUid = new Map();
@@ -164,6 +166,105 @@ exports.extraireFraisFacture = onCall({ secrets: [mammouthApiKey], region: 'euro
         description: typeof parsed.description === 'string' ? parsed.description : '',
         montant: Number(parsed.montant) || 0,
         tagSuggestion: ALLOWED_TAGS.includes(parsed.tagSuggestion) ? parsed.tagSuggestion : 'a-classifier',
+        confiance: ALLOWED_CONFIANCE.includes(parsed.confiance) ? parsed.confiance : 'basse'
+    };
+});
+
+// --- decortiquerFacture : articles d'une facture, classés par corps d'état ---
+// Onglet Travaux, sous-vue « Par corps d'état » (owned-portfolio.js, regroupement dans
+// corps-etat.js) — voir docs/superpowers/specs/2026-10-27-factures-par-corps-etat-design.md.
+// Reçoit toutes les pages d'une facture (une image par page, PDF rasterisé côté client) en un seul
+// appel, pour ne compter qu'un appel au plafond par facture. Aucune écriture ici.
+// Clés identiques à CORPS_ETAT de corps-etat.js (module ESM de la racine, non déployé avec les
+// functions) : toute modification de la liste se fait aux deux endroits.
+const CORPS_ETAT_PROMPT = [
+    ['electricite', 'Électricité (gaines, câbles, fils, prises, interrupteurs, tableau, disjoncteurs, luminaires)'],
+    ['plomberie', 'Plomberie / sanitaires (tubes, raccords, robinetterie, WC, lavabo, douche, baignoire, évacuations)'],
+    ['chauffage', 'Chauffage / ventilation (radiateurs, chaudière, chauffe-eau, pompe à chaleur, VMC)'],
+    ['platrerie', 'Plâtrerie / isolation (plaques de plâtre, rails, laine, enduits de cloison, faux plafonds)'],
+    ['peinture', 'Peinture / murs (peinture, sous-couche, papier peint, faïence murale décorative, rouleaux de peintre)'],
+    ['sols', 'Sols (carrelage, parquet, stratifié, sol vinyle, plinthes, colle et joints de carrelage)'],
+    ['menuiserie', 'Menuiserie (portes, fenêtres, volets, placards, quincaillerie de porte)'],
+    ['cuisine', 'Cuisine / électroménager (meubles de cuisine, plan de travail, évier, four, plaque, hotte, réfrigérateur)'],
+    ['maconnerie', 'Maçonnerie / gros œuvre (béton, parpaings, ciment, ouvertures de murs porteurs, dalle)'],
+    ['toiture', 'Toiture (tuiles, zinguerie, gouttières, charpente, étanchéité de toit)'],
+    ['outillage', 'Outillage / consommables (outils, visserie générique, sacs à gravats, bâches, location de matériel)'],
+    ['divers', 'Divers (frais de déplacement, livraison, évacuation des déchets, ou ce qui ne rentre nulle part)']
+];
+const MAX_PAGES_DECORTICAGE = 8;
+const MAX_TOTAL_BASE64_DECORTICAGE = 9_000_000;
+const MAX_ARTICLES_DECORTICAGE = 200;
+
+const DECORTICAGE_SYSTEM_PROMPT = `Tu es un assistant qui détaille une facture ou un ticket de travaux immobiliers français, article par article.
+Les images reçues sont les pages successives d'UN SEUL document.
+Tu réponds uniquement avec du JSON valide, sans markdown ni texte hors JSON, au format exact :
+{"articles": [{"designation": "...", "quantite": 0, "prixUnitaire": 0, "total": 0, "corpsEtat": "...", "mainOeuvre": false}], "confiance": "haute|moyenne|basse"}
+
+Règles :
+- Une entrée par ligne d'article ou de prestation facturée, dans l'ordre du document. N'ajoute PAS les lignes de sous-total, total HT, TVA, total TTC, acompte déjà versé ni net à payer.
+- designation : libellé de la ligne, raccourci si très long (80 caractères maximum), sans référence produit inutile.
+- quantite, prixUnitaire : nombres (null si absents). total : montant de la ligne en euros, tel qu'imprimé (TTC si la ligne est en TTC, HT sinon). Une remise sur une ligne à part est un article de total négatif.
+- corpsEtat : une des clés suivantes, à utiliser en priorité :
+${CORPS_ETAT_PROMPT.map(([cle, desc]) => `  - ${cle} : ${desc}`).join('\n')}
+  Seulement si AUCUNE clé ne convient vraiment (ex. piscine, ascenseur), écris un nom de corps d'état court en français (1 à 3 mots).
+- La main-d'œuvre (pose, installation, heures d'artisan) va dans le corps d'état concerné (« pose des prises » → electricite) avec "mainOeuvre": true ; une main-d'œuvre globale sans corps d'état identifiable va dans divers.
+- Si le document est illisible ou n'est pas une facture, renvoie "articles": [] et "confiance": "basse".`;
+
+exports.decortiquerFacture = onCall({ secrets: [mammouthApiKey], region: 'europe-west1', timeoutSeconds: 120 }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Authentification requise');
+    }
+    const { images } = request.data || {};
+    if (!Array.isArray(images) || images.length === 0) {
+        throw new HttpsError('invalid-argument', 'Fichier manquant');
+    }
+    if (images.length > MAX_PAGES_DECORTICAGE) {
+        throw new HttpsError('invalid-argument', `Trop de pages (${MAX_PAGES_DECORTICAGE} max)`);
+    }
+    let totalLength = 0;
+    for (const img of images) {
+        if (!img || typeof img.base64 !== 'string' || !img.base64) {
+            throw new HttpsError('invalid-argument', 'Fichier manquant');
+        }
+        if (!ALLOWED_MIME_TYPES.includes(img.mimeType)) {
+            throw new HttpsError('invalid-argument', 'Format non supporté (JPG ou PNG uniquement)');
+        }
+        totalLength += img.base64.length;
+    }
+    if (totalLength > MAX_TOTAL_BASE64_DECORTICAGE) {
+        throw new HttpsError('invalid-argument', 'Fichier trop volumineux');
+    }
+    _checkRateLimit(request.auth.uid);
+
+    const message = await _callMammouth({
+        jsonMode: true,
+        logLabel: 'decortiquerFacture',
+        messages: [
+            { role: 'system', content: DECORTICAGE_SYSTEM_PROMPT },
+            {
+                role: 'user',
+                content: [
+                    ...images.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64}` } })),
+                    { type: 'text', text: `Détaille les articles de cette facture (${images.length} page${images.length > 1 ? 's' : ''}).` }
+                ]
+            }
+        ]
+    });
+    const parsed = _parseJsonMessage(message, 'decortiquerFacture');
+    const num = v => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    const articles = (Array.isArray(parsed.articles) ? parsed.articles : [])
+        .slice(0, MAX_ARTICLES_DECORTICAGE)
+        .filter(a => a && typeof a === 'object' && typeof a.designation === 'string' && a.designation.trim())
+        .map(a => ({
+            designation: a.designation.trim().slice(0, 160),
+            quantite: num(a.quantite),
+            prixUnitaire: num(a.prixUnitaire),
+            total: num(a.total),
+            corpsEtat: typeof a.corpsEtat === 'string' ? a.corpsEtat.trim().slice(0, 40) : '',
+            mainOeuvre: a.mainOeuvre === true
+        }));
+    return {
+        articles,
         confiance: ALLOWED_CONFIANCE.includes(parsed.confiance) ? parsed.confiance : 'basse'
     };
 });
