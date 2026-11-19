@@ -238,6 +238,10 @@ body.drawer-open { overflow: hidden; }
     width: min(1440px, calc(100% - 48px));
     margin: 0 auto;
     padding-top: 102px;
+    /* Le bouton flottant 📄 (.owned-quickfab : 52 px, à 18 px du bas) ne doit rien recouvrir en bas
+       de page : hauteur + décalage + 16 px (audit 2026-11-18, F3). owned.html garde ses 96 px
+       (.shell--owned, plus bas dans ce fichier). */
+    padding-bottom: calc(52px + 18px + 16px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── Workspace ── */

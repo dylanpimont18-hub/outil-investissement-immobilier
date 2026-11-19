@@ -259,7 +259,88 @@ async function scenarioX1(browser) {
     await finish(m, 'X1 iPhone');
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1 };
+// ── F3 : boutons flottants qui ne recouvrent rien en bas de page ───────────
+// Fait défiler jusqu'en bas (fenêtre ET conteneurs défilants) puis liste les éléments visibles
+// (texte, boutons, champs) dont le rectangle croise un bouton flottant visible.
+const COVERED_AT_BOTTOM = async (page) => {
+    // behavior 'instant' : la page a scroll-behavior: smooth, un scrollTo simple n'arrive pas en bas à temps.
+    await page.evaluate(() => {
+        document.querySelectorAll('*').forEach((el) => { if (el.scrollHeight > el.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }); });
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+    });
+    await page.waitForTimeout(250);
+    await page.waitForFunction(() => Math.abs(window.scrollY + innerHeight - document.documentElement.scrollHeight) < 2, null, { timeout: 3000 }).catch(() => {});
+    return page.evaluate(() => {
+        const fabs = [...document.querySelectorAll('.owned-quickfab')].filter((f) => !f.hidden && getComputedStyle(f).display !== 'none').map((f) => f.getBoundingClientRect());
+        const hit = (r) => fabs.some((f) => r.left < f.right && r.right > f.left && r.top < f.bottom && r.bottom > f.top);
+        const out = [];
+        for (const el of document.querySelectorAll('body *')) {
+            if (el.closest('.owned-quickfab, #owned-chat-sheet, .app-toast, script, style')) continue;
+            const isCtl = el.matches('button, a[href], input, select, textarea, [role=button]');
+            const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+            if (!isCtl && !hasText) continue;
+            const s = getComputedStyle(el);
+            if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) === 0) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0 || r.bottom <= 0 || r.top >= innerHeight) continue;
+            if (hit(r)) out.push(`${el.tagName.toLowerCase()}.${[...el.classList].join('.')}: ${(el.textContent || el.placeholder || '').trim().slice(0, 40)}`);
+        }
+        return out;
+    });
+};
+
+async function scenarioF3(browser) {
+    console.log('F3 — boutons flottants');
+    const ctx = await openPcIndex(browser);
+    const { page } = ctx;
+    await page.click('.workspace-tab[data-target="collection-panel"]');
+    await page.waitForTimeout(400);
+    const pcScreens = [];
+    await page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Profil' }).first().click();
+    pcScreens.push(['Profil', await COVERED_AT_BOTTOM(page)]);
+    await shot(page, 'f3-pc-profil-bas');
+    await page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Vue d' }).first().click();
+    pcScreens.push(['Vue d\'ensemble', await COVERED_AT_BOTTOM(page)]);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await openAsset(page);
+    for (const tab of ['Acquisition', 'Exploitation', 'Travaux', 'Calcul']) {
+        await openAssetTab(page, tab);
+        pcScreens.push([`fiche ${tab}`, await COVERED_AT_BOTTOM(page)]);
+        if (tab === 'Travaux') await shot(page, 'f3-pc-travaux-bas');
+        await page.evaluate(() => window.scrollTo(0, 0));
+    }
+    await page.click('.workspace-tab[data-target="workspace-panel"]');
+    pcScreens.push(['Analyse', await COVERED_AT_BOTTOM(page)]);
+    await page.click('.workspace-tab[data-target="assistant-panel"]');
+    pcScreens.push(['Assistant', await COVERED_AT_BOTTOM(page)]);
+    for (const [name, covered] of pcScreens) {
+        await step(`PC ${name} : en bas de page, le bouton flottant ne recouvre rien`, () => assert.deepEqual(covered, []));
+    }
+    await finish(ctx, 'F3 PC');
+
+    const m = await openPage(browser, '/owned.html', { viewport: IPHONE, contextOptions: TOUCH });
+    await m.page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+    await m.page.waitForTimeout(300);
+    const mScreens = [['liste', await COVERED_AT_BOTTOM(m.page)]];
+    await m.page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Profil' }).first().click();
+    mScreens.push(['Profil', await COVERED_AT_BOTTOM(m.page)]);
+    await shot(m.page, 'f3-iphone-profil-bas');
+    await m.page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Vue d' }).first().click();
+    await m.page.evaluate(() => window.scrollTo(0, 0));
+    await openAsset(m.page);
+    for (const tab of ['Acquisition', 'Exploitation', 'Travaux', 'Calcul']) {
+        await openAssetTab(m.page, tab);
+        mScreens.push([`fiche ${tab}`, await COVERED_AT_BOTTOM(m.page)]);
+        if (tab === 'Travaux') await shot(m.page, 'f3-iphone-travaux-bas');
+        await m.page.evaluate(() => window.scrollTo(0, 0));
+    }
+    for (const [name, covered] of mScreens) {
+        await step(`iPhone ${name} : en bas de page, ✦ et 📄 ne recouvrent rien`, () => assert.deepEqual(covered, []));
+    }
+    await finish(m, 'F3 iPhone');
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();
