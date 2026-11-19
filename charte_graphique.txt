@@ -11,9 +11,21 @@ L'identité visuelle repose sur trois piliers :
 ============================================================
 2. TYPOGRAPHIE
 ============================================================
-- Titres (H1, H2, H3) : Montserrat (Bold) - Moderne et statutaire.
-- Corps de texte : Inter (Regular) - Optimisé pour la lisibilité sur écran.
-- Chiffres & Data : JetBrains Mono - Pour l'aspect "outil de précision".
+Charte unique (décidée le 20/11/2026, audit A4) : deux familles, toutes deux servies par le site
+(dossier vendor/fonts, format woff2, aucune requête vers Google Fonts) :
+- Texte et titres (H1, H2, H3, boutons, formulaires) : Inter, police variable (graisses 400 à 800).
+  Les titres se distinguent par la graisse (600-700), pas par une autre famille.
+- Chiffres & Data (montants, ratios, dates, KPI) : IBM Plex Mono (graisses 400, 500, 600) - "outil de précision".
+Les PDF (décision, dossier bancaire) utilisent les mêmes fichiers. Plus aucune autre police :
+Manrope, Cormorant Garamond, Montserrat, JetBrains Mono et Space Grotesk ont été retirées.
+
+Mise en oeuvre : variables --font-heading / --font-body / --font-display / --font-base (Inter) et --font-mono
+(IBM Plex Mono) dans styles.css ; ne jamais écrire un nom de police en dur dans une règle. Les boutons et champs
+héritent la police du texte (button, input, select, textarea { font-family: inherit }).
+Chargement : font-display: swap et préchargement (<link rel="preload" as="font" crossorigin>) d'Inter latin et des
+trois graisses de Plex Mono dans index.html et owned.html, pour qu'aucun changement de police ne soit visible au
+premier affichage (test : tests/playwright/audit-lot3.mjs, scénario A4, sous 200 ms de latence). Un fichier de
+police remplacé doit changer de nom (cache d'un an, immutable, voir firebase.json).
 
 ============================================================
 3. MODE CLAIR (LIGHT MODE) - Institutionnel & Pur

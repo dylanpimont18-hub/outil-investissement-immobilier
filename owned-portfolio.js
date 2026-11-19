@@ -792,7 +792,7 @@ function _projectionChartOptions(pal, { stacked = false, onClick = null } = {}) 
         onClick,
         onHover: onClick ? (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; } : undefined,
         plugins: {
-            legend: { position: 'top', align: 'start', labels: { color: pal.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10, boxHeight: 10, padding: 14, font: { family: "'Manrope', system-ui, sans-serif", size: 11 } } },
+            legend: { position: 'top', align: 'start', labels: { color: pal.text, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10, boxHeight: 10, padding: 14, font: { family: "'Inter', system-ui, sans-serif", size: 11 } } },
             tooltip: { callbacks: { label: ctx => `${ctx.dataset.label} : ${Math.round(ctx.parsed.y).toLocaleString('fr-FR')} €` } },
         },
         scales: {

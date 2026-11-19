@@ -79,7 +79,7 @@ The acquisition decision is a composite score (0–100) built from: cash-flow, D
 ## Design system
 
 The visual identity is documented in `charte_graphique.txt`. Key points:
-- Fonts: Cormorant Garamond (display), IBM Plex Mono (data/numbers), Manrope (body)
+- Fonts (charte unique, 2026-11-20) : Inter (texte et titres, variable) + IBM Plex Mono (chiffres), woff2 locales dans `vendor/fonts/`, préchargées ; jamais de nom de police en dur, passer par `--font-body` / `--font-heading` / `--font-mono`
 - Accent color: `#C5A059` (light) / `#D4AF37` (dark) — gold
 - Status tones map to CSS class suffixes: `--positive`, `--excellent`, `--watch`, `--negative`, `--neutral`
 - Spacing is a 4px grid; corner radii: 8px (components), 12px (cards)

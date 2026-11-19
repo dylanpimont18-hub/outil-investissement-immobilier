@@ -349,7 +349,7 @@ function _kv(label, value, strong = false) {
 const REPORT_CSS = `
     @page { size: A4; margin: 14mm 12mm; }
     * { box-sizing: border-box; }
-    .report-root { margin: 0; padding: 24px; background: #fff; color: #1f2328; font: 13px/1.5 -apple-system, "Segoe UI", Manrope, Helvetica, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .report-root { margin: 0; padding: 24px; background: #fff; color: #1f2328; font: 13px/1.5 -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .report { max-width: 900px; margin: 0 auto; }
     header { border-bottom: 2px solid #C5A059; padding-bottom: 12px; margin-bottom: 18px; }
     .eyebrow { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8a6d2f; }

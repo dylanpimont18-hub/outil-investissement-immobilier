@@ -314,7 +314,7 @@ function buildPDFParts(uploadedPhotos) {
 }
 
 #pdf-render .r-title {
-  font-family: "Space Grotesk", "Inter", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 26px;
   letter-spacing: -0.6px;
 }
@@ -413,7 +413,7 @@ function buildPDFParts(uploadedPhotos) {
 }
 
 #pdf-render .r-score-stars {
-  font-family: "Space Grotesk", "Inter", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: .18em;
@@ -458,7 +458,7 @@ function buildPDFParts(uploadedPhotos) {
 }
 
 #pdf-render .r-kpi-val {
-  font-family: "Space Grotesk", "Inter", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 21px;
   letter-spacing: -0.4px;
   margin-bottom: 2px;
@@ -560,7 +560,7 @@ function buildPDFParts(uploadedPhotos) {
 }
 
 #pdf-render .regime-cf {
-  font-family: "Space Grotesk", "Inter", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 17px;
 }
 
@@ -732,7 +732,7 @@ function buildPDFParts(uploadedPhotos) {
   font-weight: 700;
 }
 #pdf-render .r-exec-val {
-  font-family: "Space Grotesk", "Inter", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   font-size: 10.5px;
   font-weight: 800;
   color: #0f172a;
@@ -1007,7 +1007,7 @@ export function buildPrintDocument(uploadedPhotos) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
     <style>
-  ${buildLocalFontFaceCss(assetBaseUrl, { includeLegacyAliases: true })}
+  ${buildLocalFontFaceCss(assetBaseUrl)}
   ${css}
 
   html, body {
@@ -1060,145 +1060,38 @@ export function buildPrintDocument(uploadedPhotos) {
     return { documentHTML, filename };
 }
 
-function buildLocalFontFaceCss(assetBaseUrl, options = {}) {
-    const { includeLegacyAliases = false } = options;
+// Charte unique (audit A4) : Inter pour le texte (police variable, graisses 100-900), IBM Plex Mono pour les
+// chiffres — les memes fichiers que l'application, copies dans vendor/fonts. Plus d'alias « legacy » : Space
+// Grotesk et Inter pointaient vers Manrope.
+function buildLocalFontFaceCss(assetBaseUrl) {
     const baseUrl = String(assetBaseUrl || '').replace(/\/$/, '');
     const fontUrl = fileName => `${baseUrl}/vendor/fonts/${fileName}`;
-
-    const sharedFonts = `
-@font-face {
-  font-family: 'Cormorant Garamond';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('${fontUrl('CormorantGaramond-500.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Cormorant Garamond';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('${fontUrl('CormorantGaramond-600.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Cormorant Garamond';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('${fontUrl('CormorantGaramond-700.ttf')}') format('truetype');
-}
+    const plex = (poids, fichier) => `
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
-  font-weight: 400;
+  font-weight: ${poids};
   font-display: swap;
-  src: url('${fontUrl('IBMPlexMono-400.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('${fontUrl('IBMPlexMono-500.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'IBM Plex Mono';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('${fontUrl('IBMPlexMono-600.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-400.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-500.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-600.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-700.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-800.ttf')}') format('truetype');
-}
-`;
-
-    if (!includeLegacyAliases) {
-        return sharedFonts;
-    }
-
-    return `${sharedFonts}
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-400.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-500.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-600.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-700.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-600.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-700.ttf')}') format('truetype');
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('${fontUrl('Manrope-800.ttf')}') format('truetype');
+  src: url('${fontUrl(fichier)}') format('woff2');
 }`;
+    return `
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('${fontUrl('Inter-latin.woff2')}') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('${fontUrl('Inter-latin-ext.woff2')}') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}${plex(400, 'IBMPlexMono-400.woff2')}${plex(500, 'IBMPlexMono-500.woff2')}${plex(600, 'IBMPlexMono-600.woff2')}
+`;
 }
 
 function escapeDecisionPdfHtml(value) {
@@ -1395,7 +1288,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
         padding: 0;
         background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
         color: var(--text);
-        font-family: 'Manrope', sans-serif;
+        font-family: 'Inter', sans-serif;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -1499,7 +1392,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       .hero h1,
       .panel h2 {
         margin: 0;
-        font-family: 'Manrope', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-weight: 700;
         letter-spacing: -0.03em;
         color: var(--text);
@@ -1630,7 +1523,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
 
       .score-value {
         margin-top: 10px;
-        font-family: 'Manrope', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-size: 46px;
         font-weight: 700;
         line-height: 0.92;
@@ -1717,7 +1610,7 @@ export function buildDecisionPrintDocument({ analysisModel, profileData, variabl
       .metric-card strong {
         display: block;
         margin-top: 10px;
-        font-family: 'Manrope', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-size: 25px;
         font-weight: 700;
         letter-spacing: -0.04em;
@@ -2635,7 +2528,7 @@ export function buildBankDossierPrintDocument({ assets, sections, highlights, pr
         padding: 0;
         background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
         color: var(--text);
-        font-family: 'Manrope', sans-serif;
+        font-family: 'Inter', sans-serif;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }

@@ -31,4 +31,9 @@ for (const p of ['/', '/index.html', '/owned.html', '/portefeuille']) {
     if (!ok) echecs++;
     console.log(`${ok ? '✓' : '✗'} ${p.padEnd(14)} ${Object.keys(h).join(', ') || '(aucun en-tête)'}`);
 }
+// Polices locales (audit A4) : cache d'un an, un fichier remplacé doit changer de nom.
+const cachePolice = headersOf('/vendor/fonts/Inter-latin.woff2')['Cache-Control'] || '';
+const okPolice = /max-age=31536000/.test(cachePolice) && /immutable/.test(cachePolice);
+if (!okPolice) echecs++;
+console.log(`${okPolice ? '✓' : '✗'} /vendor/fonts/*  Cache-Control : ${cachePolice || '(aucun)'}`);
 process.exit(echecs ? 1 : 0);

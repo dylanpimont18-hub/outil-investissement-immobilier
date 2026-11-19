@@ -12,9 +12,11 @@
     <meta name="apple-mobile-web-app-title" content="Spark Portefeuille">
     <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Polices locales (charte unique) : les fichiers du premier affichage (Inter + 3 graisses de Plex Mono) sont préchargés (crossorigin obligatoire, même pour une police du même site) -->
+    <link rel="preload" href="/vendor/fonts/Inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/vendor/fonts/IBMPlexMono-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/vendor/fonts/IBMPlexMono-500.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/vendor/fonts/IBMPlexMono-600.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
     <!-- defer : n'empêche pas l'affichage ; exécutés dans l'ordre, avant le module owned-entry.js (déclaré plus bas), donc L et Chart existent quand l'application démarre -->

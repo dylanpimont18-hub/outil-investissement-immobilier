@@ -192,7 +192,67 @@ async function scenarioT2(browser) {
     }
 }
 
-const SCENARIOS = { T5: scenarioT5, T5IPHONE: scenarioT5Iphone, T2: scenarioT2 };
+// ── A4 : charte typographique unique, polices locales, pas de changement de police au 1er affichage ──
+// Espion posé avant tout script : heure de la fin de chargement de chaque police et du premier affichage.
+const ESPION_POLICES = () => {
+    window.__policesFin = [];
+    window.__policesDebut = [];
+    document.fonts.addEventListener('loading', () => window.__policesDebut.push(performance.now()));
+    window.__fcp = null;
+    document.fonts.addEventListener('loadingdone', e => window.__policesFin.push({ t: performance.now(), n: e.fontfaces.map(f => `${f.family}/${f.weight}`) }));
+    new PerformanceObserver(l => { for (const p of l.getEntries()) if (p.name === 'first-contentful-paint') window.__fcp = p.startTime; }).observe({ type: 'paint', buffered: true });
+};
+
+async function scenarioA4(browser) {
+    console.log('A4 — charte typographique : Inter + IBM Plex Mono, locales');
+    for (const [label, path, viewport, opts] of [['PC', '/index.html', PC, {}], ['iPhone', '/owned.html', IPHONE, { contextOptions: TOUCH }]]) {
+        const hotes = new Set(), polices = [];
+        const ctx = await openPage(browser, path, { viewport, initScripts: [[ESPION_POLICES, null]], ...opts });
+        const { page } = ctx;
+        page.on('request', r => { hotes.add(new URL(r.url()).host); if (/\.(woff2?|ttf)(\?|$)/.test(r.url())) polices.push(r.url().split('/').pop()); });
+        const cdp = await ctx.context.newCDPSession(page);
+        await cdp.send('Network.enable');
+        await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+        await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 200, downloadThroughput: 1_500_000 / 8, uploadThroughput: 750_000 / 8 });
+        await page.reload({ waitUntil: 'load' });
+        if (path === '/index.html') { await waitAppStarted(page); if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape'); }
+        else await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 30000 });
+        await page.waitForTimeout(800);
+        await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+
+        await step(`${label} : aucune requête vers Google Fonts, uniquement des polices locales`, () => {
+            assert.deepEqual([...hotes].filter(h => /googleapis|gstatic/.test(h)), []);
+            assert.ok(polices.includes('Inter-latin.woff2') && polices.some(p => /^IBMPlexMono-\d+\.woff2$/.test(p)), polices.join(', '));
+            assert.ok(polices.every(p => /\.woff2$/.test(p)), 'seulement du woff2 : ' + polices.join(', '));
+            assert.equal(polices.some(p => /Manrope|Cormorant/.test(p)), false);
+        });
+        await step(`${label} : préchargement des polices du premier affichage`, async () => {
+            const pre = await page.$$eval('link[rel=preload][as=font]', l => l.map(x => `${x.getAttribute('href')}|${x.crossOrigin}`));
+            assert.deepEqual(pre, ['Inter-latin', 'IBMPlexMono-400', 'IBMPlexMono-500', 'IBMPlexMono-600'].map(n => '/vendor/fonts/' + n + '.woff2|anonymous'));
+        });
+        await step(`${label} : une seule famille de texte (Inter) et une seule famille de chiffres (IBM Plex Mono) à l'écran`, async () => {
+            const r = await page.evaluate(() => {
+                const vis = el => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+                const f = new Set([...document.querySelectorAll('body *')].filter(el => vis(el) && el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()))
+                    .map(el => getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, '').trim()));
+                const charges = [...document.fonts].filter(x => x.status === 'loaded').map(x => x.family.replace(/["']/g, ''));
+                return { familles: [...f].sort(), inter: charges.includes('Inter'), mono: charges.includes('IBM Plex Mono') };
+            });
+            assert.deepEqual(r.familles.filter(x => !['Inter', 'IBM Plex Mono'].includes(x)), [], JSON.stringify(r));
+            assert.equal(r.inter && r.mono, true);
+        });
+        await step(`${label} : réseau lent (200 ms de latence) — chaque police est prête en moins de 100 ms dès qu'un texte en a besoin (pas de changement visible)`, async () => {
+            const r = await page.evaluate(() => ({ debut: window.__policesDebut, fin: window.__policesFin }));
+            assert.ok(r.fin.length >= 2, JSON.stringify(r));
+            const lents = r.fin.map(e => ({ n: e.n, ms: Math.round(e.t - Math.max(...r.debut.filter(d => d <= e.t))) })).filter(x => x.ms > 100);
+            assert.deepEqual(lents, [], JSON.stringify(r));
+        });
+        await shotThemes(page, `a4-${label.toLowerCase()}`, { fullPage: true });
+        await finish(ctx, `A4 ${label}`);
+    }
+}
+
+const SCENARIOS = { T5: scenarioT5, T5IPHONE: scenarioT5Iphone, T2: scenarioT2, A4: scenarioA4 };
 const only = (process.env.L3_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();
