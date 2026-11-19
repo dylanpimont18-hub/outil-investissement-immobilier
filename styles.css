@@ -8188,6 +8188,32 @@ body.asset-report-open .owned-quickfab { display: none; }
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
+/* Libellé de champ des formulaires en ligne du portefeuille (audit 2026-11-18, X1).
+   PC : le <label> s'efface de la mise en page (display: contents), le champ reste l'élément de la
+   ligne comme avant et le texte n'est lu que par les lecteurs d'écran. Mobile : le libellé
+   s'affiche au-dessus du champ (le texte indicatif disparaît dès la saisie). */
+.field-inline { display: contents; }
+.field-inline__label {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+@media (max-width: 640px) {
+    .field-inline {
+        display: flex; flex-direction: column; gap: 4px;
+        flex: 1 1 140px; min-width: 0;
+    }
+    .field-inline__label {
+        position: static; width: auto; height: auto; margin: 0;
+        overflow: visible; clip: auto; white-space: normal;
+        font-size: 12px; font-weight: 500; color: var(--text-secondary);
+    }
+    /* Les largeurs en ligne (flex: 0 0 140px…) visent la ligne PC : dans la colonne mobile,
+       le champ prend toute la largeur de son libellé. */
+    .field-inline > .variables-input {
+        flex: 0 0 auto !important; width: 100%; min-width: 0 !important;
+    }
+}
+
 /* ── Coût d'un euro emprunté : lecture directe (Analyse, formulaire Crédit) + calculette ── */
 .ratio-credit-readout {
     grid-column: 1 / -1;

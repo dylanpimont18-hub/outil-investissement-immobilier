@@ -236,12 +236,12 @@
                                     <label class="variables-field" for="taux-input">
                                         <span class="status-label">Taux %</span>
                                         <input id="taux-input" name="taux-input" type="number" class="variables-input" min="0" step="0.01" inputmode="decimal">
-                                        <input type="range" id="taux-slider" class="variables-slider" min="0.5" max="7" step="0.1" value="3.5" aria-hidden="true" tabindex="-1">
+                                        <input type="range" id="taux-slider" class="variables-slider" aria-label="Taux % (curseur)" min="0.5" max="7" step="0.1" value="3.5" aria-hidden="true" tabindex="-1">
                                     </label>
                                     <label class="variables-field" for="duree">
                                         <span class="status-label">Durée (ans)</span>
                                         <input id="duree" name="duree" type="number" class="variables-input" min="1" step="1" inputmode="numeric">
-                                        <input type="range" id="duree-slider" class="variables-slider" min="5" max="30" step="1" value="20" aria-hidden="true" tabindex="-1">
+                                        <input type="range" id="duree-slider" class="variables-slider" aria-label="Durée en années (curseur)" min="5" max="30" step="1" value="20" aria-hidden="true" tabindex="-1">
                                     </label>
                                     <!-- Coût d'un euro emprunté pour le taux et la durée saisis (ratioRemboursement, calculs.js) -->
                                     <div id="ratio-credit-readout" class="ratio-credit-readout" hidden></div>
@@ -813,7 +813,7 @@
         <div id="assistant-chat" class="assistant-chat">
             <div id="assistant-chat-messages" class="assistant-chat__messages"></div>
             <form id="assistant-chat-form" class="assistant-chat__form">
-                <textarea id="assistant-chat-input" class="assistant-chat__input" rows="2" placeholder="Ex : Rédige un email à mon banquier pour expliquer un cash-flow négatif temporaire sur mon bien à Lyon…" required></textarea>
+                <textarea id="assistant-chat-input" class="assistant-chat__input" aria-label="Votre message à l’assistant" rows="2" placeholder="Ex : Rédige un email à mon banquier pour expliquer un cash-flow négatif temporaire sur mon bien à Lyon…" required></textarea>
                 <button type="submit" class="btn btn--primary assistant-chat__send">Envoyer</button>
             </form>
         </div>

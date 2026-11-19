@@ -2022,7 +2022,7 @@ function renderOwnedProfilTab() {
             `).join('')}
         </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune évolution enregistrée — le revenu ci-dessus s'applique à toutes les années.</p>`}
         <form class="owned-loyers-form" data-form="add-revenu-hist" novalidate>
-            <input type="number" name="revenu" class="variables-input" placeholder="Revenu €/an" min="0" step="500" required style="flex:1;min-width:120px">
+            <label class="field-inline"><span class="field-inline__label">Revenu (€/an)</span><input type="number" name="revenu" class="variables-input" placeholder="Revenu €/an" min="0" step="500" required style="flex:1;min-width:120px"></label>
             <label class="owned-loyer-date-label">
                 <span>à partir de</span>
                 <input type="number" name="annee" class="variables-input" value="${anneeCourante}" min="2000" max="2100" required style="min-width:100px">
@@ -2043,8 +2043,8 @@ function renderOwnedProfilTab() {
             `).join('')}
         </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun crédit hors immobilier enregistré.</p>`}
         <form class="owned-loyers-form" data-form="add-autre-credit" novalidate>
-            <input type="text" name="libelle" class="variables-input" placeholder="ex : Crédit auto" required style="flex:1;min-width:120px">
-            <input type="number" name="mensualite" class="variables-input" placeholder="Mensualité €/mois" min="0" step="10" required style="min-width:140px">
+            <label class="field-inline"><span class="field-inline__label">Libellé du crédit</span><input type="text" name="libelle" class="variables-input" placeholder="ex : Crédit auto" required style="flex:1;min-width:120px"></label>
+            <label class="field-inline"><span class="field-inline__label">Mensualité (€/mois)</span><input type="number" name="mensualite" class="variables-input" placeholder="Mensualité €/mois" min="0" step="10" required style="min-width:140px"></label>
             <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
         </form>
 
@@ -4620,7 +4620,7 @@ function renderOwnedTravauxTab(asset) {
         <div data-ce-root ${vueCorps ? '' : 'hidden'}></div>
         <div data-travaux-liste ${vueCorps ? 'hidden' : ''}>
         <div class="owned-travaux-toolbar">
-            <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…">
+            <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…" aria-label="Rechercher un frais">
             <button type="button" class="btn btn--ghost btn--sm" data-action="print-factures" ${(post.travaux || []).length ? '' : 'disabled'}>Imprimer les factures</button>
             ${IS_MOBILE_PAGE ? '' : `<button type="button" class="btn btn--ghost btn--sm" data-action="open-projection-impots" title="Effet des travaux déductibles sur l'impôt du foyer, année par année">Impôts des prochaines années</button>`}
         </div>
@@ -4639,16 +4639,16 @@ function renderOwnedTravauxTab(asset) {
             </div>
             <form class="owned-travaux-form" data-form="add-travail-tab" novalidate>
                 <div class="owned-travaux-ai-banner" data-travaux-ai-banner hidden></div>
-                <input type="date" name="date" class="variables-input" required placeholder="Date" data-field="date" style="flex:0 0 140px">
-                <input type="text" name="description" class="variables-input" required placeholder="Description" data-field="description" style="flex:1;min-width:120px">
-                <input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" data-field="montant" style="flex:0 0 100px">
+                <label class="field-inline"><span class="field-inline__label">Date du frais</span><input type="date" name="date" class="variables-input" required placeholder="Date" data-field="date" style="flex:0 0 140px"></label>
+                <label class="field-inline"><span class="field-inline__label">Description</span><input type="text" name="description" class="variables-input" required placeholder="Description" data-field="description" style="flex:1;min-width:120px"></label>
+                <label class="field-inline"><span class="field-inline__label">Montant (€)</span><input type="number" name="montant" class="variables-input" required placeholder="Montant €" min="0" data-field="montant" style="flex:0 0 100px"></label>
                 <span class="owned-travaux-tag-wrap">
-                    <select name="tag" class="variables-input" data-field="tag" style="flex:0 0 130px">
+                    <label class="field-inline"><span class="field-inline__label">Nature du frais</span><select name="tag" class="variables-input" data-field="tag" style="flex:0 0 130px">
                         ${natureFraisOptionsHtml()}
-                    </select>
+                    </select></label>
                     <span class="owned-tag-suggested-badge" data-tag-suggested-badge hidden>🤖 suggéré</span>
                 </span>
-                <input type="text" name="commentaire" class="variables-input" placeholder="Commentaire (optionnel)" style="flex:1;min-width:120px">
+                <label class="field-inline"><span class="field-inline__label">Commentaire (optionnel)</span><input type="text" name="commentaire" class="variables-input" placeholder="Commentaire (optionnel)" style="flex:1;min-width:120px"></label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text-secondary);white-space:nowrap;flex:0 0 auto" data-tooltip="À cocher si ce frais fait partie de l'enveloppe du crédit immobilier principal (pas payé cash) — reste déductible fiscalement l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">
                     <input type="checkbox" name="financeParCredit" value="1"> Financé par le crédit
                 </label>
@@ -5936,19 +5936,19 @@ function renderAccordionAcquisition(asset) {
             <tbody>
                 ${lots.length ? lots.map(l => `
                 <tr data-lot-id="${escapeHtml(l.id)}">
-                    <td><input class="variables-input variables-input--sm" type="text" data-lot-field="nom" value="${escapeHtml(l.nom)}"></td>
-                    <td><input class="variables-input variables-input--sm" type="number" min="0" step="10" data-lot-field="loyer" value="${l.loyer}"></td>
-                    <td><input class="variables-input variables-input--sm" type="number" min="0" max="100" step="1" data-lot-field="vacance" value="${l.vacance}"></td>
-                    <td><input class="variables-input variables-input--sm" type="text" data-lot-field="locataire" value="${escapeHtml(l.locataire || '')}" placeholder="Nom locataire"></td>
+                    <td><input class="variables-input variables-input--sm" type="text" data-lot-field="nom" aria-label="Nom du lot" value="${escapeHtml(l.nom)}"></td>
+                    <td><input class="variables-input variables-input--sm" type="number" min="0" step="10" data-lot-field="loyer" aria-label="Loyer (€/mois) de ${escapeHtml(l.nom)}" value="${l.loyer}"></td>
+                    <td><input class="variables-input variables-input--sm" type="number" min="0" max="100" step="1" data-lot-field="vacance" aria-label="Vacance (%) de ${escapeHtml(l.nom)}" value="${l.vacance}"></td>
+                    <td><input class="variables-input variables-input--sm" type="text" data-lot-field="locataire" aria-label="Locataire de ${escapeHtml(l.nom)}" value="${escapeHtml(l.locataire || '')}" placeholder="Nom locataire"></td>
                     <td><button class="owned-travaux-delete" data-delete-lot="${escapeHtml(l.id)}" title="Supprimer ce lot" aria-label="Supprimer ${escapeHtml(l.nom)}">✕</button></td>
                 </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;font-style:italic;color:var(--text-tertiary);padding:12px">Aucun lot — ajoutez le premier lot ci-dessous</td></tr>'}
             </tbody>
         </table>
         <form class="owned-loyers-form" data-form="add-lot" novalidate>
-            <input type="text" name="nom" class="variables-input" placeholder="Nom du lot (ex. Appt 1)" style="flex:1;min-width:120px">
-            <input type="number" name="loyer" class="variables-input" placeholder="Loyer €/mois" min="0" step="10" style="flex:1;min-width:80px">
-            <input type="number" name="vacance" class="variables-input" placeholder="Vacance %" min="0" max="100" step="1" value="5" style="flex:1;min-width:80px">
-            <input type="text" name="locataire" class="variables-input" placeholder="Locataire" style="flex:1;min-width:100px">
+            <label class="field-inline"><span class="field-inline__label">Nom du lot</span><input type="text" name="nom" class="variables-input" placeholder="Nom du lot (ex. Appt 1)" style="flex:1;min-width:120px"></label>
+            <label class="field-inline"><span class="field-inline__label">Loyer (€/mois)</span><input type="number" name="loyer" class="variables-input" placeholder="Loyer €/mois" min="0" step="10" style="flex:1;min-width:80px"></label>
+            <label class="field-inline"><span class="field-inline__label">Vacance (%)</span><input type="number" name="vacance" class="variables-input" placeholder="Vacance %" min="0" max="100" step="1" value="5" style="flex:1;min-width:80px"></label>
+            <label class="field-inline"><span class="field-inline__label">Locataire</span><input type="text" name="locataire" class="variables-input" placeholder="Locataire" style="flex:1;min-width:100px"></label>
             <button type="submit" class="btn btn--primary btn--sm">+ Ajouter un lot</button>
         </form>
         ${lots.length ? `<div class="owned-caveat" style="margin-top:6px">CF consolidé sur ${lots.length} lot${lots.length > 1 ? 's' : ''} : ${Math.round(resolveLoyerVacance(asset).loyer).toLocaleString('fr-FR')} €/mois de loyer cumulé, ${formatPercent(resolveLoyerVacance(asset).vacancePct)} de vacance pondérée.</div>` : ''}
@@ -6244,11 +6244,11 @@ function renderAccordionPostAchat(asset) {
                 <input class="variables-input" type="number" min="0" step="5" data-post-field="chargesCopro" value="${displayCopro}">
             </label>`}
             <div class="variables-field">
-                <span class="variables-label" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <label class="variables-label" style="display:flex;align-items:center;gap:6px;cursor:pointer">
                     <input type="checkbox" data-gestion-toggle ${hasGestionLocative ? 'checked' : ''}>
                     Gestion locative${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}
-                </span>
-                <input class="variables-input" type="number" min="0" max="20" step="0.5" placeholder="% loyer" data-post-field="gestionLocative" value="${displayGestion}" ${hasGestionLocative ? '' : 'hidden'}>
+                </label>
+                <input class="variables-input" type="number" min="0" max="20" step="0.5" placeholder="% loyer" aria-label="Gestion locative (% du loyer)" data-post-field="gestionLocative" value="${displayGestion}" ${hasGestionLocative ? '' : 'hidden'}>
             </div>
             <label class="variables-field">
                 <span class="variables-label">Assurance PNO (€/an)${displayFromYear ? ` <small style="color:var(--text-tertiary)">(depuis ${displayFromYear})</small>` : ''}</span>
@@ -6267,11 +6267,11 @@ function renderAccordionPostAchat(asset) {
             `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Ajoutez une année pour suivre l\'évolution des charges.</p>'}
         </div>
         <form class="owned-charges-form" data-form="add-charges" novalidate>
-            <input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.dateAchat ? parseDateAchat(asset.dateAchat).annee : 2020}" step="1" required style="min-width:0">
-            <input type="number" name="taxeFonciere" class="variables-input" placeholder="TF (€/an)" min="0" step="10" style="min-width:0">
-            <input type="number" name="chargesCopro" class="variables-input" placeholder="Copro (€/mois)" min="0" step="5" style="min-width:0">
-            <input type="number" name="gestionLocative" class="variables-input" placeholder="Gestion (%)" min="0" max="20" step="0.5" style="min-width:0">
-            <input type="number" name="assurancePNO" class="variables-input" placeholder="PNO (€/an)" min="0" step="10" style="min-width:0">
+            <label class="field-inline"><span class="field-inline__label">Année</span><input type="number" name="annee" class="variables-input" placeholder="Année" min="${asset.dateAchat ? parseDateAchat(asset.dateAchat).annee : 2020}" step="1" required style="min-width:0"></label>
+            <label class="field-inline"><span class="field-inline__label">Taxe foncière (€/an)</span><input type="number" name="taxeFonciere" class="variables-input" placeholder="TF (€/an)" min="0" step="10" style="min-width:0"></label>
+            <label class="field-inline"><span class="field-inline__label">Charges copro (€/mois)</span><input type="number" name="chargesCopro" class="variables-input" placeholder="Copro (€/mois)" min="0" step="5" style="min-width:0"></label>
+            <label class="field-inline"><span class="field-inline__label">Gestion locative (%)</span><input type="number" name="gestionLocative" class="variables-input" placeholder="Gestion (%)" min="0" max="20" step="0.5" style="min-width:0"></label>
+            <label class="field-inline"><span class="field-inline__label">Assurance PNO (€/an)</span><input type="number" name="assurancePNO" class="variables-input" placeholder="PNO (€/an)" min="0" step="10" style="min-width:0"></label>
             <button type="submit" class="btn btn--primary btn--sm">+ Ajouter</button>
         </form>
 
@@ -6316,7 +6316,7 @@ function renderAccordionPostAchat(asset) {
                 à chaque changement de loyer.
             </p>`}
             <form class="owned-loyers-form" data-form="add-loyer-hist" novalidate>
-                <input type="number" name="montant" class="variables-input" placeholder="Loyer €/mois" min="0" step="10" required style="flex:1;min-width:110px">
+                <label class="field-inline"><span class="field-inline__label">Loyer (€/mois)</span><input type="number" name="montant" class="variables-input" placeholder="Loyer €/mois" min="0" step="10" required style="flex:1;min-width:110px"></label>
                 <label class="owned-loyer-date-label">
                     <span>à partir de</span>
                     <input type="month" name="mois" class="variables-input" value="${moisDefaut}" required style="min-width:140px">
@@ -6358,7 +6358,7 @@ function renderAccordionPostAchat(asset) {
             `).join('') || '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune note.</p>'}
         </div>
         <div class="owned-notes-add">
-            <textarea class="variables-input owned-notes-textarea" placeholder="Ajouter une note…" rows="3"></textarea>
+            <label class="field-inline"><span class="field-inline__label">Nouvelle note</span><textarea class="variables-input owned-notes-textarea" placeholder="Ajouter une note…" rows="3"></textarea></label>
             <button class="btn btn--primary btn--sm" data-action="save-note" type="button">Enregistrer</button>
         </div>
     `;

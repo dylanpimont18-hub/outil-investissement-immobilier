@@ -162,7 +162,104 @@ async function scenarioT1(browser) {
     }
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1 };
+// ── X1 : libellés des champs ────────────────────────────────────────────────
+const NO_LABEL = () => [...document.querySelectorAll('input:not([type=hidden]):not([type=file]), select, textarea')]
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; })
+    .filter((el) => !(el.labels?.length || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')))
+    .map((el) => `${el.tagName.toLowerCase()}[name=${el.name}] ph="${el.placeholder || ''}"`);
+
+// Nom accessible calculé par Chromium lui-même (arbre d'accessibilité CDP), pas par Playwright.
+async function axName(page, selector) {
+    const cdp = await page.context().newCDPSession(page);
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1 });
+    const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector });
+    const { nodes } = await cdp.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false });
+    await cdp.detach();
+    return nodes[0]?.name?.value || '';
+}
+
+const labelsVisible = (page) => page.evaluate(() => [...document.querySelectorAll('#owned-detail-view .field-inline__label, #owned-list-view .field-inline__label')]
+    .filter((s) => s.closest('form, .owned-notes-add')?.getBoundingClientRect().width > 0)
+    .map((s) => s.getBoundingClientRect().width > 2));
+
+async function openAsset(page) {
+    await page.locator('[data-open-asset="oa-test-1"], [data-asset-id="oa-test-1"]').first().click();
+    await page.waitForTimeout(400);
+}
+const openAssetTab = async (page, name) => {
+    await page.locator('#owned-detail-view .owned-tab', { hasText: name }).click();
+    await page.waitForTimeout(350);
+};
+
+async function scenarioX1(browser) {
+    console.log('X1 — libellés des champs');
+    const ctx = await openPcIndex(browser);
+    const { page } = ctx;
+    await step('Analyse : tous les champs visibles ont un libellé (curseurs taux/durée compris)', async () => assert.deepEqual(await page.evaluate(NO_LABEL), []));
+    await page.click('.workspace-tab[data-target="assistant-panel"]');
+    await step('Assistant : la zone de saisie a un libellé', async () => assert.deepEqual(await page.evaluate(NO_LABEL), []));
+    await page.click('.workspace-tab[data-target="collection-panel"]');
+    await page.waitForTimeout(400);
+    await page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Profil' }).first().click();
+    await page.waitForTimeout(300);
+    await step('PC Profil : tous les champs ont un libellé', async () => assert.deepEqual(await page.evaluate(NO_LABEL), []));
+    await shot(page, 'x1-pc-profil', { fullPage: true });
+    await page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Vue d' }).first().click();
+    await openAsset(page);
+    for (const tab of ['Exploitation', 'Travaux']) {
+        await openAssetTab(page, tab);
+        await step(`PC fiche ${tab} : tous les champs ont un libellé`, async () => assert.deepEqual(await page.evaluate(NO_LABEL), []));
+        await step(`PC fiche ${tab} : libellés masqués visuellement (mise en page inchangée)`, async () => {
+            const vis = await labelsVisible(page);
+            assert.ok(vis.length > 0, 'aucun libellé trouvé');
+            assert.deepEqual(vis.filter(Boolean), []);
+        });
+        await shot(page, `x1-pc-${tab.toLowerCase()}`, { fullPage: true });
+    }
+    await step('PC : nom accessible calculé par Chromium = « Montant (€) » pour le montant d\'un frais', async () => {
+        assert.equal(await axName(page, '[data-form="add-travail-tab"] input[name="montant"]'), 'Montant (€)');
+    });
+    await finish(ctx, 'X1 PC');
+
+    const m = await openPage(browser, '/owned.html', { viewport: IPHONE, contextOptions: TOUCH });
+    await m.page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+    await m.page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Profil' }).first().click();
+    await m.page.waitForTimeout(300);
+    await step('iPhone Profil : tous les champs ont un libellé, visibles', async () => {
+        assert.deepEqual(await m.page.evaluate(NO_LABEL), []);
+        const vis = await labelsVisible(m.page);
+        assert.ok(vis.length >= 3 && vis.every(Boolean), JSON.stringify(vis));
+    });
+    await shot(m.page, 'x1-iphone-profil', { fullPage: true });
+    await m.page.locator('.owned-list-tabs button, .owned-list-tabs [role=tab]', { hasText: 'Vue d' }).first().click();
+    await openAsset(m.page);
+    for (const tab of ['Exploitation', 'Travaux']) {
+        await openAssetTab(m.page, tab);
+        await step(`iPhone fiche ${tab} : tous les champs ont un libellé`, async () => assert.deepEqual(await m.page.evaluate(NO_LABEL), []));
+        await step(`iPhone fiche ${tab} : libellés visibles au-dessus des champs`, async () => {
+            const vis = await labelsVisible(m.page);
+            assert.ok(vis.length > 0 && vis.every(Boolean), JSON.stringify(vis));
+        });
+        await step(`iPhone fiche ${tab} : pas de débordement horizontal`, async () => {
+            assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+        });
+        await shot(m.page, `x1-iphone-${tab.toLowerCase()}`, { fullPage: true });
+    }
+    await step('iPhone : un frais saisi via les champs libellés s\'ajoute bien', async () => {
+        const f = m.page.locator('[data-form="add-travail-tab"]');
+        await f.locator('input[name="date"]').fill('2026-10-15');
+        await f.locator('input[name="description"]').fill('Peinture salon');
+        await f.locator('input[name="montant"]').fill('450');
+        await f.locator('button[type="submit"]').click();
+        await m.page.waitForFunction(() => document.querySelector('#owned-detail-view')?.textContent.includes('Peinture salon'), null, { timeout: 5000 });
+    });
+    await m.page.locator('#owned-chatfab').click().catch(() => {});
+    await m.page.waitForTimeout(300);
+    await step('iPhone Assistant : la zone de saisie a un libellé', async () => assert.equal(await m.page.getAttribute('#assistant-chat-input', 'aria-label'), 'Votre message à l’assistant'));
+    await finish(m, 'X1 iPhone');
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();
