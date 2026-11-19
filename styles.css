@@ -8721,6 +8721,10 @@ html[data-theme='dark'] .glossaire-overlay { background: rgba(0,0,0,0.6); }
     margin: 16px 0;
 }
 .owned-map-section[hidden] { display: none; }
+/* Aucun bien localisé (renderOwnedMap, audit 2026-11-18 A6) : une ligne d'invite au lieu de la carte vide. */
+.owned-map-section--empty > .owned-section-title,
+.owned-map-section--empty > .owned-map-shell { display: none; }
+.owned-map-section--empty > .owned-map-unloc { margin-top: 0; font-size: .82rem; }
 .owned-map-shell {
     position: relative;
     overflow: hidden;

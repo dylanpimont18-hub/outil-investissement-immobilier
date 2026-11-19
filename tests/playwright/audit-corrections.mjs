@@ -5,7 +5,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { openPage, waitAppStarted, step, getFailures, assert, assertNoStorageHits } from './_harness.mjs';
+import { openPage, waitAppStarted, step, getFailures, assert, assertNoStorageHits, ASSET_TEST_1 } from './_harness.mjs';
 
 const SHOTS = process.env.AC_SCREENSHOTS || '';
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -713,7 +713,81 @@ async function scenarioF6(browser) {
     }
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures, F5: scenarioF5, F6: scenarioF6 };
+// ── A2 / A3 / A6 : CF non répété, dates JJ/MM/AAAA, carte vide remplacée ───
+const ISO_DATES = () => {
+    const out = [];
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) {
+        const el = w.currentNode.parentElement;
+        if (!el || el.closest('script, style, input, textarea, select')) continue;
+        const r = el.getBoundingClientRect();
+        if (!r.width || getComputedStyle(el).visibility === 'hidden') continue;
+        if (/\b\d{4}-\d{2}(-\d{2})?\b/.test(w.currentNode.textContent)) out.push(w.currentNode.textContent.trim().slice(0, 60));
+    }
+    return out;
+};
+const ASSET_LOYER_HIST = {
+    ...ASSET_TEST_1,
+    postAchat: { ...ASSET_TEST_1.postAchat, loyerHistorique: [{ mois: '2024-03', montant: 650 }, { mois: '2026-01', montant: 680 }] }
+};
+
+async function scenarioA2A3A6(browser) {
+    console.log('A2 / A3 / A6 — doublon de CF, format des dates, carte vide');
+    const seedCloud = { assets: { 'oa-test-1': ASSET_LOYER_HIST } };
+    const ctx = await openPcIndex(browser, { seedCloud });
+    const { page } = ctx;
+    await page.click('.workspace-tab[data-target="collection-panel"]');
+    await page.waitForSelector('#owned-dashboard-wrap');
+    await page.waitForTimeout(300);
+    await step('A2 PC vue d\'ensemble : « CF net-net / mois · 12 prochains mois » une seule fois', async () => {
+        const n = await page.evaluate(() => [...document.querySelectorAll('#collection-panel *')].filter((el) => el.children.length === 0 && /CF net-net \/ mois · 12 prochains mois/i.test(el.textContent) && el.getBoundingClientRect().width > 0).length);
+        assert.equal(n, 1);
+        assert.match(await page.locator('#owned-kpi-banner').innerText(), /Rendement brut moy\.[\s\S]*Biens détenus/i);
+    });
+    await step('A6 PC : plus de carte vide, une ligne d\'invite à la place', async () => {
+        assert.match(await page.getAttribute('#owned-map-section', 'class'), /owned-map-section--empty/);
+        assert.equal(await isVisible(page, '#owned-map'), false);
+        assert.match(await page.locator('#owned-map-unloc').textContent(), /aucun bien localisé/);
+        const h = await page.evaluate(() => document.getElementById('owned-map-section').getBoundingClientRect().height);
+        assert.ok(h < 60, `section carte haute de ${h} px`);
+    });
+    await page.locator('#owned-map-section').scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy({ top: -300, behavior: 'instant' }));
+    await shot(page, 'a2-a6-pc-vue-ensemble');
+    await openAsset(page);
+    for (const tab of ['Exploitation', 'Travaux']) {
+        await openAssetTab(page, tab);
+        await step(`A3 PC fiche ${tab} : aucune date AAAA-MM-JJ / AAAA-MM affichée`, async () => assert.deepEqual(await page.evaluate(ISO_DATES), []));
+    }
+    await step('A3 PC Travaux : date du frais « 28/08/2026 »', async () => {
+        assert.equal((await page.locator('.owned-travaux-date').first().textContent()).trim(), '28/08/2026');
+    });
+    await shot(page, 'a3-pc-travaux');
+    await openAssetTab(page, 'Exploitation');
+    await step('A3 PC Exploitation : historique du loyer en « 01/2026 », « 03/2024 »', async () => {
+        const txt = await page.locator('#owned-detail-view').innerText();
+        assert.match(txt, /01\/2026/);
+        assert.match(txt, /03\/2024/);
+    });
+    await finish(ctx, 'A2/A3/A6 PC');
+
+    const m = await openPage(browser, '/owned.html', { viewport: IPHONE, contextOptions: TOUCH, seedCloud });
+    await m.page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+    await m.page.waitForTimeout(300);
+    await step('A2 iPhone liste : le bandeau garde le CF (pas de dashboard sur owned.html)', async () => {
+        assert.match(await m.page.locator('#owned-kpi-banner').innerText(), /12 prochains mois[\s\S]*€/i);
+    });
+    await shot(m.page, 'a2-iphone-liste');
+    await openAsset(m.page);
+    for (const tab of ['Exploitation', 'Travaux']) {
+        await openAssetTab(m.page, tab);
+        await step(`A3 iPhone fiche ${tab} : aucune date AAAA-MM-JJ / AAAA-MM affichée`, async () => assert.deepEqual(await m.page.evaluate(ISO_DATES), []));
+        await shot(m.page, `a3-iphone-${tab.toLowerCase()}`, { fullPage: true });
+    }
+    await finish(m, 'A2/A3/A6 iPhone');
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures, F5: scenarioF5, F6: scenarioF6, A2A3A6: scenarioA2A3A6 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();

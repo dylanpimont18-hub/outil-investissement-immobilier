@@ -68,12 +68,13 @@ try {
         await shot(page, 'pc-liste');
     });
 
-    await step('dashboard et bandeau KPI : total = somme des CF de référence, période écrite', async () => {
+    await step('dashboard : total = somme des CF de référence, période écrite ; bandeau KPI sans doublon', async () => {
         const dash = await page.locator('#owned-dashboard-wrap').innerText();
         assert.match(dash, /CF NET-NET \/ MOIS · 12 PROCHAINS MOIS/i);
         assert.ok(dash.includes(`${somme} €`), `total ${somme} € attendu dans le dashboard`);
+        // Audit 2026-11-18, A2 : sur PC le bandeau ne répète plus le CF du dashboard (gardé sur owned.html).
         const kpi = await page.locator('#owned-kpi-banner').innerText();
-        assert.ok(kpi.includes(`${somme} €`), `total ${somme} € attendu dans le bandeau`);
+        assert.ok(!kpi.includes(`${somme} €`), `le bandeau KPI ne doit plus répéter le total ${somme} € sur PC`);
         for (const [id, v] of Object.entries(attendu)) {
             const nom = ASSETS[id].nom;
             if (v.cf < -100) assert.ok(dash.includes(`${nom} — CF négatif : ${v.cf} €/mois`), `alerte ${nom} au CF de référence`);

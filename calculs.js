@@ -824,7 +824,7 @@ function getEconomicAcquisitionSignal(metrics, currentPrice, maxOfferPrice, soli
             matrixLabel: 'Réviser',
             tone: 'watch',
             summary: 'À ce niveau de prix, les indicateurs restent insuffisants. La marge doit être recréée par la négociation.',
-            action: `Viser au moins ${Math.round(negotiationToTenable)} € de baisse pour atteindre le seuil minimal, idéalement ${Math.round(negotiationToSolid)} € pour atteindre le seuil favorable.`,
+            action: `Viser au moins ${Math.round(negotiationToTenable).toLocaleString('fr-FR')} € de baisse pour atteindre le seuil minimal, idéalement ${Math.round(negotiationToSolid).toLocaleString('fr-FR')} € pour atteindre le seuil favorable.`,
             negotiationToTenable,
             negotiationToSolid
         };

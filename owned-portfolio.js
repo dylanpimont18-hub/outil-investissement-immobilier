@@ -2772,20 +2772,22 @@ function renderOwnedMap(list = null) {
     const located = assets.filter(a => a.lat != null && a.lng != null);
     const missing = assets.length - located.length;
 
-    if (emptyEl) {
-        emptyEl.hidden = located.length > 0;
-        if (!located.length) {
-            emptyEl.textContent = 'Aucun bien localisé — renseignez l\'adresse complète de vos biens dans l\'onglet Acquisition pour les voir apparaître ici.';
-        }
-    }
+    // Audit 2026-11-18, A6 : sans aucun bien localisé, plus de carte vide de ~300 px — titre et cadre
+    // masqués (.owned-map-section--empty), une seule ligne d'invite à la place.
+    const wasEmpty = section.classList.contains('owned-map-section--empty');
+    section.classList.toggle('owned-map-section--empty', !located.length);
+    if (emptyEl) emptyEl.hidden = true;
     if (unlocEl) {
-        unlocEl.textContent = (located.length && missing)
-            ? `${missing} bien${missing > 1 ? 's' : ''} sans adresse — ajoutez-la dans l'onglet Acquisition pour ${missing > 1 ? 'les' : 'le'} placer sur la carte.`
-            : '';
+        unlocEl.textContent = !located.length
+            ? 'Carte du portefeuille : aucun bien localisé. Renseignez l’adresse d’un bien (onglet Acquisition) pour le placer sur la carte.'
+            : (missing
+                ? `${missing} bien${missing > 1 ? 's' : ''} sans adresse — ajoutez-la dans l'onglet Acquisition pour ${missing > 1 ? 'les' : 'le'} placer sur la carte.`
+                : '');
     }
 
     if (!located.length) return;
     if (!_initOwnedMap()) return;
+    if (wasEmpty) window.requestAnimationFrame(() => _ownedMap?.invalidateSize()); // cadre ré-affiché
     _ownedMapMarkers.clearLayers();
 
     const tmi = getOwnedTmi();
@@ -2862,13 +2864,15 @@ function renderOwnedPortfolioList() {
                 }, 0) / totalInvest
                 : 0;
             const cfTone = totalCF >= 0 ? 'positive' : 'negative';
+            // Audit 2026-11-18, A2 : sur PC, le dashboard juste au-dessus affiche déjà ce CF ; la carte
+            // n'est gardée que sur owned.html, où le dashboard n'est pas rendu (IS_MOBILE_PAGE).
             nodes.ownedKpiBanner.innerHTML = `
-                <div class="owned-kpi-card">
+                ${IS_MOBILE_PAGE ? `<div class="owned-kpi-card">
                     <span class="owned-kpi-card__label" title="${escapeHtml(libellePeriodeCF(periodeCFReference()))}, hors frais ponctuels">CF net-net / mois · 12 prochains mois</span>
                     <span class="owned-kpi-card__value owned-kpi-card__value--${cfTone}">
                         ${totalCF >= 0 ? '+' : ''}${Math.round(totalCF).toLocaleString('fr-FR')} €
                     </span>
-                </div>
+                </div>` : ''}
                 <div class="owned-kpi-card">
                     <span class="owned-kpi-card__label">Rendement brut moy.</span>
                     <span class="owned-kpi-card__value">${avgRdt.toFixed(1).replace('.', ',')} %</span>
@@ -4622,7 +4626,7 @@ function renderOwnedTravauxTab(asset) {
             <div class="owned-travaux-list">
                 ${rows.map(t => `
                     <div class="owned-travaux-row" data-search-text="${escapeHtml(`${t.description || ''} ${t.montant || ''} ${t.commentaire || ''}`)}">
-                        <span class="owned-travaux-date">${escapeHtml(t.date || '—')}</span>
+                        <span class="owned-travaux-date">${escapeHtml(_formatDateFr(t.date))}</span>
                         <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.financeParCredit ? ` <small class="owned-caveat" data-tooltip="Inclus dans le crédit immobilier principal (pas payé cash) — reste déductible l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">🏦 financé</small>` : ''}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
                         <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
                         <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
@@ -4860,7 +4864,7 @@ function renderOwnedTravauxTab(asset) {
         // Taxe foncière déjà dans les charges : avertissement non bloquant (B9), porté par le toast
         // de confirmation de l'ajout (un seul toast à la fois, voir showToast).
         const alerteTF = alerteDoublonTaxeFonciere(getOwnedAsset(id), { tag: fd.get('tag'), description, date });
-        if (doublon && !window.confirm(`Une dépense très proche existe déjà : « ${doublon.description || 'sans description'} » du ${doublon.date} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €).\n\nAjouter quand même ce frais ?`)) {
+        if (doublon && !window.confirm(`Une dépense très proche existe déjà : « ${doublon.description || 'sans description'} » du ${_formatDateFr(doublon.date)} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €).\n\nAjouter quand même ce frais ?`)) {
             return;
         }
         let pdfFilename = null;
@@ -4958,6 +4962,12 @@ function _filterFactureFiles(files) {
     }
     const truncated = Math.max(0, accepted.length - FM_MAX_FILES_PER_DROP);
     return { accepted: accepted.slice(0, FM_MAX_FILES_PER_DROP), rejectedFormat, rejectedSize, truncated };
+}
+
+// Format de date affiché partout (audit 2026-11-18, A3) : « 28/08/2026 » ; les mois « 11/2026 ».
+function _formatMoisFr(isoMois) {
+    const m = /^(\d{4})-(\d{2})$/.exec(isoMois || '');
+    return m ? `${m[2]}/${m[1]}` : (isoMois || '—');
 }
 
 function _formatDateFr(iso) {
@@ -5460,7 +5470,7 @@ async function openImportDossierModal(existingAssetId) {
             <td><input type="checkbox" data-dossier-travail-check="${idx}" checked></td>
             <td class="owned-batch-filename">
                 📄 ${escapeHtml(t.file.name)}
-                ${doublon ? `<div class="owned-batch-duplicate">⚠ Possible doublon : « ${escapeHtml(doublon.description || 'sans description')} » du ${escapeHtml(doublon.date)}</div>` : ''}
+                ${doublon ? `<div class="owned-batch-duplicate">⚠ Possible doublon : « ${escapeHtml(doublon.description || 'sans description')} » du ${escapeHtml(_formatDateFr(doublon.date))}</div>` : ''}
                 ${alerteTF ? `<div class="owned-batch-duplicate">⚠ ${escapeHtml(alerteTF)}</div>` : ''}
             </td>
             <td><input type="date" class="variables-input" data-dossier-travail-field="date" data-idx="${idx}" value="${escapeHtml(t.date)}"></td>
@@ -6335,12 +6345,12 @@ function renderAccordionPostAchat(asset) {
             <div class="owned-charges-annuelles-list">
                 ${historique.map((e, idx) => `
                     <div class="owned-charges-annuelles-row">
-                        <span class="owned-charges-annuelles-row__year">${escapeHtml(e.mois)}</span>
+                        <span class="owned-charges-annuelles-row__year">${escapeHtml(_formatMoisFr(e.mois))}</span>
                         <span class="owned-charges-annuelles-row__vals">
                             ${Math.round(e.montant || 0).toLocaleString('fr-FR')} €/mois
                             ${idx === historique.length - 1 ? ' · <em>début de location</em>' : ''}
                         </span>
-                        <button class="owned-travaux-delete" data-delete-loyer-hist="${escapeHtml(e.mois)}" title="Supprimer" aria-label="Supprimer le loyer à partir de ${escapeHtml(e.mois)}">✕</button>
+                        <button class="owned-travaux-delete" data-delete-loyer-hist="${escapeHtml(e.mois)}" title="Supprimer" aria-label="Supprimer le loyer à partir de ${escapeHtml(_formatMoisFr(e.mois))}">✕</button>
                     </div>
                 `).join('')}
             </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">
