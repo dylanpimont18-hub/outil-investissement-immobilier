@@ -21,7 +21,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 |---|---|
 | `index.html` | Structure HTML complète, tous les panneaux et formulaires pré-déclarés |
 | `owned.html` / `owned-entry.js` | Page iPhone : sous-ensemble portefeuille, bootstrap dédié (`IS_MOBILE_PAGE`) |
-| `main.js` | Shell de l'app : état, câblage DOM, synchro entre fenêtres, onglet Analyse + comparateur, démarrage cloud (`_initCloud`). Délègue le portefeuille à `owned-portfolio.js` |
+| `main.js` | Shell de l'app : état, câblage DOM, onglet Analyse + comparateur, démarrage cloud (`_initCloud`). Délègue le portefeuille à `owned-portfolio.js` |
 | `owned-portfolio.js` | Module portefeuille biens détenus (CRUD, liste/détail, dashboard, modales). Reçoit `state`/`nodes` de `main.js` par référence via `initOwnedPortfolio(deps)`, appelée avant le premier `render()` |
 | `owned-cloud.js` | Wrapper Firebase du portefeuille (Auth, `ownedAssets`, `portfolioMeta`, justificatifs Storage, appels aux Cloud Functions IA) |
 | `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
@@ -47,10 +47,6 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 3. On any change, `main.js` calls `computeAnalysisViewModel()` from `calculs.js`, which returns a fully computed view model
 4. `main.js` renders that view model into the pre-declared DOM containers via `innerHTML` injection
 
-### Two-window mode
-
-The app supports a split-screen mode where the analysis panel opens in a second popup window (`?panel=analysis`). State synchronizes between windows via `BroadcastChannel`. The `IS_ANALYSIS_WINDOW` flag in `main.js` controls which panels are shown.
-
 ### Key state shape (`state` object in `main.js`, passed by reference into `owned-portfolio.js`)
 
 - `variablesData` — current study inputs (all form fields, sanitized)
@@ -58,7 +54,7 @@ The app supports a split-screen mode where the analysis panel opens in a second 
 - `activeAssetId` — which saved comparator record is currently loaded
 - `ownedAssets`, `activeOwnedAssetId`, `ownedOrder`, `ownedCompact`, `ownedYearFilters`, `ownedLoyerPage` — owned-portfolio state, read/written by `owned-portfolio.js`
 - `profileData` — household profile (income, adults, children) used for tax calculations
-- `theme`, `screens` — UI preferences
+- `theme` — UI preference
 
 ### Financial engine (`calculs.js`)
 

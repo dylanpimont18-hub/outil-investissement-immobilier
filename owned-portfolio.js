@@ -2,7 +2,7 @@
 // onglets Acquisition/Exploitation/Travaux/Projection) et evenements. Extrait de main.js (axe 3).
 //
 // Interface : initOwnedPortfolio(deps) doit etre appelee en tout premier (avant le premier render()),
-// avec { state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE } (les memes objets partages
+// avec { state, nodes, IS_MOBILE_PAGE } (les memes objets partages
 // que main.js, passes par reference) — renderCollections() en depend des le premier rendu.
 // IS_MOBILE_PAGE (true depuis owned-entry.js, false depuis main.js) fait sauter dashboard/carte/
 // graphiques/comparaison regimes/diagnostic IA dans le rendu, pour ne garder sur owned.html (page
@@ -39,7 +39,7 @@ import { watchPrefs, savePref, cloudListArchives, cloudUploadArchive, cloudReadA
 import { nomArchiveUnique } from './archives-regles.js';
 import { anneesDisponibles, selectionnerFrais, nomFichierFactures, formatEuros, formatDateFr, genererPdfFactures } from './factures-pdf.js';
 
-let state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE;
+let state, nodes, IS_MOBILE_PAGE;
 
 // Affichage de dateAchat ('YYYY-MM', voir parseDateAchat dans calculs.js) au format français MM/YYYY.
 // Accepte aussi une année brute (biens saisis avant l'ajout du mois précis) : affichée telle quelle.
@@ -65,7 +65,6 @@ let _prefsLoaded = false; // premier snapshot settings/prefs (densite, tri, filt
 export function initOwnedPortfolio(deps) {
     state = deps.state;
     nodes = deps.nodes;
-    IS_ANALYSIS_WINDOW = deps.IS_ANALYSIS_WINDOW;
     IS_MOBILE_PAGE = !!deps.IS_MOBILE_PAGE;
     _initCloudSync();
 }
@@ -3442,7 +3441,7 @@ function initOwnedQuickFab() {
 function _syncQuickFabVisibility() {
     const fab = document.getElementById('owned-quickfab');
     if (!fab) return;
-    fab.hidden = !!IS_ANALYSIS_WINDOW || !_authUser || !_cloudLoaded;
+    fab.hidden = !_authUser || !_cloudLoaded;
 }
 
 function openOwnedDeleteModal(assetId) {
@@ -6901,10 +6900,6 @@ function _renderAuthGate() {
 
 function renderCollections() {
     _syncQuickFabVisibility();
-    if (IS_ANALYSIS_WINDOW) {
-        nodes.collectionPanel.hidden = true;
-        return;
-    }
     nodes.collectionPanel.hidden = false;
 
     const gate = document.getElementById('owned-auth-gate');

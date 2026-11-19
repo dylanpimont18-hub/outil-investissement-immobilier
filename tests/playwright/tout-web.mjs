@@ -293,35 +293,6 @@ async function scenarioEtudes(browser, viewport, label) {
     await context.close();
 }
 
-async function scenarioDeuxFenetres(browser) {
-    console.log('\nDeux fenêtres — PC');
-    const { page, context, errors } = await openPage(browser, '/index.html', { viewport: PC });
-    await waitAppStarted(page);
-    const popup = await context.newPage();
-    const popupErrors = [];
-    popup.on('pageerror', err => popupErrors.push(err.message));
-    await popup.goto(`${BASE}/index.html?panel=analysis`, { waitUntil: 'load' });
-    await waitAppStarted(popup);
-
-    await step('la fenêtre d analyse suit la frappe sans attendre le débounce', async () => {
-        await page.fill('#variables-form [name="nom-bien"]', 'Maison sync');
-        await popup.waitForFunction(() => /Maison sync/.test(document.getElementById('topbar-study-name')?.textContent || ''), null, { timeout: 1000 });
-        assert.equal(await popup.isVisible('#collection-panel'), false, 'fenêtre détachée : pas de portefeuille');
-    });
-
-    await step('thème basculé dans la fenêtre principale → appliqué dans la fenêtre d analyse', async () => {
-        await page.click('#theme-toggle');
-        await popup.waitForFunction(() => document.documentElement.dataset.theme === 'light', null, { timeout: 1000 });
-    });
-
-    await step('zéro accès localStorage/sessionStorage', async () => {
-        assert.deepEqual(await page.evaluate(() => window.__storageHits), []);
-        assert.deepEqual(await popup.evaluate(() => window.__storageHits), []);
-    });
-    await step('aucune erreur JS dans les deux fenêtres', () => { assert.deepEqual(errors, []); assert.deepEqual(popupErrors, []); });
-    await context.close();
-}
-
 async function scenarioPrefsPortefeuille(browser) {
     console.log('\nPréférences portefeuille — owned.html iPhone');
     const { page, context, errors } = await openPage(browser, '/owned.html', { viewport: IPHONE });
@@ -515,7 +486,6 @@ async function scenarioExportImport(browser) {
 
 const browser = await chromium.launch();
 try {
-    await scenarioDeuxFenetres(browser);
     await scenarioConnexion(browser, PC, 'PC');
     await scenarioConnexion(browser, IPHONE, 'iPhone');
     await scenarioPreferences(browser, PC, 'PC');

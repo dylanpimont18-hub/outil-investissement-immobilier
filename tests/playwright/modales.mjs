@@ -239,11 +239,6 @@ async function scenarioBandeau(browser) {
         assert.deepEqual(errors, []);
     });
 
-    await step('absent dans la fenêtre d analyse détachée', async () => {
-        await page.goto(page.url().replace(/index\.html.*$/, 'index.html?panel=analysis'), { waitUntil: 'load' });
-        await page.waitForTimeout(500);
-        assert.equal(await page.locator('#mobile-redirect-banner').count(), 0);
-    });
     await page.context().close();
 }
 

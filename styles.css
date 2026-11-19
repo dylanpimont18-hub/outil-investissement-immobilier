@@ -230,9 +230,6 @@ body::before {
 body.modal-open { overflow: hidden; }
 body.drawer-open { overflow: hidden; }
 
-body.panel-analysis .app-sidebar { display: none; }
-body.panel-analysis #collection-panel { display: none; }
-body.panel-analysis #assistant-panel { display: none; }
 
 /* ── Shell ── */
 .shell {

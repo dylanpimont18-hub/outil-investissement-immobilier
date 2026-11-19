@@ -57,7 +57,7 @@ const nodes = {
     accSimulateurSummary: document.getElementById('acc-simulateur-summary')
 };
 
-initOwnedPortfolio({ state, nodes, IS_ANALYSIS_WINDOW: false, IS_MOBILE_PAGE: true });
+initOwnedPortfolio({ state, nodes, IS_MOBILE_PAGE: true });
 initOwnedPortfolioEvents();
 initAssistantChat({ state, nodes });
 renderCollections();

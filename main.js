@@ -224,14 +224,11 @@ const DPE_VALUES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 const COPRO_RISK_VALUES = new Set(['stable', 'medium', 'high']);
 const SOURCE_STATUS_VALUES = new Set(['verified', 'estimated', 'unknown']);
 const PASSOIRE_POLICY_VALUES = new Set(['yes', 'no']);
-const PANEL_MODE = getPanelMode();
-const IS_ANALYSIS_WINDOW = PANEL_MODE === 'analysis';
 // Valeurs par défaut uniquement : les vraies valeurs arrivent par les snapshots Firestore (prefs,
 // portfolioMeta, studies, settings/analysis) avant le premier render(), voir _startCloud/_startApp.
 // Rien ici n'est jamais réécrit dans le cloud : seules les actions de l'utilisateur écrivent.
 const state = {
     theme: 'dark',
-    screens: 1,
     profilePreset: 'famille',
     profileData: createProfileData('famille'),
     profileConfigured: false,
@@ -244,7 +241,6 @@ const state = {
     tutoStep: 0,
     analysisView: 'quick',
     guidedStepIndex: 0,
-    analysisPopupBlocked: false,
     activeOwnedAssetId: null,
     ownedRegime: 'micro-foncier',
     ownedYearFilter: 'actuel', // 'actuel' = CF de référence (12 prochains mois) ; 1/3/5/10 = An N
@@ -256,15 +252,12 @@ const state = {
     ownedExpandedIds: new Set(),
 };
 
-let analysisWindowRef = null;
-let syncChannel = null;
 let profileModalReturnFocusTarget = null;
 
 const nodes = {
     btnViewQuick: document.getElementById('btn-view-quick'),
     btnViewFull: document.getElementById('btn-view-full'),
     themeToggle: document.getElementById('theme-toggle'),
-    screenToggle: document.getElementById('screen-toggle'),
     profileTrigger: document.getElementById('profile-trigger'),
     topbarVersion: document.getElementById('topbar-version'),
     topbarStudyName: document.getElementById('topbar-study-name'),
@@ -399,21 +392,6 @@ const nodes = {
     tutoPrev: document.getElementById('tuto-prev'),
     tutoNext: document.getElementById('tuto-next'),
 };
-
-function getPanelMode() {
-    const panel = new URLSearchParams(window.location.search).get('panel');
-    return panel === 'analysis' ? 'analysis' : 'workspace';
-}
-
-function buildPanelUrl(panel) {
-    const url = new URL(window.location.href);
-    if (panel === 'analysis') {
-        url.searchParams.set('panel', 'analysis');
-    } else {
-        url.searchParams.delete('panel');
-    }
-    return url.toString();
-}
 
 function getProfileOption(profileKey) {
     return PROFILE_OPTIONS.find(profile => profile.key === profileKey) || PROFILE_OPTIONS[0];
@@ -730,46 +708,6 @@ function saveActiveAssetId() { _scheduleAnalysisSave(); }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _flushAnalysisSave(); });
 window.addEventListener('pagehide', _flushAnalysisSave);
 
-// ─── Mode deux fenêtres (?panel=analysis) ─────────────────────────────────────
-// Le message BroadcastChannel porte l'état lui-même (plus de relais par stockage local) : la fenêtre
-// détachée suit la frappe immédiatement, sans attendre le débounce Firestore. Au rechargement, elle
-// repart des snapshots cloud comme la fenêtre principale.
-function emitStateUpdate() {
-    if (!syncChannel) return;
-    syncChannel.postMessage({
-        type: 'state-update',
-        payload: {
-            theme: state.theme, screens: state.screens, sparkMode: state.sparkMode, profilePreset: state.profilePreset,
-            profileData: state.profileData, profileConfigured: state.profileConfigured,
-            variablesData: state.variablesData, activeAssetId: state.activeAssetId, assetRecords: state.assetRecords
-        }
-    });
-}
-
-function applyRemoteState(payload) {
-    if (!payload || !_appStarted) return; // avant le premier render, les snapshots cloud suffisent
-    state.theme = payload.theme === 'light' ? 'light' : 'dark';
-    state.screens = Number(payload.screens) === 2 ? 2 : 1;
-    state.sparkMode = payload.sparkMode === 'guided' ? 'guided' : 'full';
-    state.profilePreset = PROFILE_OPTIONS.some(p => p.key === payload.profilePreset) ? payload.profilePreset : state.profilePreset;
-    if (payload.profileData) state.profileData = sanitizeProfileData(payload.profileData);
-    state.profileConfigured = Boolean(payload.profileConfigured);
-    if (payload.variablesData) state.variablesData = sanitizeVariablesData({ ...VARIABLE_DEFAULTS, ...payload.variablesData });
-    state.activeAssetId = typeof payload.activeAssetId === 'string' && payload.activeAssetId ? payload.activeAssetId : null;
-    if (Array.isArray(payload.assetRecords)) state.assetRecords = payload.assetRecords.map(sanitizeAssetRecord).filter(Boolean);
-    _reconcileActiveAsset();
-    if (!IS_ANALYSIS_WINDOW && state.screens === 1) closeAnalysisWindow();
-    render();
-}
-
-function setupCrossWindowSync() {
-    if (!('BroadcastChannel' in window)) return;
-    syncChannel = new BroadcastChannel('investissement-web-sync');
-    syncChannel.addEventListener('message', event => {
-        if (event.data && event.data.type === 'state-update') applyRemoteState(event.data.payload);
-    });
-}
-
 function getProfileComposition(profileData) {
     return `${profileData.adults} adulte${profileData.adults > 1 ? 's' : ''} · ${profileData.children} enfant${profileData.children > 1 ? 's' : ''}`;
 }
@@ -877,13 +815,6 @@ function getProfileContextSummary() {
     return `Profil provisoire · ${formatCurrency(state.profileData.income)} · ${composition}`;
 }
 
-function getWorkspaceModeLabel({ useLocalFallback = false } = {}) {
-    if (IS_ANALYSIS_WINDOW) return 'Vue analyse synchronisée';
-    if (state.screens === 1) return 'Vue intégrée';
-    if (useLocalFallback) return 'Vue locale';
-    return 'Vue séparée';
-}
-
 function isEssentialDataMissing() {
     const prix = Number(state.variablesData?.prix) || 0;
     const loyer = Number(state.variablesData?.loyer) || 0;
@@ -899,7 +830,7 @@ function buildNeutralAnalysisPlaceholder() {
     `;
 }
 
-function buildWorkspaceHero(analysisModel, { tmi, composition, useLocalFallback = false } = {}) {
+function buildWorkspaceHero(analysisModel, { tmi, composition } = {}) {
     if (!nodes.workspaceHero) {
         return;
     }
@@ -929,7 +860,6 @@ function buildWorkspaceHero(analysisModel, { tmi, composition, useLocalFallback 
             <div class="workspace-hero-decision__main">
                 <div class="workspace-hero-decision__eyebrow">
                     <span class="workspace-hero-decision__kicker">Évaluation du dossier</span>
-                    <span class="workspace-hero-decision__mode">${escapeHtml(getWorkspaceModeLabel({ useLocalFallback }))}</span>
                     <span class="workspace-hero-decision__profile workspace-hero-decision__profile--${profileTone}">${state.profileConfigured ? 'Profil validé' : 'Profil incomplet'}</span>
                 </div>
                 <div class="workspace-hero-decision__heading">
@@ -1331,7 +1261,6 @@ function handleAutreCreditDrawerSave(event) {
     state.profileData = { ...state.profileData, autresCredits: credits };
     saveProfileData();
     closeAutreCreditDrawer();
-    emitStateUpdate();
     render({ syncVariables: false, syncProfile: false });
     renderProfileCreditsList();
     showToast('Crédit enregistré.');
@@ -1343,7 +1272,6 @@ function handleDeleteAutreCredit(creditId) {
         autresCredits: (state.profileData.autresCredits || []).filter(c => c.id !== creditId)
     };
     saveProfileData();
-    emitStateUpdate();
     render({ syncVariables: false, syncProfile: false });
     renderProfileCreditsList();
     showToast('Crédit supprimé.');
@@ -1380,7 +1308,6 @@ function createOrUpdateCurrentAsset() {
     state.activeAssetId = assetId;
     saveAssetRecords();
     saveActiveAssetId();
-    emitStateUpdate();
     try {
         render({ syncVariables: false, syncProfile: false });
     } catch (err) {
@@ -1412,16 +1339,14 @@ function loadAssetIntoWorkspace(assetId) {
     state.variablesData = sanitizeVariablesData(asset.variablesData);
     saveVariablesData();
     saveActiveAssetId();
-    emitStateUpdate();
     render({ syncVariables: true, syncProfile: false });
     // Navigate to Saisie & Analyse tab
     const workspaceTab = document.querySelector('.workspace-tab[data-target="workspace-panel"]');
-    if (workspaceTab && !IS_ANALYSIS_WINDOW) workspaceTab.click();
+    if (workspaceTab) workspaceTab.click();
 }
 
 function applyTheme() {
     document.documentElement.dataset.theme = state.theme;
-    document.body.classList.toggle('panel-analysis', IS_ANALYSIS_WINDOW);
 
     if (nodes.themeMeta) {
         nodes.themeMeta.setAttribute('content', state.theme === 'dark' ? '#09090b' : '#f4f4f5');
@@ -1664,7 +1589,6 @@ function dismissProfileModal() {
 function confirmProfileModal() {
     setProfileConfigured();
     saveProfileData();
-    emitStateUpdate();
     dismissProfileModal();
 }
 
@@ -1685,36 +1609,7 @@ function applyProfilePreset(profileKey) {
     savePref({ profilePreset: profileKey }).catch(() => {});
     state.profileData = { ...createProfileData(profileKey), autresCredits: state.profileData.autresCredits, revenuHistorique: state.profileData.revenuHistorique };
     saveProfileData();
-    emitStateUpdate();
     render({ syncProfile: false, syncVariables: false });
-}
-
-function openAnalysisWindow(options = {}) {
-    const { focus = false } = options;
-
-    if (IS_ANALYSIS_WINDOW || state.screens !== 2) {
-        return;
-    }
-
-    if (analysisWindowRef && !analysisWindowRef.closed) {
-        state.analysisPopupBlocked = false;
-        if (focus) {
-            analysisWindowRef.focus();
-        }
-        return;
-    }
-
-    const width = Math.max(960, Math.floor(window.screen.availWidth * 0.48));
-    const height = Math.max(760, Math.floor(window.screen.availHeight * 0.92));
-    const left = Math.max(0, window.screenX + window.outerWidth + 24);
-    const top = Math.max(0, window.screenY);
-    const features = `popup=yes,resizable=yes,scrollbars=yes,width=${width},height=${height},left=${left},top=${top}`;
-    analysisWindowRef = window.open(buildPanelUrl('analysis'), 'investissement-web-analysis', features);
-    state.analysisPopupBlocked = !analysisWindowRef;
-
-    if (analysisWindowRef && focus) {
-        analysisWindowRef.focus();
-    }
 }
 
 async function handleDecisionSummaryExport() {
@@ -1726,14 +1621,6 @@ async function handleDecisionSummaryExport() {
     });
 
     await openPrintDocument(documentHTML, filename, 'export-decision-pdf');
-}
-
-function closeAnalysisWindow() {
-    if (analysisWindowRef && !analysisWindowRef.closed) {
-        analysisWindowRef.close();
-    }
-    analysisWindowRef = null;
-    state.analysisPopupBlocked = false;
 }
 
 function renderFormKpiBar(analysisModel) {
@@ -2198,58 +2085,27 @@ function renderWorkspaceContent() {
     const analysisModel = getCurrentAnalysisModel();
     const { metrics, parts, tmi } = analysisModel;
     const composition = getProfileComposition(state.profileData);
-    const useLocalFallback = !IS_ANALYSIS_WINDOW && state.screens === 2 && state.analysisPopupBlocked;
-    const showVariables = !IS_ANALYSIS_WINDOW;
-    const showAnalysis = IS_ANALYSIS_WINDOW || state.screens === 1 || useLocalFallback;
+    nodes.variablesPanel.hidden = false;
+    nodes.analysisPanel.hidden = false;
+    nodes.workspaceBoard.dataset.layout = '1';
 
-    if (IS_ANALYSIS_WINDOW && state.screens !== 2 && window.opener) {
-        window.close();
-        return;
-    }
-
-    nodes.variablesPanel.hidden = !showVariables;
-    nodes.analysisPanel.hidden = !showAnalysis;
-    nodes.workspaceBoard.dataset.layout = (!IS_ANALYSIS_WINDOW && state.screens === 2 && useLocalFallback) ? '2' : '1';
-
-    if (IS_ANALYSIS_WINDOW) {
-        nodes.workspaceTitle.textContent = 'Analyse synchronisée';
-        nodes.workspaceSubtitle.textContent = 'Cette fenêtre affiche les résultats calculés à partir de la saisie principale.';
-        nodes.analysisKicker.textContent = 'Analyse';
-        nodes.analysisSubtitle.textContent = 'Décision, sensibilité et contrôles sont recalculés en temps réel.';
-    } else if (state.screens === 1) {
-        nodes.workspaceTitle.textContent = 'Étude active';
-        nodes.workspaceSubtitle.textContent = 'Les hypothèses et les résultats sont présentés dans une même vue.';
-        nodes.analysisKicker.textContent = 'Analyse';
-        nodes.analysisSubtitle.textContent = 'Les indicateurs, scénarios et contrôles suivent chaque modification.';
-    } else if (useLocalFallback) {
-        nodes.workspaceTitle.textContent = 'Étude active';
-        nodes.workspaceSubtitle.textContent = 'La fenêtre séparée n a pas pu s ouvrir. Les résultats restent affichés localement.';
-        nodes.analysisKicker.textContent = 'Analyse locale';
-        nodes.analysisSubtitle.textContent = 'Les résultats sont calculés ici tant que la vue séparée n est pas ouverte.';
-    } else {
-        nodes.workspaceTitle.textContent = 'Paramétrage';
-        nodes.workspaceSubtitle.textContent = 'Cette fenêtre regroupe les hypothèses. Les résultats sont affichés dans la vue séparée.';
-        nodes.analysisKicker.textContent = 'Analyse séparée';
-        nodes.analysisSubtitle.textContent = 'Décision, sensibilité et contrôles restent synchronisés dans la seconde fenêtre.';
-    }
-
-    nodes.variablesKicker.textContent = state.screens === 1 ? 'Hypothèses' : 'Paramétrage';
+    nodes.workspaceTitle.textContent = 'Étude active';
+    nodes.workspaceSubtitle.textContent = 'Les hypothèses et les résultats sont présentés dans une même vue.';
+    nodes.analysisKicker.textContent = 'Analyse';
+    nodes.analysisSubtitle.textContent = 'Les indicateurs, scénarios et contrôles suivent chaque modification.';
+    nodes.variablesKicker.textContent = 'Hypothèses';
     if (nodes.topbarStudyName) {
         nodes.topbarStudyName.textContent = getCurrentAssetName();
     }
     if (nodes.topbarStudyMeta) {
         nodes.topbarStudyMeta.textContent = `${state.variablesData.ville || VARIABLE_DEFAULTS.ville} · ${getTypeBienLabel(state.variablesData['type-bien'])}`;
     }
-    nodes.variablesSubtitle.textContent = state.screens === 1
-        ? 'Hypothèses, coûts et financement peuvent être ajustés en continu.'
-        : 'Cette vue centralise les hypothèses, coûts et paramètres de financement.';
+    nodes.variablesSubtitle.textContent = 'Hypothèses, coûts et financement peuvent être ajustés en continu.';
     nodes.variablesContext.textContent = `Dossier : ${getCurrentAssetName()} · ${state.variablesData.ville || VARIABLE_DEFAULTS.ville} · ${getProfileContextSummary()} · TMI ${tmi} %.`;
 
-    buildWorkspaceHero(analysisModel, { tmi, composition, useLocalFallback });
-    if (showVariables) {
-        renderFormKpiBar(analysisModel);
-        renderFinanceLiveSummary(analysisModel);
-    }
+    buildWorkspaceHero(analysisModel, { tmi, composition });
+    renderFormKpiBar(analysisModel);
+    renderFinanceLiveSummary(analysisModel);
     buildAnalysisStickySummary(analysisModel);
     renderCFWaterfall(analysisModel);
     buildAnalysisMetrics(analysisModel);
@@ -2424,8 +2280,7 @@ function render(options = {}) {
     const { syncProfile = true, syncVariables = true } = options;
 
     applyTheme();
-    if (!IS_ANALYSIS_WINDOW) renderModeSwitch(state.sparkMode);
-    nodes.screenToggle.textContent = state.screens === 1 ? '1 écran' : '2 écrans';
+    renderModeSwitch(state.sparkMode);
 
     if (syncProfile) {
         syncProfileForm();
@@ -2465,7 +2320,6 @@ function updateProfileFromForm() {
         revenuHistorique: state.profileData.revenuHistorique
     });
     saveProfileData();
-    emitStateUpdate();
     render({ syncProfile: false, syncVariables: false });
 }
 
@@ -2481,23 +2335,6 @@ function updateVariablesFromForm() {
     state.variablesData = sanitizeVariablesData(rawVariables);
     syncDecisionJournalValidity();
     saveVariablesData();
-    emitStateUpdate();
-    render({ syncVariables: false, syncProfile: false });
-}
-
-function handleScreenToggle() {
-    state.screens = state.screens === 1 ? 2 : 1;
-    savePref({ screens: state.screens }).catch(() => {});
-
-    if (!IS_ANALYSIS_WINDOW) {
-        if (state.screens === 2) {
-            openAnalysisWindow({ focus: false });
-        } else {
-            closeAnalysisWindow();
-        }
-    }
-
-    emitStateUpdate();
     render({ syncVariables: false, syncProfile: false });
 }
 
@@ -2510,7 +2347,6 @@ function bindEvents() {
     nodes.themeToggle.addEventListener('click', () => {
         state.theme = state.theme === 'dark' ? 'light' : 'dark';
         savePref({ theme: state.theme }).catch(() => {});
-        emitStateUpdate();
         render({ syncVariables: false, syncProfile: false });
     });
 
@@ -2535,7 +2371,6 @@ function bindEvents() {
         toggleFormZone(zoneHead);
     });
 
-    nodes.screenToggle.addEventListener('click', handleScreenToggle);
     nodes.profileTrigger.addEventListener('click', openProfileModal);
     nodes.profileClose.addEventListener('click', () => closeProfileModal());
     nodes.profileSkip?.addEventListener('click', () => skipProfileModal());
@@ -2606,7 +2441,7 @@ function bindEvents() {
     document.getElementById('autre-credit-drawer-cancel')?.addEventListener('click', closeAutreCreditDrawer);
     document.getElementById('autre-credit-drawer-form')?.addEventListener('submit', handleAutreCreditDrawerSave);
 
-    if (nodes.modeToggle && !IS_ANALYSIS_WINDOW) {
+    if (nodes.modeToggle) {
         nodes.modeToggle.addEventListener('click', e => {
             const btn = e.target.closest('[data-mode]');
             if (!btn) return;
@@ -2617,14 +2452,6 @@ function bindEvents() {
         });
     }
 
-    window.addEventListener('beforeunload', () => {
-        if (syncChannel) {
-            syncChannel.close();
-        }
-        if (!IS_ANALYSIS_WINDOW) {
-            closeAnalysisWindow();
-        }
-    });
 
 }
 
@@ -2900,7 +2727,6 @@ let _unsubs = [];
 
 function _applyPrefs(prefs) {
     state.theme = prefs.theme === 'light' ? 'light' : 'dark';
-    state.screens = Number(prefs.screens) === 2 ? 2 : 1;
     state.profilePreset = PROFILE_OPTIONS.some(p => p.key === prefs.profilePreset) ? prefs.profilePreset : 'famille';
     state.sparkMode = prefs.sparkMode === 'guided' ? 'guided' : 'full';
     state.guidedMode = prefs.guidedMode === true;
@@ -3006,12 +2832,8 @@ function _startApp() {
     render();
     _applyAnalysisView(state.analysisView);
     applyGuidedModeUI(state.guidedMode);
-    if (!IS_ANALYSIS_WINDOW && !state.profileConfigured) {
+    if (!state.profileConfigured) {
         setTimeout(() => openProfileModal(), 400);
-    }
-    if (!IS_ANALYSIS_WINDOW && state.screens === 2) {
-        openAnalysisWindow({ focus: false });
-        if (state.analysisPopupBlocked) render({ syncVariables: false, syncProfile: false });
     }
 }
 
@@ -3046,7 +2868,6 @@ function _initCloud() {
 // on propose la version iPhone (/portefeuille) sans redirection forcée (l'Analyse reste accessible).
 // Fermable (✕), rien n'est mémorisé : il revient au prochain chargement. Jamais dans la fenêtre d'analyse.
 function _initMobileBanner() {
-    if (IS_ANALYSIS_WINDOW) return;
     if (window.innerWidth >= 700 || window.matchMedia('(pointer: fine)').matches) return;
     const banner = document.createElement('div');
     banner.id = 'mobile-redirect-banner';
@@ -3066,14 +2887,13 @@ function _initMobileBanner() {
 
 console.log('[Spark] Init start');
 _initMobileBanner();
-initOwnedPortfolio({ state, nodes, IS_ANALYSIS_WINDOW, IS_MOBILE_PAGE: false });
+initOwnedPortfolio({ state, nodes, IS_MOBILE_PAGE: false });
 populateProfiles();
-setupCrossWindowSync();
 bindEvents();
 initWorkspaceTabs();
 _initAnalysisViewToggle();
 initOwnedPortfolioEvents();
-if (!IS_ANALYSIS_WINDOW) initAssistantChat({ state, nodes });
+initAssistantChat({ state, nodes });
 initAccordion();
 initTutoBar();
 initGlossaire();
