@@ -340,7 +340,123 @@ async function scenarioF3(browser) {
     await finish(m, 'F3 iPhone');
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3 };
+// ── F1 : « Mes études » (études enregistrées) ──────────────────────────────
+const XSS_NAME = '<img src=x onerror="window.__xss=1">Studio';
+const STUDY = (id, nom, ville, prix, loyer, day) => ({
+    id, createdAt: Date.UTC(2026, 10, day - 1, 9), updatedAt: Date.UTC(2026, 10, day, 10),
+    variablesData: { 'nom-bien': nom, ville, prix, loyer, apport: 20000, 'taux-input': 3.5, duree: 20 }
+});
+const STUDIES_SEED = {
+    'st-lyon': STUDY('st-lyon', 'T2 Croix-Rousse', 'Lyon', 150000, 750, 17),
+    'st-xss': STUDY('st-xss', XSS_NAME, 'Bourges', 80000, 600, 18)
+};
+
+async function scenarioF1(browser) {
+    console.log('F1 — Mes études');
+    const ctx = await openPcIndex(browser, { seedStore: { studies: STUDIES_SEED } });
+    const { page } = ctx;
+    const items = page.locator('#sidebar-studies-list .study-item');
+    const writes = () => page.evaluate(() => window.__store.writes.map(w => w.join(':')));
+    await step('chargement : aucune écriture cloud', async () => assert.deepEqual(await writes(), []));
+    await step('liste : 2 études, la plus récente en premier', async () => {
+        assert.equal(await items.count(), 2);
+        assert.equal(await page.locator('#sidebar-studies-count').textContent(), '(2)');
+        assert.match(await items.nth(0).textContent(), /Studio/);
+    });
+    await step('ligne : nom, ville, prix, CF, score, date', async () => {
+        const t = (await items.nth(1).innerText()).replace(/\s+/g, ' ');
+        for (const re of [/T2 Croix-Rousse/, /Lyon · 150\s000\s€/, /CF [+-]\d[\d\s]*\s€\/mois/, /Score \d+\/100/, /Modifiée le 17\/11\/2026/]) assert.match(t, re);
+    });
+    await step('nom saisi par l\'utilisateur échappé (aucun HTML injecté)', async () => {
+        assert.equal(await page.evaluate(() => window.__xss), undefined);
+        assert.equal(await page.locator('#sidebar-studies-list img').count(), 0);
+        assert.match(await items.nth(0).locator('.study-item__name').textContent(), /<img src=x/);
+    });
+    await shot(page, 'f1-pc-liste');
+
+    await step('clic sur une étude (brouillon vide) : chargée sans question, marquée active', async () => {
+        await items.nth(1).locator('.study-item__open').click();
+        await page.waitForTimeout(300);
+        assert.equal(await page.locator('#study-confirm[open]').count(), 0);
+        assert.equal(await page.inputValue('[name="nom-bien"]'), 'T2 Croix-Rousse');
+        assert.equal(await page.inputValue('[name="prix"]'), '150000');
+        assert.match(await page.locator('#sidebar-studies-list .study-item.is-active').textContent(), /Croix-Rousse/);
+        assert.match(await page.locator('#asset-status-bar').textContent(), /À jour/);
+    });
+    await page.fill('[name="prix"]', '149000');
+    await page.locator('[name="prix"]').dispatchEvent('input');
+    await page.waitForTimeout(400);
+    await step('modifications non enregistrées + clic sur une autre étude : confirmation, Annuler garde la saisie', async () => {
+        await page.locator('#sidebar-studies-list .study-item', { hasText: 'Studio' }).locator('.study-item__open').click();
+        await page.waitForSelector('#study-confirm[open]');
+        assert.match(await page.locator('#study-confirm').textContent(), /modifications non enregistrées/);
+        await shot(page, 'f1-pc-confirmation-chargement');
+        await page.locator('#study-confirm button[value="cancel"]').click();
+        assert.equal(await page.inputValue('[name="prix"]'), '149000');
+    });
+    await step('… puis « Ouvrir sans enregistrer » charge l\'autre étude', async () => {
+        await page.locator('#sidebar-studies-list .study-item', { hasText: 'Studio' }).locator('.study-item__open').click();
+        await page.waitForSelector('#study-confirm[open]');
+        await page.locator('#study-confirm-ok').click();
+        await page.waitForTimeout(300);
+        assert.equal(await page.inputValue('[name="nom-bien"]'), XSS_NAME);
+    });
+    await step('suppression : Échap annule, rien n\'est écrit', async () => {
+        await page.locator('#sidebar-studies-list .study-item', { hasText: 'Croix-Rousse' }).locator('.study-item__delete').click();
+        await page.waitForSelector('#study-confirm[open]');
+        await shot(page, 'f1-pc-confirmation-suppression');
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        assert.equal(await items.count(), 2);
+        assert.ok(!(await writes()).some(w => w.startsWith('deleteStudy')));
+    });
+    await step('suppression confirmée : retirée de la liste et du cloud', async () => {
+        await page.locator('#sidebar-studies-list .study-item', { hasText: 'Croix-Rousse' }).locator('.study-item__delete').click();
+        await page.waitForSelector('#study-confirm[open]');
+        await page.locator('#study-confirm-ok').click();
+        await page.waitForTimeout(300);
+        assert.equal(await items.count(), 1);
+        assert.ok((await writes()).includes('deleteStudy:st-lyon'));
+        assert.equal(await page.evaluate(() => 'st-lyon' in window.__store.studies), false);
+    });
+    await step('supprimer l\'étude ouverte : le formulaire garde ses valeurs, redevient « Nouvelle étude »', async () => {
+        await items.nth(0).locator('.study-item__delete').click();
+        await page.locator('#study-confirm-ok').click();
+        await page.waitForTimeout(300);
+        assert.equal(await page.inputValue('[name="nom-bien"]'), XSS_NAME);
+        assert.match(await page.locator('#asset-status-bar').textContent(), /Nouvelle étude/);
+        assert.match(await page.locator('#sidebar-studies-list').textContent(), /Aucune étude enregistrée/);
+    });
+    await step('« Enregistrer » ajoute l\'étude en cours à la liste', async () => {
+        await page.fill('[name="nom-bien"]', 'Maison Tours');
+        await page.locator('[name="nom-bien"]').dispatchEvent('input');
+        await page.waitForTimeout(400);
+        await page.click('#save-asset');
+        await page.waitForTimeout(400);
+        assert.equal(await items.count(), 1);
+        assert.match(await items.nth(0).textContent(), /Maison Tours/);
+        assert.match(await items.nth(0).getAttribute('class'), /is-active/);
+    });
+    await shot(page, 'f1-pc-apres-enregistrement');
+    await page.click('.workspace-tab[data-target="collection-panel"]');
+    await step('Portefeuille : la liste « Mes études » est masquée', async () => assert.equal(await isVisible(page, '.sidebar-studies'), false));
+    await finish(ctx, 'F1 PC');
+
+    const m = await openPage(browser, '/index.html', { viewport: IPHONE, contextOptions: TOUCH, seedStore: { studies: STUDIES_SEED } });
+    await waitAppStarted(m.page);
+    if (await m.page.locator('#profile-modal:not([hidden])').count()) await m.page.keyboard.press('Escape');
+    await step('iPhone index.html : la liste s\'affiche et charge une étude', async () => {
+        assert.equal(await m.page.locator('#sidebar-studies-list .study-item').count(), 2);
+        await m.page.locator('#sidebar-studies-list .study-item', { hasText: 'Croix-Rousse' }).locator('.study-item__open').click();
+        await m.page.waitForTimeout(300);
+        assert.equal(await m.page.inputValue('[name="nom-bien"]'), 'T2 Croix-Rousse');
+    });
+    await m.page.locator('.sidebar-studies').scrollIntoViewIfNeeded();
+    await shot(m.page, 'f1-iphone-index-liste');
+    await finish(m, 'F1 iPhone');
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();

@@ -316,6 +316,9 @@ const nodes = {
     decisionThesisError: document.getElementById('decision-thesis-error'),
     decisionNextStepError: document.getElementById('decision-next-step-error'),
     newAsset: document.getElementById('new-asset'),
+    studiesList: document.getElementById('sidebar-studies-list'),
+    studiesCount: document.getElementById('sidebar-studies-count'),
+    studyConfirm: document.getElementById('study-confirm'),
     saveAsset: document.getElementById('save-asset'),
     exportDecisionPdf: document.getElementById('export-decision-pdf'),
     analysisKicker: document.getElementById('analysis-kicker'),
@@ -1514,6 +1517,155 @@ function detachCurrentAsset() {
     openEssentielAccordions();
 }
 
+// ─── Mes études : liste des études enregistrées (barre latérale de l'Analyse) ─────
+// Audit 2026-11-18, F1 : « Enregistrer » écrivait dans users/{uid}/studies sans aucune liste pour
+// rouvrir ou supprimer. CF et score viennent du moteur (computeAnalysisViewModel) avec le profil
+// courant ; mis en cache par étude, render() tournant à chaque frappe.
+const _studySummaryCache = new Map();
+let _studiesListHtml = null; // dernier HTML écrit dans #sidebar-studies-list
+
+function getStudySummary(record) {
+    const p = state.profileData || {};
+    const key = `${record.id}|${record.updatedAt}|${p.income}|${p.adults}|${p.children}`;
+    const cached = _studySummaryCache.get(record.id);
+    if (cached && cached.key === key) return cached.summary;
+    const v = record.variablesData || {};
+    let summary = { cf: null, score: null, tone: 'neutral' };
+    if ((Number(v.prix) || 0) > 0 && (Number(v.loyer) || 0) > 0) {
+        try {
+            const model = computeAnalysisViewModel({ ...v, revenus: p.income, adults: p.adults, children: p.children });
+            summary = { cf: model.metrics.cfNetNet, score: model.acquisitionDecision.score, tone: model.acquisitionDecision.tone };
+        } catch (err) {
+            console.warn('[Spark] étude illisible pour la liste :', record.id, err);
+        }
+    }
+    _studySummaryCache.set(record.id, { key, summary });
+    return summary;
+}
+
+function formatDateFrCourte(timestamp) {
+    const d = new Date(Number(timestamp) || 0);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function renderStudiesList() {
+    const list = nodes.studiesList;
+    if (!list) return;
+    const records = [...state.assetRecords].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (nodes.studiesCount) nodes.studiesCount.textContent = records.length ? `(${records.length})` : '';
+    const html = !records.length
+        ? '<li class="sidebar-studies__empty">Aucune étude enregistrée. « Enregistrer » ajoute l’étude en cours à cette liste.</li>'
+        : records.map((record) => {
+        const v = record.variablesData || {};
+        const nom = String(v['nom-bien'] || '').trim() || 'Étude sans nom';
+        const ville = String(v.ville || '').trim();
+        const lieu = ville && ville !== VARIABLE_DEFAULTS.ville ? ville : '';
+        const prix = Number(v.prix) || 0;
+        const { cf, score, tone } = getStudySummary(record);
+        const isActive = record.id === state.activeAssetId;
+        const meta = [lieu, prix > 0 ? formatCurrency(prix) : 'Prix à saisir'].filter(Boolean).join(' · ');
+        const kpis = cf === null
+            ? '<span class="study-item__kpi">Prix et loyer à compléter</span>'
+            : `<span class="study-item__kpi study-item__kpi--${cf >= 0 ? 'positive' : 'negative'}">CF ${escapeHtml(formatSignedCurrency(cf))}/mois</span>`
+              + `<span class="study-item__kpi study-item__kpi--score-${escapeHtml(tone)}">Score ${score}/100</span>`;
+        return `
+            <li class="study-item${isActive ? ' is-active' : ''}">
+                <button type="button" class="study-item__open" data-study-load="${escapeHtml(record.id)}"${isActive ? ' aria-current="true"' : ''}>
+                    <span class="study-item__name">${escapeHtml(nom)}</span>
+                    <span class="study-item__meta">${escapeHtml(meta)}</span>
+                    <span class="study-item__kpis">${kpis}</span>
+                    <span class="study-item__date">Modifiée le ${escapeHtml(formatDateFrCourte(record.updatedAt))}</span>
+                </button>
+                <button type="button" class="study-item__delete" data-study-delete="${escapeHtml(record.id)}" aria-label="Supprimer l’étude ${escapeHtml(nom)}" title="Supprimer l’étude">✕</button>
+            </li>`;
+    }).join('');
+    // render() tourne à chaque saisie et au blur d'un champ (événement change) : réécrire la liste
+    // à l'identique entre le mousedown et le mouseup d'un clic sur une étude perdait ce clic.
+    if (_studiesListHtml !== html) {
+        list.innerHTML = html;
+        _studiesListHtml = html;
+    }
+}
+
+// Vrai si charger une autre étude ferait perdre une saisie : étude active modifiée, ou brouillon
+// renseigné (prix + loyer) jamais enregistré.
+function hasUnsavedStudyChanges() {
+    if (_formInputPending) updateVariablesFromForm();
+    const saved = state.activeAssetId ? state.assetRecords.find((r) => r.id === state.activeAssetId) : null;
+    if (saved) {
+        return JSON.stringify(sanitizeVariablesData(state.variablesData)) !== JSON.stringify(sanitizeVariablesData(saved.variablesData));
+    }
+    return !isEssentialDataMissing();
+}
+
+// Boîte de confirmation (<dialog id="study-confirm">) ; résout true sur le bouton d'action, false
+// sur Annuler, Échap ou fermeture. Textes posés en textContent (pas d'HTML injecté).
+function confirmStudyAction({ title, message, confirmLabel, danger = false }) {
+    const dialog = nodes.studyConfirm;
+    if (!dialog || typeof dialog.showModal !== 'function') return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+    dialog.querySelector('#study-confirm-title').textContent = title;
+    dialog.querySelector('#study-confirm-message').textContent = message;
+    const ok = dialog.querySelector('#study-confirm-ok');
+    ok.textContent = confirmLabel;
+    ok.className = `btn btn--sm ${danger ? 'btn--negative' : 'btn--primary'}`;
+    dialog.returnValue = 'cancel';
+    return new Promise((resolve) => {
+        dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true });
+        dialog.showModal();
+    });
+}
+
+async function openStudyFromList(assetId) {
+    const record = state.assetRecords.find((r) => r.id === assetId);
+    if (!record) return;
+    if (assetId === state.activeAssetId && !hasUnsavedStudyChanges()) return;
+    if (hasUnsavedStudyChanges()) {
+        const nomCourant = getCurrentAssetName();
+        const ok = await confirmStudyAction({
+            title: 'Modifications non enregistrées',
+            message: assetId === state.activeAssetId
+                ? `Revenir à la version enregistrée de « ${nomCourant} » ? Les modifications en cours seront perdues.`
+                : `L’étude en cours (« ${nomCourant} ») a des modifications non enregistrées. Ouvrir « ${String(record.variablesData['nom-bien'] || 'cette étude')} » les abandonnera.`,
+            confirmLabel: 'Ouvrir sans enregistrer'
+        });
+        if (!ok) return;
+    }
+    loadAssetIntoWorkspace(assetId);
+    showToast(`Étude « ${String(record.variablesData['nom-bien'] || '')} » ouverte.`);
+}
+
+async function deleteStudyFromList(assetId) {
+    const record = state.assetRecords.find((r) => r.id === assetId);
+    if (!record) return;
+    const nom = String(record.variablesData['nom-bien'] || '').trim() || 'Étude sans nom';
+    const ok = await confirmStudyAction({
+        title: 'Supprimer l’étude ?',
+        message: `« ${nom} » sera supprimée de vos études enregistrées. Cette action est irréversible.`,
+        confirmLabel: 'Supprimer',
+        danger: true
+    });
+    if (!ok) return;
+    state.assetRecords = state.assetRecords.filter((r) => r.id !== assetId);
+    _studySummaryCache.delete(assetId);
+    saveAssetRecords();
+    if (state.activeAssetId === assetId) {
+        // Le formulaire garde ses valeurs : elles redeviennent une nouvelle étude non enregistrée.
+        state.activeAssetId = null;
+        saveActiveAssetId();
+    }
+    render({ syncVariables: false, syncProfile: false });
+    showToast(`Étude « ${nom} » supprimée.`);
+}
+
+function initStudiesList() {
+    nodes.studiesList?.addEventListener('click', (event) => {
+        const del = event.target.closest('[data-study-delete]');
+        if (del) { deleteStudyFromList(del.dataset.studyDelete); return; }
+        const open = event.target.closest('[data-study-load]');
+        if (open) openStudyFromList(open.dataset.studyLoad);
+    });
+}
+
 function openEssentielAccordions() {
     const essentielZone = document.querySelector('.form-zone[data-zone="essentiel"]');
     if (essentielZone) {
@@ -2292,6 +2444,7 @@ function render(options = {}) {
 
     renderRatioCredit();
     renderWorkspaceContent();
+    renderStudiesList();
     renderModalState();
 }
 
@@ -2907,6 +3060,7 @@ initAccordion();
 initTutoBar();
 initGlossaire();
 initCalculette();
+initStudiesList();
 initSliders();
 // Câblage DOM terminé (aucune écriture) : le premier render() viendra des snapshots cloud (_startApp).
 _initCloud();

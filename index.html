@@ -86,6 +86,11 @@
                     <button type="button" id="new-asset" class="toolbar-button sidebar-save__tertiary">+ Nouvelle étude</button>
                     <button type="button" id="export-decision-pdf" class="toolbar-button sidebar-save__util">Exporter PDF</button>
                 </div>
+                <!-- Études enregistrées (users/{uid}/studies), rendues par renderStudiesList (main.js) -->
+                <section class="sidebar-studies" data-analysis-only aria-labelledby="sidebar-studies-title">
+                    <h2 id="sidebar-studies-title" class="sidebar-studies__title">Mes études <span id="sidebar-studies-count" class="sidebar-studies__count"></span></h2>
+                    <ul id="sidebar-studies-list" class="sidebar-studies__list"></ul>
+                </section>
             </aside>
             <div class="app-main">
             <section id="workspace-panel" class="workspace-panel" aria-label="Espace de travail">
@@ -1019,6 +1024,19 @@
                 <button type="button" id="calculette-fermer" class="btn btn--primary btn--sm">Fermer</button>
             </div>
         </div>
+    </dialog>
+
+    <!-- Confirmation des actions sur les études enregistrées (suppression, chargement par-dessus
+         des modifications non enregistrées) : confirmStudyAction, main.js. Échap = Annuler. -->
+    <dialog id="study-confirm" class="calculette study-confirm" aria-labelledby="study-confirm-title" aria-describedby="study-confirm-message">
+        <form method="dialog" class="calculette__box">
+            <h2 id="study-confirm-title" class="calculette__title"></h2>
+            <p id="study-confirm-message" class="calculette__intro"></p>
+            <div class="study-confirm__actions">
+                <button type="submit" value="cancel" class="btn btn--ghost btn--sm" autofocus>Annuler</button>
+                <button type="submit" value="ok" id="study-confirm-ok" class="btn btn--sm"></button>
+            </div>
+        </form>
     </dialog>
 
     <script type="module" src="main.js"></script>

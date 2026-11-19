@@ -411,6 +411,58 @@ html[data-theme='light'] .sidebar-save__primary { color: #fff; } /* indigo fonc�
     font-size: 12px;
 }
 
+/* ── Mes études (études enregistrées, renderStudiesList dans main.js — audit 2026-11-18 F1) ── */
+.sidebar-studies {
+    padding: 10px 8px 8px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 18px;
+    flex-shrink: 0;
+    min-width: 0;
+}
+.sidebar-studies__title {
+    margin: 0 4px 6px;
+    font-family: var(--font-body);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted);
+}
+.sidebar-studies__count { font-weight: 500; letter-spacing: 0; }
+.sidebar-studies__list {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: 4px;
+    /* La barre latérale est collante : la liste défile d'elle-même au-delà de quelques études. */
+    max-height: min(46vh, 420px); overflow-y: auto;
+}
+.sidebar-studies__empty { font-size: 12px; line-height: 1.45; color: var(--muted); padding: 2px 4px 4px; }
+.study-item {
+    position: relative;
+    border-radius: 12px;
+    border: 1px solid transparent;
+}
+.study-item.is-active { border-color: var(--primary); background: var(--primary-soft); }
+.study-item__open {
+    display: flex; flex-direction: column; gap: 2px;
+    width: 100%; padding: 8px 30px 8px 8px;
+    background: transparent; border: none; border-radius: 12px;
+    text-align: left; cursor: pointer; color: var(--text);
+    font-family: var(--font-body);
+}
+.study-item__open:hover { background: var(--primary-soft); }
+.study-item__open:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.study-item__name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-item__meta, .study-item__date { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-item__kpis { display: flex; flex-wrap: wrap; gap: 2px 8px; font-family: var(--font-mono); font-size: 12px; color: var(--muted-strong); }
+.study-item__kpi--positive { color: var(--positive); }
+.study-item__kpi--negative { color: var(--negative); }
+.study-item__delete {
+    position: absolute; top: 4px; right: 4px;
+    width: 24px; height: 24px; border-radius: 8px;
+    border: none; background: transparent; color: var(--muted);
+    font-size: 12px; cursor: pointer;
+}
+.study-item__delete:hover, .study-item__delete:focus-visible { background: var(--negative-muted); color: var(--negative); }
+.study-confirm__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
 /* ── App main content ── */
 .app-main {
     flex: 1;
