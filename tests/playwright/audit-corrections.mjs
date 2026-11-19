@@ -338,7 +338,45 @@ async function scenarioF3(browser) {
     for (const [name, covered] of mScreens) {
         await step(`iPhone ${name} : en bas de page, ✦ et 📄 ne recouvrent rien`, () => assert.deepEqual(covered, []));
     }
+
+    // Repli pendant le défilement (choix utilisateur du 2026-11-19).
+    const scrollTo = async (page, y) => {
+        await page.evaluate((top) => window.scrollTo({ top, behavior: 'instant' }), y);
+        await page.waitForTimeout(350);
+    };
+    const fabsShown = (page) => page.evaluate(() => [...document.querySelectorAll('.owned-quickfab:not([hidden])')]
+        .map((f) => { const r = f.getBoundingClientRect(); return r.top < innerHeight && Number(getComputedStyle(f).opacity) > 0.5; }));
+    await openAssetTab(m.page, 'Travaux');
+    await scrollTo(m.page, 0);
+    await step('iPhone Travaux, en haut : ✦ et 📄 visibles', async () => assert.deepEqual(await fabsShown(m.page), [true, true]));
+    await scrollTo(m.page, 300);
+    await step('iPhone : défilement vers le bas → ✦ et 📄 repliés hors de l\'écran', async () => assert.deepEqual(await fabsShown(m.page), [false, false]));
+    await shot(m.page, 'f3-iphone-travaux-defilement-bas');
+    await step('iPhone : plus rien n\'est recouvert pendant le défilement', async () => {
+        const covered = await m.page.evaluate(() => {
+            const fabs = [...document.querySelectorAll('.owned-quickfab:not([hidden])')].map((f) => f.getBoundingClientRect()).filter((r) => r.top < innerHeight);
+            return fabs.length;
+        });
+        assert.equal(covered, 0);
+    });
+    await scrollTo(m.page, 200);
+    await step('iPhone : on remonte → les boutons reviennent', async () => assert.deepEqual(await fabsShown(m.page), [true, true]));
+    await scrollTo(m.page, 250);
+    await m.page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+    await m.page.waitForTimeout(350);
+    await step('iPhone : arrivé en bas de page → les boutons reviennent', async () => assert.deepEqual(await fabsShown(m.page), [true, true]));
     await finish(m, 'F3 iPhone');
+
+    const pc = await openPcIndex(browser);
+    await pc.page.click('.workspace-tab[data-target="collection-panel"]');
+    await pc.page.waitForTimeout(400);
+    await scrollTo(pc.page, 0);
+    await scrollTo(pc.page, 400);
+    await step('PC : le bouton 📄 ne se replie jamais', async () => {
+        assert.equal(await pc.page.evaluate(() => document.body.classList.contains('owned-fabs-tucked')), false);
+        assert.deepEqual(await fabsShown(pc.page), [true]);
+    });
+    await finish(pc, 'F3 PC repli');
 }
 
 // ── F1 : « Mes études » (études enregistrées) ──────────────────────────────

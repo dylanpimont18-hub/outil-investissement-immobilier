@@ -3432,10 +3432,37 @@ function initOwnedQuickFab() {
     const fab = document.getElementById('owned-quickfab');
     if (!fab) return;
     fab.addEventListener('click', () => openAjoutFacturesModal({ assetId: state.activeOwnedAssetId || null }));
+    if (IS_MOBILE_PAGE) _initFabAutoHide();
 }
 
-// Visible dès que le portefeuille cloud est chargé ; masqué hors connexion (rien à rattacher) et
-// dans la fenêtre d'analyse détachée. Appelé à chaque renderCollections() — seul point commun à
+// iPhone (owned.html) uniquement : les boutons flottants ✦ et 📄 (.owned-quickfab) se replient quand
+// on fait défiler vers le bas, pour ne pas masquer le contenu qui passe dessous, et reviennent dès
+// qu'on remonte, qu'on atteint le bas de la page ou qu'un bouton reçoit le focus (audit 2026-11-18
+// F3, choix utilisateur du 2026-11-19). La classe body.owned-fabs-tucked est stylée dans styles.css.
+function _initFabAutoHide() {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const update = () => {
+        ticking = false;
+        const y = window.scrollY;
+        const atBottom = y + window.innerHeight >= document.documentElement.scrollHeight - 4;
+        const delta = y - lastY;
+        if (Math.abs(delta) < 6 && !atBottom) return; // petits à-coups du défilement inertiel
+        document.body.classList.toggle('owned-fabs-tucked', delta > 0 && y > 80 && !atBottom);
+        lastY = y;
+    };
+    window.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        window.requestAnimationFrame(update);
+    }, { passive: true });
+    document.addEventListener('focusin', (e) => {
+        if (e.target.closest?.('.owned-quickfab')) document.body.classList.remove('owned-fabs-tucked');
+    });
+}
+
+// Visible dès que le portefeuille cloud est chargé ; masqué hors connexion (rien à rattacher).
+// Appelé à chaque renderCollections() — seul point commun à
 // tous les changements d'état auth/cloud. `.owned-quickfab[hidden]` est explicitement display:none
 // en CSS, car la classe pose display:flex qui l'emporterait sinon sur l'attribut hidden.
 function _syncQuickFabVisibility() {

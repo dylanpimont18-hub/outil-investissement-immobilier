@@ -326,6 +326,10 @@ async function scenarioPrefsPortefeuille(browser) {
     });
 
     await step('modale factures : dernier bien mémorisé dans prefs.facturesLastAsset', async () => {
+        // Sur owned.html, les boutons flottants se replient quand on fait défiler vers le bas (étape
+        // précédente) : comme un utilisateur, on remonte pour les faire revenir (audit F3, 2026-11-19).
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+        await page.waitForFunction(() => !document.body.classList.contains('owned-fabs-tucked'));
         await page.click('#owned-quickfab');
         await page.waitForSelector('#owned-factures-modal:not([hidden])');
         await page.selectOption('[data-fm-asset]', 'oa-test-1');
