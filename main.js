@@ -2271,6 +2271,7 @@ function renderWorkspaceContent() {
     buildAnalysisSummary(analysisModel, parts);
     buildActionPlan(analysisModel.actionLevers);
     buildAnalysisDetails(analysisModel, composition);
+    renderSectionToggles(analysisModel);
     renderCollections();
     syncAssetActionLabels();
 }
@@ -2628,6 +2629,48 @@ function _applyAnalysisView(view, { persist = false } = {}) {
 function _initAnalysisViewToggle() {
     nodes.btnViewQuick?.addEventListener('click', () => _applyAnalysisView('quick', { persist: true }));
     nodes.btnViewFull?.addEventListener('click', () => _applyAnalysisView('full', { persist: true }));
+}
+
+// ── En-têtes ③ Robustesse / ④ Scénarios & projections en Vue rapide ─────────
+// Audit 2026-11-18, F5 : en Vue rapide ces sections sont masquées et leur pastille paraissait vide.
+// Le bouton d'en-tête les résume en une ligne et les affiche à la demande (état de la session,
+// rien n'est enregistré). Vue complète : bouton masqué en CSS, sections toujours affichées.
+function renderSectionToggles(analysisModel) {
+    const set = (key, text) => {
+        const el = document.querySelector(`[data-section-summary="${key}"]`);
+        if (el && el.textContent !== text) el.textContent = text;
+    };
+    if (isEssentialDataMissing()) {
+        set('robustesse', 'Renseignez le prix et le loyer pour évaluer la solidité du dossier.');
+        set('scenarios', 'Renseignez le prix et le loyer pour simuler les scénarios.');
+        return;
+    }
+    const { confidenceModel, acquisitionChecklist, scenarioModel } = analysisModel;
+    const blocages = acquisitionChecklist?.blockersCount || 0;
+    const reserves = acquisitionChecklist?.warningCount || 0;
+    set('robustesse', [
+        `Fiabilité ${confidenceModel.score}/100`,
+        blocages ? `${blocages} point${blocages > 1 ? 's' : ''} bloquant${blocages > 1 ? 's' : ''}` : 'aucun point bloquant',
+        reserves ? `${reserves} à vérifier` : null
+    ].filter(Boolean).join(' · '));
+    const total = scenarioModel.scenarios?.length || 0;
+    const worst = scenarioModel.worstCase;
+    set('scenarios', [
+        `Stress ${String(scenarioModel.label || '').toLowerCase()} : ${scenarioModel.passingCount}/${total} scénarios tiennent`,
+        worst && Number.isFinite(worst.cfNetNet) ? `pessimiste ${formatSignedCurrency(worst.cfNetNet)}/mois` : null
+    ].filter(Boolean).join(' · '));
+}
+
+function initSectionToggles() {
+    document.querySelectorAll('[data-section-toggle]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.sectionToggle;
+            const open = btn.getAttribute('aria-expanded') !== 'true';
+            btn.setAttribute('aria-expanded', String(open));
+            btn.querySelector('.analysis-section-toggle__action').textContent = open ? 'Masquer' : 'Afficher';
+            nodes.analysisPanel?.toggleAttribute(`data-show-${key}`, open);
+        });
+    });
 }
 
 function initWorkspaceTabs() {
@@ -3053,6 +3096,7 @@ populateProfiles();
 bindEvents();
 initWorkspaceTabs();
 _initAnalysisViewToggle();
+initSectionToggles();
 initOwnedPortfolioEvents();
 initAssistantChat({ state, nodes });
 initAccordion();

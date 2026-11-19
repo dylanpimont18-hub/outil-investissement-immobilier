@@ -575,7 +575,15 @@
                             </section>
                         </div>
 
-                        <div id="analysis-anchor-robustesse" class="analysis-section-badge">③ ROBUSTESSE</div>
+                        <div id="analysis-anchor-robustesse" class="analysis-section-head">
+                            <span class="analysis-section-badge">③ ROBUSTESSE</span>
+                            <!-- Vue rapide : la section est masquée ; ce bouton la résume en une ligne et l'affiche
+                                 (renderSectionToggles / initSectionToggles, main.js — audit 2026-11-18 F5) -->
+                            <button type="button" class="analysis-section-toggle" data-section-toggle="robustesse" aria-expanded="false">
+                                <span class="analysis-section-toggle__summary" data-section-summary="robustesse"></span>
+                                <span class="analysis-section-toggle__action">Afficher</span>
+                            </button>
+                        </div>
                         <div class="analysis-columns--2up">
                             <details class="analysis-block analysis-section--robustesse">
                                 <summary>Solidité des hypothèses</summary>
@@ -589,7 +597,15 @@
                             <div id="analysis-details"></div>
                         </details>
 
-                        <div id="analysis-anchor-scenarios" class="analysis-section-badge">④ SCÉNARIOS &amp; PROJECTIONS</div>
+                        <div id="analysis-anchor-scenarios" class="analysis-section-head">
+                            <span class="analysis-section-badge">④ SCÉNARIOS &amp; PROJECTIONS</span>
+                            <!-- Vue rapide : la section est masquée ; ce bouton la résume en une ligne et l'affiche
+                                 (renderSectionToggles / initSectionToggles, main.js — audit 2026-11-18 F5) -->
+                            <button type="button" class="analysis-section-toggle" data-section-toggle="scenarios" aria-expanded="false">
+                                <span class="analysis-section-toggle__summary" data-section-summary="scenarios"></span>
+                                <span class="analysis-section-toggle__action">Afficher</span>
+                            </button>
+                        </div>
                         <div class="analysis-columns--2up">
                             <details class="analysis-block analysis-section--scenarios">
                                 <summary>Scénarios de stress</summary>

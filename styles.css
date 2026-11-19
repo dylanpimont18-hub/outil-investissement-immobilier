@@ -5410,17 +5410,62 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     font-weight: 500;
 }
 
-/* Sections masquées en Vue rapide */
-#analysis-panel[data-analysis-view="quick"] .analysis-forward,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--sensitivity,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--cashflow,
+/* Sections masquées en Vue rapide. ③ Robustesse et ④ Scénarios & projections peuvent être affichées
+   une à une par leur bouton d'en-tête (data-show-robustesse / data-show-scenarios sur le panneau,
+   posés par initSectionToggles dans main.js — audit 2026-11-18 F5). */
 #analysis-panel[data-analysis-view="quick"] .analysis-section--visuals,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--robustesse,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--scenarios,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--regime,
-#analysis-panel[data-analysis-view="quick"] .analysis-section--journal {
+#analysis-panel[data-analysis-view="quick"] .analysis-section--journal,
+#analysis-panel[data-analysis-view="quick"]:not([data-show-robustesse]) .analysis-section--robustesse,
+#analysis-panel[data-analysis-view="quick"]:not([data-show-scenarios]) .analysis-section--scenarios,
+#analysis-panel[data-analysis-view="quick"]:not([data-show-scenarios]) .analysis-section--sensitivity,
+#analysis-panel[data-analysis-view="quick"]:not([data-show-scenarios]) .analysis-forward,
+#analysis-panel[data-analysis-view="quick"]:not([data-show-scenarios]) .analysis-section--regime,
+#analysis-panel[data-analysis-view="quick"]:not([data-show-scenarios]) .analysis-section--cashflow {
     display: none;
 }
+
+/* En-tête de section ③/④ : pastille + (Vue rapide seulement) bouton résumé avec chevron. */
+.analysis-section-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+.analysis-section-head .analysis-section-badge { margin-bottom: 0; }
+.analysis-section-toggle {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 260px;
+    min-width: 0;
+    padding: 8px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--surface-card);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+#analysis-panel[data-analysis-view="quick"] .analysis-section-toggle { display: flex; }
+.analysis-section-toggle:hover { border-color: var(--accent-gold-border); }
+.analysis-section-toggle:focus-visible { outline: 2px solid var(--accent-gold); outline-offset: 2px; }
+.analysis-section-toggle__summary { flex: 1; min-width: 0; color: var(--muted-strong); }
+.analysis-section-toggle__action {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; color: var(--accent-gold); white-space: nowrap;
+}
+/* Chevron : ▸ replié, ▾ affiché (même dessin que les <summary> de l'Analyse). */
+.analysis-section-toggle__action::after {
+    content: '';
+    width: 7px; height: 7px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 150ms ease;
+}
+.analysis-section-toggle[aria-expanded="true"] .analysis-section-toggle__action::after { transform: rotate(45deg); }
 
 /* Grille 2 colonnes → 1 colonne quand un des deux enfants est masqué en Vue rapide */
 #analysis-panel[data-analysis-view="quick"] .analysis-columns--action {

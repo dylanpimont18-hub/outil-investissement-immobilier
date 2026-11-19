@@ -609,7 +609,66 @@ async function scenarioFermerFactures(browser) {
     }
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures };
+// ── F5 : en-têtes ③ / ④ en Vue rapide (chevron + résumé d'une ligne) ───────
+async function scenarioF5(browser) {
+    console.log('F5 — sections repliées de l\'Analyse');
+    for (const [label, viewport, opts] of [['PC', PC, {}], ['iPhone', IPHONE, { contextOptions: TOUCH }]]) {
+        const ctx = await openPage(browser, '/index.html', { viewport, ...opts });
+        const { page } = ctx;
+        await waitAppStarted(page);
+        if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape');
+        await fillStudy(page, { prix: 150000, loyer: 750 });
+        const showHead = async (key) => {
+            await page.evaluate((k) => {
+                const head = document.getElementById(`analysis-anchor-${k}`);
+                window.scrollTo({ top: head.getBoundingClientRect().top + window.scrollY - innerHeight / 2, behavior: 'instant' });
+            }, key);
+            await page.waitForTimeout(250);
+        };
+        await step(`${label} Vue rapide : ③ et ④ ont un résumé d'une ligne et un bouton « Afficher » avec chevron`, async () => {
+            assert.equal(await page.getAttribute('#analysis-panel', 'data-analysis-view'), 'quick');
+            const rob = await page.locator('[data-section-summary="robustesse"]').textContent();
+            const sce = await page.locator('[data-section-summary="scenarios"]').textContent();
+            assert.match(rob, /^Fiabilité \d+\/100 · (\d+ points? bloquants?|aucun point bloquant)/);
+            assert.doesNotMatch(rob, /\b1 points\b|\b[2-9] point bloquants/);
+            assert.match(sce, /^Stress .+ : \d\/\d scénarios tiennent · pessimiste [+-]?\d/);
+            for (const k of ['robustesse', 'scenarios']) {
+                assert.equal(await isVisible(page, `[data-section-toggle="${k}"]`), true);
+                const chevron = await page.evaluate((key) => getComputedStyle(document.querySelector(`[data-section-toggle="${key}"] .analysis-section-toggle__action`), '::after').borderRightStyle, k);
+                assert.equal(chevron, 'solid');
+            }
+        });
+        await step(`${label} : sections masquées tant qu'on n'a pas cliqué`, async () => {
+            assert.equal(await isVisible(page, '.analysis-section--robustesse'), false);
+            assert.equal(await isVisible(page, '.analysis-section--scenarios'), false);
+        });
+        await showHead('robustesse');
+        await shot(page, `f5-${label.toLowerCase()}-replie`);
+        await step(`${label} : « Afficher » sur ③ montre ses blocs (chevrons), sans écrire dans le cloud`, async () => {
+            const before = await page.evaluate(() => window.__store.writes.filter((w) => w[0] === 'prefs').length);
+            await page.click('[data-section-toggle="robustesse"]');
+            assert.equal(await page.getAttribute('[data-section-toggle="robustesse"]', 'aria-expanded'), 'true');
+            assert.equal(await isVisible(page, '.analysis-section--robustesse'), true);
+            assert.equal(await isVisible(page, '.analysis-section--scenarios'), false);
+            assert.equal(await page.evaluate(() => window.__store.writes.filter((w) => w[0] === 'prefs').length), before);
+        });
+        await showHead('robustesse');
+        await shot(page, `f5-${label.toLowerCase()}-robustesse-affichee`);
+        await step(`${label} : « Masquer » replie de nouveau`, async () => {
+            await page.click('[data-section-toggle="robustesse"]');
+            assert.equal(await isVisible(page, '.analysis-section--robustesse'), false);
+        });
+        await step(`${label} Vue complète : bouton résumé masqué, sections visibles`, async () => {
+            await page.click('#btn-view-full');
+            assert.equal(await isVisible(page, '[data-section-toggle="robustesse"]'), false);
+            assert.equal(await isVisible(page, '.analysis-section--robustesse'), true);
+            await page.click('#btn-view-quick');
+        });
+        await finish(ctx, `F5 ${label}`);
+    }
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures, F5: scenarioF5 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();
