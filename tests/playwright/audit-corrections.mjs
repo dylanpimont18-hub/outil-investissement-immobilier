@@ -668,7 +668,52 @@ async function scenarioF5(browser) {
     }
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures, F5: scenarioF5 };
+// ── F6 : période de chaque comparatif des régimes (onglet Calcul) ──────────
+async function scenarioF6(browser) {
+    console.log('F6 — périodes des comparatifs de régimes');
+    for (const [label, path, viewport, opts] of [['PC', '/index.html', PC, {}], ['iPhone', '/owned.html', IPHONE, { contextOptions: TOUCH }]]) {
+        const ctx = await openPage(browser, path, { viewport, ...opts });
+        const { page } = ctx;
+        if (label === 'PC') {
+            await waitAppStarted(page);
+            if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape');
+            await page.click('.workspace-tab[data-target="collection-panel"]');
+            await page.waitForTimeout(300);
+        } else await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+        await openAsset(page);
+        await openAssetTab(page, 'Calcul');
+        await step(`${label} : cartes titrées « Comparaison des régimes — 12 prochains mois (MM/AAAA – MM/AAAA) »`, async () => {
+            // innerText applique le text-transform: uppercase du titre : comparaison insensible à la casse.
+            assert.match(await page.locator('#owned-detail-view').innerText(), /Comparaison des régimes — 12 prochains mois \(\d{2}\/\d{4} – \d{2}\/\d{4}\)/i);
+        });
+        await step(`${label} : tableau titré « par année civile de détention », colonnes An 1 · 2024…`, async () => {
+            const txt = await page.locator('#owned-detail-view').innerText();
+            assert.match(txt, /Comparaison des régimes — par année civile de détention/i);
+            const heads = await page.$$eval('.regime-comparison th', (ths) => ths.map((t) => t.textContent.trim()));
+            assert.deepEqual(heads, ['Régime', 'An 1 · 2024', 'An 3 · 2026', 'An 5 · 2028', 'An 10 · 2033']);
+            assert.match(await page.locator('.regime-comparison__note').textContent(), /couvrent une autre période/);
+        });
+        await step(`${label} : les 3 lignes de régime restent (SCI-IS inchangée)`, async () => {
+            assert.deepEqual(await page.$$eval('.regime-comparison tbody td:first-child', (tds) => tds.map((t) => t.textContent.trim())), ['Micro-foncier', 'Foncier Réel', 'SCI-IS']);
+        });
+        if (label === 'iPhone') {
+            await step('iPhone : pas de débordement horizontal de la page', async () => {
+                assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+            });
+        }
+        await page.locator('.regime-comparison').scrollIntoViewIfNeeded();
+        await page.evaluate(() => window.scrollBy({ top: -260, behavior: 'instant' }));
+        await page.waitForTimeout(250);
+        await shot(page, `f6-${label.toLowerCase()}-calcul-tableau`);
+        await page.locator('.owned-synthese__defisca').scrollIntoViewIfNeeded();
+        await page.evaluate(() => window.scrollBy({ top: -200, behavior: 'instant' }));
+        await page.waitForTimeout(250);
+        await shot(page, `f6-${label.toLowerCase()}-calcul-cartes`);
+        await finish(ctx, `F6 ${label}`);
+    }
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures, F5: scenarioF5, F6: scenarioF6 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();

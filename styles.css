@@ -8618,6 +8618,7 @@ html[data-theme='dark'] .glossaire-overlay { background: rgba(0,0,0,0.6); }
     font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
     color: var(--text-secondary); margin-bottom: 10px;
 }
+.regime-comparison__note { margin: -4px 0 10px; font-size: 12px; line-height: 1.45; color: var(--text-tertiary); }
 .regime-comparison table {
     width: 100%; border-collapse: collapse; font-size: 12px;
 }

@@ -5822,7 +5822,7 @@ function renderOwnedCalculTab(asset) {
                 }
             </div>
         </div>
-        <div class="owned-synthese__title" style="margin-top:16px">Défiscalisation — comparaison des régimes (12 prochains mois)
+        <div class="owned-synthese__title" style="margin-top:16px">Comparaison des régimes — ${escapeHtml(libellePeriodeCF(periodeCFReference()))}
             <button class="btn btn--ghost btn--sm" data-action="open-simu-travaux" style="margin-left:auto;font-size:0.75rem">🔧 Simuler des travaux</button>
         </div>
         <div class="owned-synthese__defisca">
@@ -5866,8 +5866,8 @@ function renderOwnedCalculTab(asset) {
     const cmp = computeRegimeComparison(asset, state.profileData);
     const anneeComp = new Date().getFullYear();
     bottomEl.innerHTML = `
-        <div class="owned-section-title" style="margin-top:20px">Comparatif des régimes fiscaux dans le temps</div>
-        ${renderRegimeComparisonHTML(cmp)}
+        <div class="owned-section-title" style="margin-top:20px">Comparaison des régimes — par année civile de détention</div>
+        ${renderRegimeComparisonHTML(cmp, asset)}
         <button type="button" class="btn btn--ghost btn--sm" data-action="open-compte-resultat" data-annee="${anneeComp}" style="margin-top:12px">📊 Compte de résultat ${anneeComp}</button>
     `;
 }
@@ -6173,9 +6173,13 @@ function renderCFBreakdownHTML(bd, basePeriode) {
     </div>`;
 }
 
-function renderRegimeComparisonHTML(cmp, yr) {
+// Audit 2026-11-18, F6 : chaque colonne est une année civile de détention (« An 1 · 2024 »), alors que
+// les cartes du haut de l'onglet portent sur les 12 prochains mois : les chiffres diffèrent, la note le dit.
+function renderRegimeComparisonHTML(cmp, asset) {
     const REGIME_LABELS = { 'micro-foncier': 'Micro-foncier', 'reel': 'Foncier Réel', 'sci-is': 'SCI-IS' };
     const YEARS = [1, 3, 5, 10];
+    const anneeAchat = asset ? parseDateAchat(asset.dateAchat).annee : null;
+    const enTete = y => anneeAchat ? `An ${y} · ${anneeAchat + y - 1}` : `An ${y}`;
     const regimes = ['micro-foncier', 'reel', 'sci-is'];
     const fmt = v => v === null ? '—' : (v >= 0 ? '+' : '−') + Math.abs(Math.round(v / 12)).toLocaleString('fr-FR') + ' €/m';
     const cls = v => v === null ? '' : v >= 0 ? 'cf-pos' : 'cf-neg';
@@ -6188,12 +6192,13 @@ function renderRegimeComparisonHTML(cmp, yr) {
         : '';
 
     return `<div class="regime-comparison">
-        <div class="regime-comparison__title">Comparatif régimes fiscaux — CF mensuel net</div>
+        <div class="regime-comparison__title">CF net-net de chaque année civile, ramené au mois (÷ 12)</div>
+        <p class="regime-comparison__note">An 1 = année d'achat, comptée à partir du mois d'achat. Les cartes « ${escapeHtml(libellePeriodeCF(periodeCFReference()))} » plus haut couvrent une autre période : leurs montants diffèrent de ce tableau.</p>
         <table>
             <thead>
                 <tr>
                     <th>Régime</th>
-                    ${YEARS.map(y => `<th>An ${y}</th>`).join('')}
+                    ${YEARS.map(y => `<th>${enTete(y)}</th>`).join('')}
                 </tr>
             </thead>
             <tbody>
