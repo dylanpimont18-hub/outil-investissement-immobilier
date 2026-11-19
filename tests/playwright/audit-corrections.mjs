@@ -131,7 +131,38 @@ async function scenarioA1(browser) {
     await finish(m, 'A1 iPhone');
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1 };
+// ── T1 : logo léger (48 px en-tête, 180 px apple-touch-icon) ───────────────
+async function scenarioT1(browser) {
+    console.log('T1 — logo allégé');
+    for (const [label, path, viewport, opts] of [['PC', '/index.html', PC, {}], ['iPhone', '/owned.html', IPHONE, { contextOptions: TOUCH }]]) {
+        const ctx = await openPage(browser, path, { viewport, ...opts });
+        const pngs = [];
+        ctx.page.on('response', async (r) => {
+            if (/\.png(\?|$)/.test(r.url())) pngs.push({ url: r.url(), size: Number(r.headers()['content-length'] || (await r.body().catch(() => Buffer.alloc(0))).length) });
+        });
+        await ctx.page.reload({ waitUntil: 'load' });
+        if (path === '/index.html') await waitAppStarted(ctx.page);
+        else await ctx.page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+        await step(`${label} : Logo_site.png n'est plus téléchargé`, () => assert.equal(pngs.filter(p => /Logo_site\.png/.test(p.url)).length, 0));
+        await step(`${label} : logo de l'en-tête = logo-48.png chargé (48×48)`, async () => {
+            const img = await ctx.page.evaluate(() => { const i = document.querySelector('.topbar-logo img'); return { src: i.getAttribute('src'), w: i.naturalWidth, h: i.naturalHeight, ok: i.complete }; });
+            assert.deepEqual(img, { src: 'logo-48.png', w: 48, h: 48, ok: true });
+        });
+        await step(`${label} : aucun PNG de plus de 50 Ko au chargement`, () => assert.deepEqual(pngs.filter(p => p.size > 50 * 1024), []));
+        if (label === 'iPhone') {
+            await step('iPhone : apple-touch-icon = logo-180.png (180×180)', async () => {
+                const href = await ctx.page.getAttribute('link[rel="apple-touch-icon"]', 'href');
+                assert.equal(href, 'logo-180.png');
+                const dim = await ctx.page.evaluate(async (h) => { const i = new Image(); i.src = h; await i.decode(); return [i.naturalWidth, i.naturalHeight]; }, href);
+                assert.deepEqual(dim, [180, 180]);
+            });
+        }
+        await shot(ctx.page, `t1-${label.toLowerCase()}-entete`, { clip: { x: 0, y: 0, width: viewport.width, height: 140 } });
+        await finish(ctx, `T1 ${label}`);
+    }
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();
