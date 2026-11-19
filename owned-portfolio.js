@@ -21,7 +21,7 @@ import {
     ratioRemboursement, computeProjectionImpotsFoyer, computeOptimisationTravaux, computeProjectionRegimesFoyer,
     resolveScenarioCourant, estFraisDeductible, computeCFBreakdownReference, libellePeriodeCF, periodeCFReference
 } from './calculs.js';
-import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, openPrintDocument } from './utils.js';
+import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, formatRatio, formatPercent, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
 import { buildRapportAnnuelData, buildRapportAnnuelTexte } from './rapport-annuel.js';
@@ -1308,7 +1308,7 @@ function openCapaciteEmpruntModal() {
             </div>
             <div class="cr-section">
                 <div class="cr-row"><span>Mensualités totales actuelles</span><span>${Math.round(endettement.totalMensualites).toLocaleString('fr-FR')} €/mois</span></div>
-                <div class="cr-row cr-row--kpi"><span>Taux d'endettement</span><span style="color:${endettTone}">${endettement.tauxEndettement.toFixed(1)} %</span></div>
+                <div class="cr-row cr-row--kpi"><span>Taux d'endettement</span><span style="color:${endettTone}">${formatPercent(endettement.tauxEndettement)}</span></div>
             </div>
             <div class="cr-section">
                 <div class="owned-form-grid">
@@ -2246,7 +2246,7 @@ function renderOwnedDashboard(list, profileData, regime) {
             </div>
             <div class="owned-dashboard-kpi">
                 <span class="owned-dashboard-kpi__label">Taux d'endettement</span>
-                <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--${endettTone}">${endettement.tauxEndettement.toFixed(1)} %</span>
+                <span class="owned-dashboard-kpi__value owned-dashboard-kpi__value--${endettTone}">${formatPercent(endettement.tauxEndettement)}</span>
                 <div class="owned-jauge-wrap">
                     <div class="owned-jauge-bar">
                         <div class="owned-jauge-fill owned-jauge-fill--${endettTone}" style="width:${Math.min(100, endettement.tauxEndettement).toFixed(1)}%"></div>
@@ -3010,7 +3010,7 @@ function renderOwnedPortfolioList() {
                             if (cfMens < -50) {
                                 statusTone = 'negative'; statusLabel = `CF ${Math.round(cfMens).toLocaleString('fr-FR')} €`;
                             } else if (dscr > 0 && dscr < 1) {
-                                statusTone = 'negative'; statusLabel = `DSCR ${dscr.toFixed(2).replace('.', ',')}`;
+                                statusTone = 'negative'; statusLabel = `DSCR ${formatRatio(dscr)}`;
                             } else if (dscr >= 1 && dscr < 1.1) {
                                 statusTone = 'watch'; statusLabel = 'DSCR tendu';
                             } else if (hasUnclassified) {
@@ -3034,7 +3034,7 @@ function renderOwnedPortfolioList() {
                                     ${cfMens >= 0 ? '+' : ''}${Math.round(cfMens).toLocaleString('fr-FR')} €
                                 </td>
                                 <td class="owned-table-num owned-col-hideable">${rentaNette.toFixed(1).replace('.', ',')} %</td>
-                                <td class="owned-table-num owned-col-hideable">${dscr.toFixed(2).replace('.', ',')}</td>
+                                <td class="owned-table-num owned-col-hideable">${formatRatio(dscr)}</td>
                                 <td>
                                     <span class="owned-status-badge owned-status-badge--${statusTone}">
                                         ${statusLabel}
@@ -3055,11 +3055,11 @@ function renderOwnedPortfolioList() {
             </div>
             <div class="owned-expanded-metric">
                 <span class="owned-expanded-label">Rendement net</span>
-                <span class="owned-expanded-value">${rentaNette.toFixed(1)} %</span>
+                <span class="owned-expanded-value">${formatPercent(rentaNette)}</span>
             </div>
             <div class="owned-expanded-metric">
                 <span class="owned-expanded-label">DSCR</span>
-                <span class="owned-expanded-value owned-expanded-value--${dscr >= 1.2 ? 'positive' : dscr >= 1 ? 'watch' : 'negative'}">${dscr.toFixed(2)}</span>
+                <span class="owned-expanded-value owned-expanded-value--${dscr >= 1.2 ? 'positive' : dscr >= 1 ? 'watch' : 'negative'}">${formatRatio(dscr)}</span>
             </div>
             <div class="owned-expanded-metric">
                 <span class="owned-expanded-label">Prix d'achat</span>
@@ -5782,7 +5782,7 @@ function renderOwnedCalculTab(asset) {
             <div class="owned-synthese__card">
                 <span class="owned-synthese__card-label" data-tooltip="Capacité de remboursement par le loyer : loyers ÷ mensualité crédit. Au-dessus de 1, le loyer couvre intégralement le crédit.">DSCR</span>
                 <span class="owned-synthese__card-value ${dscrTone ? `owned-synthese__card-value--${dscrTone}` : ''}">
-                    ${r.dscr.toFixed(2).replace('.', ',')}
+                    ${formatRatio(r.dscr)}
                 </span>
             </div>
             <div class="owned-synthese__card ${patNet.patrimoineNet !== null ? (patTone === 'positive' ? 'owned-synthese__card--patrimoine-pos' : 'owned-synthese__card--patrimoine-neg') : ''}">
@@ -5951,7 +5951,7 @@ function renderAccordionAcquisition(asset) {
             <input type="text" name="locataire" class="variables-input" placeholder="Locataire" style="flex:1;min-width:100px">
             <button type="submit" class="btn btn--primary btn--sm">+ Ajouter un lot</button>
         </form>
-        ${lots.length ? `<div class="owned-caveat" style="margin-top:6px">CF consolidé sur ${lots.length} lot${lots.length > 1 ? 's' : ''} : ${Math.round(resolveLoyerVacance(asset).loyer).toLocaleString('fr-FR')} €/mois de loyer cumulé, ${resolveLoyerVacance(asset).vacancePct.toFixed(1)} % de vacance pondérée.</div>` : ''}
+        ${lots.length ? `<div class="owned-caveat" style="margin-top:6px">CF consolidé sur ${lots.length} lot${lots.length > 1 ? 's' : ''} : ${Math.round(resolveLoyerVacance(asset).loyer).toLocaleString('fr-FR')} €/mois de loyer cumulé, ${formatPercent(resolveLoyerVacance(asset).vacancePct)} de vacance pondérée.</div>` : ''}
         ` : ''}
         <div class="owned-section-title">Crédit immobilier</div>
         <div class="owned-form-grid">

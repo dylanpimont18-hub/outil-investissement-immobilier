@@ -1,5 +1,6 @@
 // Helpers partagés (formatage, échappement HTML, toast) — zéro dépendance sur state/nodes.
 // Utilisés par main.js et owned-portfolio.js.
+import { formatDecimalFr, formatRatioFr } from './calculs.js';
 
 // [data-tooltip]/[data-tooltip-below] (styles.css) ne s'affichent qu'au survol souris (:hover /
 // :focus-within) : sur écran tactile (owned.html), sans hover, ces bulles sont invisibles — trouvé
@@ -54,14 +55,12 @@ export function formatPercent(value) {
     if (!Number.isFinite(value)) {
         return '--';
     }
-    return `${value.toFixed(1)} %`;
+    return `${formatDecimalFr(value, 1)} %`;
 }
 
+// Format commun des ratios (DSCR, GRM…) : « 0,92 » (formatRatioFr, calculs.js).
 export function formatRatio(value) {
-    if (!Number.isFinite(value)) {
-        return '--';
-    }
-    return value.toFixed(2);
+    return formatRatioFr(value);
 }
 
 export function formatSignedCurrency(value) {

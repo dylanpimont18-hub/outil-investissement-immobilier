@@ -17,6 +17,18 @@ function normaliserEnfants(enfants) {
     return Math.max(0, Math.round(Number(enfants) || 0));
 }
 
+// Format décimal français partagé par toute l'interface (audit 2026-11-18, A1) : « 0,92 », jamais
+// « 0.92 ». Pur (pas d'Intl ni de DOM) pour rester utilisable ici, dans pdf.js et dans les tests.
+export function formatDecimalFr(value, digits = 2) {
+    if (!Number.isFinite(value)) return '--';
+    return value.toFixed(digits).replace('.', ',');
+}
+
+// Ratios (DSCR, GRM…) : deux décimales.
+export function formatRatioFr(value) {
+    return formatDecimalFr(value, 2);
+}
+
 // Un adulte seul qui a au moins un enfant à charge reçoit une demi-part supplémentaire (art. 194 II
 // CGI, « case T »). Sans elle, 1 adulte / 2 enfants à 45 000 € était imposé sur 2 parts au lieu de
 // 2,5 : TMI de 30 % au lieu de 11 %. Le profil du foyer ne connaît qu'adultes/enfants : un adulte
@@ -874,10 +886,10 @@ function buildAcquisitionChecklist(inputs, thresholds, confidenceModel) {
             label: 'Vacance locative',
             status: vacancy > thresholds.maxVacancy ? 'block' : (vacancy > Math.max(0, thresholds.maxVacancy - 2) ? 'watch' : 'ready'),
             detail: vacancy > thresholds.maxVacancy
-                ? `Vacance cible à ${vacancy.toFixed(1)} % : l\'hypothèse d\'exploitation est trop tendue.`
+                ? `Vacance cible à ${formatDecimalFr(vacancy, 1)} % : l\'hypothèse d\'exploitation est trop tendue.`
                 : (vacancy > Math.max(0, thresholds.maxVacancy - 2)
-                    ? `Vacance cible à ${vacancy.toFixed(1)} % : vérifier la profondeur de marché et la vitesse de relocation.`
-                    : `Vacance cible à ${vacancy.toFixed(1)} % : hypothèse locative défendable.`),
+                    ? `Vacance cible à ${formatDecimalFr(vacancy, 1)} % : vérifier la profondeur de marché et la vitesse de relocation.`
+                    : `Vacance cible à ${formatDecimalFr(vacancy, 1)} % : hypothèse locative défendable.`),
             isCritical: vacancy > thresholds.maxVacancy
         },
         {
@@ -1120,24 +1132,24 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     if (metrics.dscr >= thresholds.strongDscr) {
         strengths.push({
             label: 'Dette correctement couverte',
-            detail: `DSCR a ${metrics.dscr.toFixed(2)}.`
+            detail: `DSCR à ${formatRatioFr(metrics.dscr)}.`
         });
     } else {
         blockers.push({
             label: 'Couverture de dette trop courte',
-            detail: `DSCR à ${metrics.dscr.toFixed(2)} sous la zone de confort.`
+            detail: `DSCR à ${formatRatioFr(metrics.dscr)} sous la zone de confort.`
         });
     }
 
     if (metrics.rentaNetNet >= 4.5) {
         strengths.push({
             label: 'Rendement défendable',
-            detail: `Rentabilité nette-nette à ${metrics.rentaNetNet.toFixed(1)} %.`
+            detail: `Rentabilité nette-nette à ${formatDecimalFr(metrics.rentaNetNet, 1)} %.`
         });
     } else {
         blockers.push({
             label: 'Rendement trop court',
-            detail: `Rentabilité nette-nette à ${metrics.rentaNetNet.toFixed(1)} %.`
+            detail: `Rentabilité nette-nette à ${formatDecimalFr(metrics.rentaNetNet, 1)} %.`
         });
     }
 
@@ -3033,7 +3045,7 @@ export function computePortfolioAlerts(assets, profileData, regime, revenusMensu
 
     const endettement = computeEndettementGlobal(assets, revenusMensuels);
     if (endettement.tauxEndettement > 35) {
-        alerts.push({ type: 'dette', severity: 'warning', msg: `Taux d'endettement ${endettement.tauxEndettement.toFixed(1)} % — dépasse le seuil HCSF (35 %)` });
+        alerts.push({ type: 'dette', severity: 'warning', msg: `Taux d'endettement ${formatDecimalFr(endettement.tauxEndettement, 1)} % — dépasse le seuil HCSF (35 %)` });
     }
 
     for (const asset of assets) {
@@ -3043,7 +3055,7 @@ export function computePortfolioAlerts(assets, profileData, regime, revenusMensu
             alerts.push({ type: 'cf', severity: 'error', assetId: asset.id, msg: `${asset.nom} — CF négatif : ${Math.round(r.cfNetNet).toLocaleString('fr-FR')} €/mois` });
         }
         if (r.dscr > 0 && r.dscr < 1) {
-            alerts.push({ type: 'dscr', severity: 'error', assetId: asset.id, msg: `${asset.nom} — DSCR ${r.dscr.toFixed(2)} : remboursement non couvert par les loyers` });
+            alerts.push({ type: 'dscr', severity: 'error', assetId: asset.id, msg: `${asset.nom} — DSCR ${formatRatioFr(r.dscr)} : remboursement non couvert par les loyers` });
         }
 
         const credit = asset.acquisition?.credit || {};

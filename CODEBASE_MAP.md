@@ -55,6 +55,7 @@ le Comparateur, le profil, le shell (thème, onglets) et le câblage des imports
 
 ## owned-portfolio.js
 Module "portefeuille biens détenus" — CRUD, rendu (liste, fiche détail, onglets Acquisition/Exploitation/Travaux/Calcul, dashboard dirigeant) et tous les événements associés. Extrait de main.js (axe 3) ; reçoit `state`/`nodes`/`IS_MOBILE_PAGE` par référence via `initOwnedPortfolio(deps)` plutôt que de les dupliquer. Depuis le 2026-07-27, la donnée du portefeuille (biens, objectifs, ordre, régime, documents PDF) vit dans Firebase (Firestore + Storage, projet `spark-investissement`) au lieu de `localStorage` — un seul compte, synchronisé PC + iPhone (page dédiée `owned.html`). Toute la logique Firebase concrète est dans `owned-cloud.js` ; ce fichier ne fait que lire/écrire un cache local tenu à jour par des listeners temps réel, ce qui préserve le contrat synchrone historique de `loadOwnedAssets()`/`saveOwnedAssets()` pour tous les appelants existants. Depuis le 2026-08-04 (voir `docs/superpowers/specs/2026-08-04-onglet-calcul-portefeuille.md`), l'onglet **Calcul** (`renderOwnedCalculTab`) regroupe TOUT le détail chiffré d'un bien — indicateurs clés, défiscalisation, détail CF net-net, flux de trésorerie annuel, comparatif des régimes dans le temps — et est identique PC et mobile (plus de garde `IS_MOBILE_PAGE`) ; l'onglet Projection et ses 4 graphiques (CF cumulé, recettes/dépenses, CRD, dépenses) ont été supprimés entièrement, jugés non prioritaires face à leur coût de maintenance. `renderOwnedSynthese` ne rend plus que les 3 alertes (régime optimal, seuil micro-foncier, loyer sous-évalué), toujours visibles au-dessus des onglets, PC et mobile. `index.html` et `owned.html` partagent désormais exactement la même structure d'onglets par bien — seuls dashboard portefeuille/carte/bloc Verdict/diagnostic IA restent PC uniquement (`IS_MOBILE_PAGE`, voir `docs/superpowers/specs/2026-07-28-owned-mobile-simplification.md`). **Le garde-fou `if (IS_MOBILE_PAGE) return;` vit dans chaque fonction desktop-only elle-même** (`renderOwnedVerdictBlock`, `renderAccordionSimulateur`, `renderOwnedDashboard`, `renderOwnedMap`, `renderOwnedCfConsolidatedSection`, `renderOwnedPortfolioCharts`), pas seulement dans `renderOwnedDetail()`/`renderOwnedPortfolioList()` qui les appellent au premier rendu — ces fonctions sont aussi rappelées après quasi toute mutation (ajout/édition d'un travail, d'une charge, d'un loyer, d'une note...) depuis des dizaines d'autres endroits du fichier. Bug réel trouvé le 2026-07-29 : le premier rendu était bien simplifié, mais la moindre action sur `owned.html` faisait réapparaître ces blocs (conteneurs vides au chargement, remplis dès la première mutation puisque rien ne les `hidden` par CSS). **Toute nouvelle fonction de rendu réservée au desktop doit s'auto-garder de la même façon**, ne pas compter sur les appelants pour le faire.
+- Formatage (2026-11-19, audit A1) : DSCR (statut et colonne de la liste, liste dépliée, carte de l'onglet Calcul) via `formatRatio`, taux d'endettement / rentabilité nette / vacance pondérée via `formatPercent` (utils.js) — virgule décimale partout
 - `initOwnedPortfolio(deps)` — **point d'entrée**, à appeler avant le premier `render()` de main.js (stocke `state`/`nodes`/`IS_MOBILE_PAGE` — plus de `STORAGE_KEYS` —, démarre `_initCloudSync()`)
 - `_initCloudSync()` — s'abonne à `watchAuth`/`watchOwnedAssets`/`watchPortfolioMeta` (owned-cloud.js) ; tient à jour `_assetsCache`/`_metaCache`/`_authUser`/`_cloudLoaded` et rappelle `renderCollections()` à chaque snapshot. Sur chaque snapshot `watchPortfolioMeta`, si `_metaCache.profile` existe il est mergé dans `state.profileData` (income/adults/children, pilotent le TMI) ; sinon `state.profileData` garde ses défauts (plus de bootstrap depuis un profil local : la migration vers Firestore s'en charge)
 - `syncProfileToCloud()` — exportée, pousse le profil complet (`name`, `income`, `adults`, `children`, `revenuHistorique`, `objectifCF`, `revaloAnnuelle`, `autresCredits`) de `state.profileData` vers `portfolioMeta/main` (`cloudSaveMeta`, merge:true) ; appelée par `main.js` → `saveProfileData()`, et par `saveOwnedProfileData()` (onglet Profil, PC et téléphone) ; no-op hors connexion. Étendu le 2026-08-04 au-delà de `{income, adults, children}` (portée initiale du 2026-07-29) quand l'onglet Profil a rendu tout le profil éditable des deux côtés
@@ -154,7 +155,8 @@ Module "portefeuille biens détenus" — CRUD, rendu (liste, fiche détail, ongl
 Helpers partagés — formatage, échappement HTML, toast. Zéro dépendance sur `state`/`nodes` ; importé par `main.js` et `owned-portfolio.js`.
 - `escapeHtml(value)` / `formatMultilineText(value)` — échappement HTML
 - `showToast(message, tone)` — notification temporaire (crée/anime `#app-toast`)
-- `formatCurrency` / `formatPercent` / `formatRatio` / `formatSignedCurrency` / `formatCompactCurrency` / `formatPlainCurrency` / `formatShortDateTime` — formatage nombres/dates fr-FR
+- `formatPercent` (« 17,7 % ») / `formatRatio` (« 0,92 ») — délèguent à `formatDecimalFr`/`formatRatioFr` (calculs.js, importé depuis le 2026-11-19, audit A1) : plus aucun `toFixed` brut affiché pour un DSCR ou un pourcentage
+- `formatCurrency` / `formatSignedCurrency` / `formatCompactCurrency` / `formatPlainCurrency` / `formatShortDateTime` — formatage nombres/dates fr-FR
 - `getMetricClass(value)` / `getDecisionClass(tone)` — classes CSS selon signe/tonalité
 - `getRegimeLabel(regime)` / `getTypeBienLabel(type)` — libellés régime fiscal / type de bien
 - `getChecklistTone(status)` / `getChecklistLabel(status)` — tonalité/libellé checklist
@@ -241,6 +243,7 @@ Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-
 
 ## calculs.js
 Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
+- `formatDecimalFr(value, digits = 2)` / `formatRatioFr(value)` — (2026-11-19, audit A1) format décimal français pur (« 0,92 », `'--'` si non fini), source unique de `formatRatio`/`formatPercent` (utils.js) et des ratios/pourcentages de pdf.js ; utilisé dans les textes du moteur (DSCR des forces/blocages et de l'alerte `computePortfolioAlerts`, rentabilité nette-nette, vacance cible, taux d'endettement)
 - `computeAnalysisViewModel(inputs)` — **point d'entrée principal** : retourne tout le VM analyse
 - `computeCF(prixVendeur, loyer, inputs, tmi)` — cash-flow brut + net + net-net
 - `computeProjectMetrics(inputs)` — KPIs par actif (rentaBrute, rentaNette, DSCR, GRM, CoC…)
@@ -323,6 +326,7 @@ Impression groupée des factures (2026-10-22) — module **pur** (aucun DOM ni r
 
 ## pdf.js
 Génération de PDF sous forme de HTML standalone, imprimé côté navigateur par `openPrintDocument` (`utils.js`, Shadow DOM + `window.print`). Importe `calculs.js` (seul fichier du trio pdf.js/main.js/owned-portfolio.js à en dépendre directement pour un export).
+- `formatDecisionPdfRatio`/`formatDecisionPdfPercent` (internes) — délèguent à `formatRatioFr`/`formatDecimalFr` (calculs.js, 2026-11-19)
 - `buildDecisionPrintDocument(opts)` — PDF complet avec analyse + décision + scénarios (outil Analyse)
 - `buildPrintDocument(photos)` — snapshot rapide (photos + métriques)
 - `getOwnedDefaultScenarioForPdf(asset)` — = `resolveScenarioCourant(asset)` (vacance de l'onglet Exploitation, bilan B2)
@@ -474,6 +478,7 @@ Test Playwright des corrections d'interface du bilan 2026-10-12 (hors `npm test`
 ## tests/playwright/audit-corrections.mjs
 Test Playwright des corrections de l'audit du 18/11/2026 (hors `npm test`, `AC_SCREENSHOTS=<dir>` pour les captures PC 1440×900 / iPhone 393×852, `AC_ONLY=F2,A1…` pour filtrer). Un scénario par défaut corrigé, chacun termine par zéro accès storage + aucune erreur JS/404.
 - `scenarioF2` — contrôles de l'Analyse visibles sur Analyse, masqués sur Portefeuille/Assistant (PC + index.html iPhone)
+- `scenarioA1` — aucun décimal à point (`DOT_DECIMALS`, texte visible hors champs) sur l'Analyse remplie, le Portefeuille et les 4 onglets d'une fiche iPhone ; DSCR « 0,92 » dans le Centre d'actions
 
 ## tests/playwright/corps-etat.mjs
 Test Playwright des factures décortiquées par corps d'état (hors `npm test`, `CE_SCREENSHOTS=<dir>`) : rien d'analysé au chargement, groupes/écart/non détaillé/total, pastilles, reclassement enregistré, bouton « Décortiquer » (PDF 3 pages → 3 JPEG), décorticage automatique d'un frais ajouté, plafond IA atteint, iPhone 393 px (lisible, sans bouton d'analyse). Stub `cloudDecortiquerFacture` du harnais (`seedCloud.decorticage`).
@@ -498,6 +503,9 @@ Test Playwright du chantier CF unique (hors `npm test`, `npm run serve` sur 8090
 ## tests/playwright/projection-impots.mjs
 Test Playwright du coût d'un euro emprunté et de la projection « Impôts des prochaines années » (3 onglets ; PC 1440 + iPhone ; `PI_SCREENSHOTS=<dir>`; hors `npm test`). Même adaptation tout-web (profil revenu 48 000 € dans le `meta` du stub, `cloud-store.js` du harnais). Prérequis : `node scripts/serve-static.mjs 8090`.
 - `openPage(browser, path, viewport)` — page stubbée, attend les 2 biens du stub
+
+## tests/test_format_fr.mjs
+Test du format décimal français (`formatDecimalFr`, `formatRatioFr`, message DSCR de `computePortfolioAlerts`), audit A1 du 2026-11-18.
 
 ## tests/test_cf_unique.mjs
 Test de cohérence du chantier « CF unique » (`docs/chantier-cf-unique.md`), écrit rouge avant le moteur (étape 0), dans `npm test` depuis l'étape 2. 5 biens types (stable, frais ponctuel, crédit travaux, acheté il y a 2 mois, déficit reporté) × micro/réel (+ SCI-IS pour l'impôt) : façade `computeOwnedAssetCF` = `computeCFReference`, frais ponctuel sans effet sur la référence, Σ `computeFluxMensuelsBien` d'une année = `cfAnnuel` de la timeline, mensualité crédit travaux dans la timeline, `computeCFBreakdown` = timeline (CF, impôt, mensualités) ; étape 4 : liste/dashboard = détail 12 mois = rapport du bien = rapport annuel, libellé de période ; étape 3 : compte de résultat = timeline = `computeImpotAnnuelBien` (impôt, `cfReel`), loyer revalorisé en juin compté à partir de juin.

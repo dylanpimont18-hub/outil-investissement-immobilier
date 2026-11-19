@@ -1648,7 +1648,7 @@ function renderFormKpiBar(analysisModel) {
     nodes.fkpiCfNet.className = `form-kpi-bar__value ${cf >= 0 ? 'form-kpi-bar__value--green' : 'form-kpi-bar__value--red'}`;
 
     const dscr = metrics.dscr ?? 0;
-    nodes.fkpiDscr.textContent = dscr.toFixed(2).replace('.', ',');
+    nodes.fkpiDscr.textContent = formatRatio(dscr);
     nodes.fkpiDscr.className = 'form-kpi-bar__value';
 }
 

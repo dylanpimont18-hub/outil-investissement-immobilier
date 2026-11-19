@@ -1,4 +1,4 @@
-import { computeOwnedAssetCF, resolveScenarioCourant, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer, computeAmortizationSchedule, computeEndettementGlobal, resolveRevenuFoyer } from './calculs.js';
+import { computeOwnedAssetCF, resolveScenarioCourant, computeRegimeComparison, computePatrimoineNet, computeOwnedAssetTimeline, parseDateAchat, resolveTmiFoyer, computeAmortizationSchedule, computeEndettementGlobal, resolveRevenuFoyer, formatDecimalFr, formatRatioFr } from './calculs.js';
 
 function buildPDFParts(uploadedPhotos) {
     const projectName = document.getElementById('project-name').value.trim() || 'Investissement';
@@ -1242,11 +1242,7 @@ function formatDecisionPdfSignedCurrency(value) {
 }
 
 function formatDecisionPdfRatio(value) {
-    if (!Number.isFinite(value)) {
-        return '--';
-    }
-
-    return value.toFixed(2);
+    return formatRatioFr(value);
 }
 
 function formatDecisionPdfPercent(value) {
@@ -1254,7 +1250,7 @@ function formatDecisionPdfPercent(value) {
         return '--';
     }
 
-    return `${value.toFixed(1)} %`;
+    return `${formatDecimalFr(value, 1)} %`;
 }
 
 function slugifyDecisionPdfLabel(value) {
