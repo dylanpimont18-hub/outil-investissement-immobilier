@@ -197,6 +197,23 @@ html[data-theme='dark'] {
 /* Les contrôles de formulaire n'héritent pas la police du navigateur par défaut (Arial) : charte unique (audit A4). */
 button, input, select, textarea { font-family: inherit; }
 
+/* Icônes (charte unique, icones.js, audit A7) : SVG en ligne, trait 1,5 px, couleur = celle du texte. La taille suit le
+   corps de texte (1,1 em) ; les contextes qui veulent plus grand le disent ci-dessous. */
+.icone { width: 1.1em; height: 1.1em; flex: none; vertical-align: -0.2em; }
+.owned-quickfab .icone { width: 24px; height: 24px; vertical-align: middle; }
+.owned-quickfab__plus { line-height: 1; }
+.owned-travaux-dropzone__icon .icone { width: 28px; height: 28px; vertical-align: middle; }
+.owned-quickrail__icon .icone { width: 18px; height: 18px; vertical-align: middle; }
+.regime-card-icon .icone { width: 28px; height: 28px; vertical-align: middle; }
+.form-zone__chevron .icone { width: 12px; height: 12px; vertical-align: middle; }
+.asset-status-bar__dot .icone { width: 14px; height: 14px; vertical-align: middle; }
+.cf-waterfall__live .icone { width: 9px; height: 9px; vertical-align: 0; }
+.guided-step-pip .icone { width: 14px; height: 14px; vertical-align: middle; }
+.optimal-badge .icone { width: 12px; height: 12px; vertical-align: -0.12em; }
+.topbar-btn--icon .icone, .portfolio-ai-drawer__close .icone, .modal-close .icone, .glossaire-drawer__close .icone, .drawer-close .icone { width: 16px; height: 16px; vertical-align: middle; }
+.btn .icone, .guided-btn-ghost .icone, .guided-btn-gold .icone, .tuto-btn .icone { vertical-align: -0.18em; }
+.owned-alert .icone, .owned-batch-duplicate .icone, .regime-comparison__alert .icone, .assistant-chat__action-warning .icone { margin-right: 2px; }
+
 html, body {
     min-height: 100%;
     overflow-x: clip;
@@ -351,7 +368,7 @@ body.drawer-open { overflow: hidden; }
     font-weight: 700;
 }
 
-html[data-theme='dark'] .sidebar-save__primary { color: #0D1117; }
+html[data-theme='dark'] .sidebar-save__primary { color: var(--on-accent); }
 html[data-theme='light'] .sidebar-save__primary { color: #fff; } /* indigo foncé : texte blanc 6,3:1 (sombre : 2,6:1) */
 
 .sidebar-save__primary:hover { opacity: 0.88; }
@@ -1560,7 +1577,7 @@ html[data-theme='dark'] .topbar {
     font-weight: 700;
 }
 
-html[data-theme='dark'] #profile-save { color: #0D1117; }
+html[data-theme='dark'] #profile-save { color: var(--on-accent); }
 html[data-theme='light'] #profile-save { color: #1C2128; }
 #profile-save:hover { opacity: 0.88; }
 
@@ -3665,7 +3682,7 @@ body.tuto-active {
 }
 .mode-toggle__btn[aria-pressed="true"] {
     background: var(--accent);
-    color: #0D1117;
+    color: var(--on-accent);
 }
 .mode-toggle--sm {
     flex-shrink: 0;
@@ -4121,7 +4138,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 .guided-step-pip--active {
     background: var(--accent);
     border-color: var(--accent);
-    color: #0D1117;
+    color: var(--on-accent);
 }
 .guided-step-line {
     flex: 1;
@@ -4236,7 +4253,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 }
 .guided-btn-gold {
     background: var(--accent);
-    color: #0D1117;
+    color: var(--on-accent);
     border: none;
     border-radius: 6px;
     padding: 6px 16px;
@@ -4461,18 +4478,26 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
     line-height: 1.4;
 }
 .regime-list-item--pro::before {
-    content: '✓';
+    content: '';
     position: absolute;
     left: 0;
-    color: var(--success);
-    font-weight: 700;
+    top: 1px;
+    width: 12px;
+    height: 12px;
+    background: var(--success);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 8.5 3.25 3.25L13 4.75'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 8.5 3.25 3.25L13 4.75'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .regime-list-item--con::before {
-    content: '✗';
+    content: '';
     position: absolute;
     left: 0;
-    color: var(--danger);
-    font-weight: 700;
+    top: 1px;
+    width: 12px;
+    height: 12px;
+    background: var(--danger);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.75 3.75 8.5 8.5M12.25 3.75l-8.5 8.5'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.75 3.75 8.5 8.5M12.25 3.75l-8.5 8.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 /* Toast de feedback */
@@ -4499,7 +4524,7 @@ html[data-theme="dark"] .form-zone[data-zone="important"][data-open="true"] .for
 }
 .app-toast--positive {
     background: var(--accent);
-    color: #0D1117;
+    color: var(--on-accent);
 }
 .app-toast--negative {
     background: var(--danger);
@@ -7034,7 +7059,9 @@ body.asset-report-open .owned-quickfab { display: none; }
 }
 .owned-travaux-year__summary::-webkit-details-marker { display: none; }
 .owned-travaux-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.owned-travaux-search { flex: 1 1 200px; max-width: 320px; }
+.owned-travaux-search-wrap { position: relative; flex: 1 1 200px; max-width: 320px; display: block; }
+.owned-travaux-search-wrap > .icone { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-tertiary); width: 14px; height: 14px; }
+.owned-travaux-search-wrap .owned-travaux-search { width: 100%; max-width: none; padding-left: 32px; }
 .owned-travaux-pdf-btn {
     background: none;
     border: none;
@@ -9046,7 +9073,7 @@ html[data-theme='light'] .mode-toggle__btn[aria-pressed="true"] { color: #fff; }
 html[data-theme='dark'] .portfolio-ai-trigger { color: #1A1508; }
 html[data-theme='dark'] .glossaire-trigger { color: var(--accent-strong); }
 html[data-theme='dark'] .sidebar-nav .workspace-tab.is-active,
-html[data-theme='dark'] .sidebar-nav .workspace-tab.is-active svg { color: #0D1117; } /* blanc sur indigo clair : 3,5:1 */
+html[data-theme='dark'] .sidebar-nav .workspace-tab.is-active svg { color: var(--on-accent); } /* blanc sur indigo clair : 3,5:1 */
 
 /* Factures décortiquées par corps d'état (2026-10-27) : sous-vue de l'onglet Travaux
    (owned-portfolio.js, _renderVueCorpsEtat). Bascule = .mode-toggle existant. Un seul tableau,

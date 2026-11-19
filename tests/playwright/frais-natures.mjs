@@ -69,7 +69,7 @@ async function scenarioPC(browser) {
 
     await step('alerte doublon taxe foncière : texte, non bloquante (ligne cochée)', async () => {
         const tf = (await readRows(page)).find(r => r.fournisseur === 'SIP Bourges');
-        assert.equal(tf.alerte, '⚠ La taxe foncière est déjà saisie dans les charges (800 €/an) : ne la comptez pas deux fois');
+        assert.equal(tf.alerte.trim(), 'La taxe foncière est déjà saisie dans les charges (800 €/an) : ne la comptez pas deux fois');
         assert.equal(tf.checked, true, 'avertissement seulement : la ligne reste cochée');
         const autres = (await readRows(page)).filter(r => r.fournisseur !== 'SIP Bourges');
         assert.ok(autres.every(r => r.alerte === ''), 'pas d\'alerte sur les frais d\'emprunt');
@@ -121,7 +121,7 @@ async function scenarioPC(browser) {
         await form.locator('[name="tag"]').selectOption('taxe-fonciere');
         await form.locator('button[type="submit"]').click();
         await page.waitForFunction(() => (document.getElementById('app-toast')?.textContent || '')
-            === 'Frais ajouté. ⚠ La taxe foncière est déjà saisie dans les charges (800 €/an) : ne la comptez pas deux fois', null, { timeout: 3000 });
+            === 'Frais ajouté. La taxe foncière est déjà saisie dans les charges (800 €/an) : ne la comptez pas deux fois', null, { timeout: 3000 });
         await shot(page, 'fn-travaux-toast');
         const travaux = await page.evaluate(() => window.__stub.assets['oa-test-1'].postAchat.travaux);
         assert.ok(travaux.some(t => t.montant === 120 && t.tag === 'taxe-fonciere'), 'avertissement non bloquant : le frais est ajouté');

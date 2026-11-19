@@ -21,6 +21,7 @@ import {
     ratioRemboursement, computeProjectionImpotsFoyer, computeOptimisationTravaux, computeProjectionRegimesFoyer,
     resolveScenarioCourant, estFraisDeductible, computeCFBreakdownReference, libellePeriodeCF, periodeCFReference
 } from './calculs.js';
+import { icone, definirTexteAvecIcone } from './icones.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, formatRatio, formatPercent, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
@@ -501,12 +502,12 @@ async function geocodeOwnedAsset(assetId, adresse, hintEl) {
         updateOwnedAsset(assetId, { lat, lng });
         if (hintEl) {
             hintEl.textContent = lat != null
-                ? '📍 Localisé sur la carte'
-                : '⚠ Adresse non localisée — vérifiez l\'orthographe';
+                ? 'Localisé sur la carte'
+                : 'Adresse non localisée — vérifiez l\'orthographe';
         }
         renderOwnedMap();
     } catch {
-        if (hintEl) hintEl.textContent = '⚠ Localisation indisponible (hors ligne ?)';
+        if (hintEl) hintEl.textContent = 'Localisation indisponible (hors ligne ?)';
     }
 }
 
@@ -657,7 +658,7 @@ function openCompteResultatModal(assetId) {
                             ${annees.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
                         </select>
                     </label>
-                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
                 </div>
             </div>
             <div id="cr-content">${renderCR(currentYear)}</div>
@@ -695,7 +696,7 @@ function openSimulationTravauxModal(assetId) {
         <div class="owned-modal">
             <div class="owned-modal-head">
                 <h3 class="owned-modal-title">Simuler des travaux — ${escapeHtml(asset.nom)}</h3>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="cr-section">
                 <div class="owned-form-grid">
@@ -1210,7 +1211,7 @@ function openProjectionImpotsModal(assetId = null) {
                     <h3 class="owned-modal-title">Impôts des prochaines années</h3>
                     <div class="owned-modal-sub">Impôt du foyer de ${currentYear} à ${currentYear + 10} — ${assets.length} bien${assets.length > 1 ? 's' : ''}</div>
                 </div>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="cr-section">
                 <div class="owned-section-title" style="margin-top:0">Travaux supplémentaires à simuler (non saisis)</div>
@@ -1304,7 +1305,7 @@ function openCapaciteEmpruntModal() {
         <div class="owned-modal">
             <div class="owned-modal-head">
                 <h3 class="owned-modal-title">Capacité d'emprunt</h3>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="cr-section">
                 <div class="cr-row"><span>Mensualités totales actuelles</span><span>${Math.round(endettement.totalMensualites).toLocaleString('fr-FR')} €/mois</span></div>
@@ -1346,8 +1347,8 @@ function openObjectifsModal() {
     const modal = _showOwnedModal(`
         <div class="owned-modal">
             <div class="owned-modal-head">
-                <h3 class="owned-modal-title">⚙ Objectifs portefeuille</h3>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <h3 class="owned-modal-title">${icone('engrenage')} Objectifs portefeuille</h3>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="cr-section">
                 <div class="owned-form-grid">
@@ -1427,7 +1428,7 @@ function openBankDossierModal(startAssetId) {
         <div class="owned-modal owned-modal--wide owned-bank-dossier-modal">
             <div class="owned-modal-head">
                 <h3 class="owned-modal-title">Dossier bancaire</h3>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="cr-section">
                 <div class="owned-bank-dossier__step-label">Étape 1/2 — Biens et contenu</div>
@@ -1442,7 +1443,7 @@ function openBankDossierModal(startAssetId) {
             </div>
             <div class="owned-modal-actions">
                 <button class="btn btn--ghost" data-close-modal>Annuler</button>
-                <button class="btn btn--primary" id="bank-dossier-next" ${assets.length ? '' : 'disabled'}>Suivant →</button>
+                <button class="btn btn--primary" id="bank-dossier-next" ${assets.length ? '' : 'disabled'}>Suivant ${icone('fleche-droite')}</button>
             </div>
         </div>
     `, 'owned-bank-dossier-modal');
@@ -1471,7 +1472,7 @@ function openBankDossierHighlightStep(selectedAssetIds, sections) {
         <div class="owned-modal owned-modal--wide owned-bank-dossier-modal">
             <div class="owned-modal-head">
                 <h3 class="owned-modal-title">Dossier bancaire</h3>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="cr-section">
                 <div class="owned-bank-dossier__step-label">Étape 2/2 — Mise en surbrillance</div>
@@ -1483,7 +1484,7 @@ function openBankDossierHighlightStep(selectedAssetIds, sections) {
                 </div>
             </div>
             <div class="owned-modal-actions">
-                <button class="btn btn--ghost" id="bank-dossier-back">← Retour</button>
+                <button class="btn btn--ghost" id="bank-dossier-back">${icone('fleche-gauche')} Retour</button>
                 <button class="btn btn--primary" id="bank-dossier-generate">Générer le PDF</button>
             </div>
         </div>
@@ -1549,7 +1550,7 @@ function openAssetReportPreview(assetId) {
                 <button type="button" class="btn btn--ghost btn--sm" id="asset-report-md">Exporter .md</button>
                 <button type="button" class="btn btn--ghost btn--sm" id="asset-report-copy">Copier</button>
             </div>
-            <button type="button" class="asset-report-toolbar__close" id="asset-report-close" aria-label="Fermer l'aperçu">✕</button>
+            <button type="button" class="asset-report-toolbar__close" id="asset-report-close" aria-label="Fermer l'aperçu">${icone('croix')}</button>
         </div>
         <iframe class="asset-report-frame" title="Aperçu du rapport"></iframe>`;
     document.body.appendChild(overlay);
@@ -1660,7 +1661,7 @@ function openRapportAnnuelModal() {
                 </div>
                 <div style="display:flex;gap:8px">
                     <button class="btn btn--ghost btn--sm" id="rapport-copy">⎘ Copier</button>
-                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
                 </div>
             </div>
             <div id="rapport-content">${buildRapport(currentYear)}</div>
@@ -1691,7 +1692,7 @@ function openDeclarationFiscaleModal() {
     const annees = [];
     for (let y = Math.max(anneeMin, currentYear - 5); y <= currentYear; y++) annees.push(y);
 
-    const DISCLAIMER = `⚠ Calcul indicatif basé sur vos données saisies — à vérifier avant télédéclaration. Ne remplace pas un professionnel (expert-comptable, centre des impôts). Source : notice DGFiP 2044-NOT-SD.`;
+    const DISCLAIMER = `Calcul indicatif basé sur vos données saisies — à vérifier avant télédéclaration. Ne remplace pas un professionnel (expert-comptable, centre des impôts). Source : notice DGFiP 2044-NOT-SD.`;
 
     function buildReel(annee) {
         if (!assets.length) return `<p style="color:var(--text-tertiary);text-align:center">Aucun bien avec un prix d'achat renseigné.</p>`;
@@ -1763,7 +1764,7 @@ POINTS À VÉRIFIER VOUS-MÊME
                 </div>
                 <div style="display:flex;gap:8px">
                     ${regime === 'reel' ? `<button class="btn btn--ghost btn--sm" id="decl-copy">⎘ Copier</button>` : ''}
-                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
                 </div>
             </div>
             <div id="decl-content">${regime === 'reel' ? buildReel(currentYear) : regime === 'sci-is' ? SCI_IS_MSG : MICRO_MSG}</div>
@@ -1824,7 +1825,7 @@ function renderOwnedImpotTab() {
 
         return `
             <div class="owned-alert owned-alert--info">
-                ⚠ Estimation indicative basée sur vos données saisies — barème IR ${annee} appliqué tranche par tranche, décote incluse.
+                ${icone('alerte')} Estimation indicative basée sur vos données saisies — barème IR ${annee} appliqué tranche par tranche, décote incluse.
                 Ne prend pas en compte : autres revenus (dividendes, BIC…), autres crédits/réductions d'impôt, cas particuliers de plafonnement (parent isolé, invalidité, veuvage).
                 Ne remplace pas votre avis d'imposition réel.
             </div>
@@ -1881,7 +1882,7 @@ function renderOwnedImpotTab() {
                     </div>
                     ${impot.plafonnementQF?.applique ? `
                     <div class="owned-cf-table__note">
-                        ⚠ Plafonnement du quotient familial appliqué : l'avantage lié à vos parts enfants (${fmt(impot.plafonnementQF.avantage)}) dépasse le plafond légal (${fmt(impot.plafonnementQF.plafond)}) — IR brut recalculé sans ce plafonnement aurait été ${fmt(impot.plafonnementQF.irBrutSansPlafonnement)}.
+                        ${icone('alerte')} Plafonnement du quotient familial appliqué : l'avantage lié à vos parts enfants (${fmt(impot.plafonnementQF.avantage)}) dépasse le plafond légal (${fmt(impot.plafonnementQF.plafond)}) — IR brut recalculé sans ce plafonnement aurait été ${fmt(impot.plafonnementQF.irBrutSansPlafonnement)}.
                     </div>` : ''}
                     <div class="owned-cf-table__note">
                         IR brut (× ${impot.parts} part${impot.parts > 1 ? 's' : ''}) = ${fmt(impot.irBrut)}
@@ -2017,7 +2018,7 @@ function renderOwnedProfilTab() {
                         ${Math.round(e.revenu || 0).toLocaleString('fr-FR')} €/an
                         ${idx === revenuHistorique.length - 1 ? ' · <em>revenu de départ</em>' : ''}
                     </span>
-                    <button class="owned-travaux-delete" data-delete-revenu-hist="${e.annee}" title="Supprimer" aria-label="Supprimer le revenu ${e.annee}">✕</button>
+                    <button class="owned-travaux-delete" data-delete-revenu-hist="${e.annee}" title="Supprimer" aria-label="Supprimer le revenu ${e.annee}">${icone('croix')}</button>
                 </div>
             `).join('')}
         </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune évolution enregistrée — le revenu ci-dessus s'applique à toutes les années.</p>`}
@@ -2038,7 +2039,7 @@ function renderOwnedProfilTab() {
                 <div class="owned-charges-annuelles-row">
                     <span class="owned-charges-annuelles-row__year">${escapeHtml(c.libelle || 'Crédit')}</span>
                     <span class="owned-charges-annuelles-row__vals">${Math.round(c.mensualite || 0).toLocaleString('fr-FR')} €/mois</span>
-                    <button class="owned-travaux-delete" data-delete-autre-credit="${escapeHtml(c.id)}" title="Supprimer" aria-label="Supprimer ${escapeHtml(c.libelle || 'ce crédit')}">✕</button>
+                    <button class="owned-travaux-delete" data-delete-autre-credit="${escapeHtml(c.id)}" title="Supprimer" aria-label="Supprimer ${escapeHtml(c.libelle || 'ce crédit')}">${icone('croix')}</button>
                 </div>
             `).join('')}
         </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucun crédit hors immobilier enregistré.</p>`}
@@ -2269,9 +2270,9 @@ function renderOwnedDashboard(list, profileData, regime) {
             ${alerts.map(a => `
             <div class="owned-dashboard-alert owned-dashboard-alert--${a.severity}">
                 ${escapeHtml(a.msg)}
-                ${a.assetId ? `<button class="btn btn--ghost btn--xs" data-action="go-asset" data-id="${escapeHtml(a.assetId)}" title="Voir le bien" aria-label="Voir le bien concerné">→</button>` : ''}
+                ${a.assetId ? `<button class="btn btn--ghost btn--xs" data-action="go-asset" data-id="${escapeHtml(a.assetId)}" title="Voir le bien" aria-label="Voir le bien concerné">${icone('fleche-droite')}</button>` : ''}
             </div>`).join('')}
-        </div>` : '<div class="owned-dashboard-no-alerts">✓ Aucune action en attente sur le portefeuille</div>'}
+        </div>` : `<div class="owned-dashboard-no-alerts">${icone('coche')} Aucune action en attente sur le portefeuille</div>`}
 
         <!-- Ligne 3 : Objectifs -->
         ${hasGoals ? `
@@ -2283,15 +2284,15 @@ function renderOwnedDashboard(list, profileData, regime) {
             <div class="owned-goal-row">
                 <span class="owned-goal-label">CF mensuel : ${Math.round(totalCF).toLocaleString('fr-FR')} € / ${goals.cfCible.toLocaleString('fr-FR')} € cible</span>
                 <div class="owned-goal-bar-wrap"><div class="owned-goal-bar" style="width:${cfProgress.toFixed(1)}%"></div></div>
-                <span class="owned-goal-delta">${totalCF >= goals.cfCible ? '✓ Atteint !' : 'Il manque ' + Math.round(goals.cfCible - totalCF).toLocaleString('fr-FR') + ' €/mois'}</span>
+                <span class="owned-goal-delta">${totalCF >= goals.cfCible ? `${icone('coche')} Atteint !` : 'Il manque ' + Math.round(goals.cfCible - totalCF).toLocaleString('fr-FR') + ' €/mois'}</span>
             </div>` : ''}
             ${goals.patrimoineCible > 0 ? `
             <div class="owned-goal-row">
                 <span class="owned-goal-label">Patrimoine : ${totalPatNet.toLocaleString('fr-FR')} € / ${goals.patrimoineCible.toLocaleString('fr-FR')} € cible</span>
                 <div class="owned-goal-bar-wrap"><div class="owned-goal-bar" style="width:${patProgress.toFixed(1)}%"></div></div>
-                <span class="owned-goal-delta">${totalPatNet >= goals.patrimoineCible ? '✓ Atteint !' : 'Il manque ' + Math.round(goals.patrimoineCible - totalPatNet).toLocaleString('fr-FR') + ' €'}</span>
+                <span class="owned-goal-delta">${totalPatNet >= goals.patrimoineCible ? `${icone('coche')} Atteint !` : 'Il manque ' + Math.round(goals.patrimoineCible - totalPatNet).toLocaleString('fr-FR') + ' €'}</span>
             </div>` : ''}
-            ${moisRestantsObj !== null ? `<div class="owned-goal-deadline">⏱ ${moisRestantsObj > 0 ? moisRestantsObj + ' mois restants avant l\'objectif' : 'Date objectif dépassée'}</div>` : ''}
+            ${moisRestantsObj !== null ? `<div class="owned-goal-deadline">${icone('horloge')} ${moisRestantsObj > 0 ? moisRestantsObj + ' mois restants avant l\'objectif' : 'Date objectif dépassée'}</div>` : ''}
         </div>` : `
         <div class="owned-dashboard-goals owned-dashboard-goals--empty">
             Aucun objectif défini. <button class="btn btn--ghost btn--xs" data-action="open-objectifs">Définir mes objectifs</button>
@@ -2336,8 +2337,8 @@ function initOwnedPortfolioEvents() {
                 const existants = (await cloudListArchives()).map(a => a.name);
                 const archiveName = nomArchiveUnique(base, existants);
                 await cloudUploadArchive(archiveName, json);
-                exportBtn.textContent = `✓ ${archiveName}`;
-                setTimeout(() => { exportBtn.textContent = '↓ Export'; }, 3000);
+                definirTexteAvecIcone(exportBtn, 'coche', archiveName);
+                setTimeout(() => { exportBtn.innerHTML = `${icone('fleche-bas')} Export`; }, 3000);
             } catch {
                 showToast('Archive cloud non enregistrée — le fichier a tout de même été téléchargé', 'negative');
             }
@@ -2403,7 +2404,7 @@ function initOwnedPortfolioEvents() {
                 const added = _importPortfolioObject(portfolio);
                 importModal.hidden = true;
                 renderOwnedPortfolioList();
-                importConfirm.textContent = added > 0 ? `✓ ${added} bien(s) importé(s)` : '⚠ Tous les biens sont déjà présents';
+                importConfirm.textContent = added > 0 ? `${added} bien(s) importé(s)` : 'Tous les biens sont déjà présents';
                 if (added > 0) setTimeout(() => { importConfirm.textContent = 'Importer'; }, 3000);
             } catch (err) {
                 showToast(`Import impossible : ${err?.message || 'fichier illisible'}`, 'negative');
@@ -2814,7 +2815,7 @@ function renderOwnedMap(list = null) {
                 <div class="owned-map-popup__cf" style="color:${positif ? '#16a34a' : '#dc2626'}">
                     CF net-net : <strong>${cfLabel}</strong>
                 </div>
-                <button type="button" class="owned-map-popup__btn" data-map-open="${escapeHtml(asset.id)}">Voir le détail →</button>
+                <button type="button" class="owned-map-popup__btn" data-map-open="${escapeHtml(asset.id)}">Voir le détail ${icone('fleche-droite')}</button>
             </div>
         `);
         marker.addTo(_ownedMapMarkers);
@@ -2970,7 +2971,7 @@ function renderOwnedPortfolioList() {
                 rowData.sort((a, b) => (valueFor(a) - valueFor(b)) * (sort.dir === 'asc' ? 1 : -1));
             }
 
-            const sortArrow = key => sort?.criterion === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+            const sortArrow = key => sort?.criterion === key ? ` ${icone(sort.dir === 'asc' ? 'chevron-haut' : 'chevron-bas')}` : '';
             const basePeriodeListe = yr === 'actuel' ? '12 mois' : `An ${yr}`;
             const sortHeaderAttr = (key, tooltip) => `data-sort-header="${key}" role="button" tabindex="0" title="${tooltip ? tooltip + ' ' : ''}Trier par ${SORT_LABELS[key]}"`;
 
@@ -2997,7 +2998,7 @@ function renderOwnedPortfolioList() {
                             const optAn1 = cmp.optimal[1];
                             const optAn5 = cmp.optimal[5];
                             const regimeAlertHtml = (optAn1 && optAn5 && optAn1 !== optAn5)
-                                ? `<span class="owned-regime-alert" title="Régime optimal change en an 5">⚠ Régime an 5</span>`
+                                ? `<span class="owned-regime-alert" title="Régime optimal change en an 5">${icone('alerte')} Régime an 5</span>`
                                 : '';
 
                             // Donut inline SVG — loyer résolu à targetAbsYear (même année que cfAnnuel via
@@ -3018,7 +3019,7 @@ function renderOwnedPortfolioList() {
                             } else if (dscr >= 1 && dscr < 1.1) {
                                 statusTone = 'watch'; statusLabel = 'DSCR tendu';
                             } else if (hasUnclassified) {
-                                statusTone = 'watch'; statusLabel = '⚠ Travaux';
+                                statusTone = 'watch'; statusLabel = 'Travaux';
                             } else {
                                 statusTone = 'ras'; statusLabel = 'RAS';
                             }
@@ -3045,7 +3046,7 @@ function renderOwnedPortfolioList() {
                                     </span>
                                 </td>
                                 <td>
-                                    <button class="btn btn--ghost btn--sm" data-action="delete-owned" data-id="${escapeHtml(asset.id)}" title="Supprimer" aria-label="Supprimer ${escapeHtml(asset.nom || 'le bien')}">✕</button>
+                                    <button class="btn btn--ghost btn--sm" data-action="delete-owned" data-id="${escapeHtml(asset.id)}" title="Supprimer" aria-label="Supprimer ${escapeHtml(asset.nom || 'le bien')}">${icone('croix')}</button>
                                 </td>
                             </tr>
                             `;
@@ -3073,7 +3074,7 @@ function renderOwnedPortfolioList() {
                 <span class="owned-expanded-label">Loyer initial</span>
                 <span class="owned-expanded-value">${(asset.acquisition?.loyerInitial || 0).toLocaleString('fr-FR')} €/mois</span>
             </div>
-            <button class="btn btn--ghost btn--sm" style="margin-left:auto" data-open-asset="${escapeHtml(asset.id)}">Ouvrir →</button>
+            <button class="btn btn--ghost btn--sm" style="margin-left:auto" data-open-asset="${escapeHtml(asset.id)}">Ouvrir ${icone('fleche-droite')}</button>
         </div>
     </td>
 </tr>` : '';
@@ -3822,7 +3823,7 @@ async function openDocumentPreview(assetId, filename, local = null) {
         overlay.className = 'document-preview-overlay';
         overlay.innerHTML = `
             <div class="document-preview-dialog">
-                <button type="button" class="document-preview-close" aria-label="Fermer">✕</button>
+                <button type="button" class="document-preview-close" aria-label="Fermer">${icone('croix')}</button>
                 <embed class="document-preview-embed" type="application/pdf" hidden>
                 <img class="document-preview-img" alt="Justificatif" hidden>
             </div>
@@ -3859,7 +3860,7 @@ function openEditTravailModal(assetId, travailId) {
         <div class="owned-modal">
             <div class="owned-modal-head">
                 <h3 class="owned-modal-title">Modifier le frais</h3>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <form class="owned-form-grid" data-form="edit-travail" novalidate>
                 <label class="variables-field">
@@ -3892,7 +3893,7 @@ function openEditTravailModal(assetId, travailId) {
                     <span class="variables-label">Justificatif</span>
                     ${travail.pdfFilename ? `
                     <div class="owned-edit-pdf-current" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                        <button type="button" class="btn btn--ghost btn--sm" data-preview-current-pdf>📄 Voir le justificatif actuel</button>
+                        <button type="button" class="btn btn--ghost btn--sm" data-preview-current-pdf>${icone('document')} Voir le justificatif actuel</button>
                         <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--text-secondary);cursor:pointer">
                             <input type="checkbox" name="removePdf" value="1"> Supprimer ce justificatif
                         </label>
@@ -4002,7 +4003,7 @@ function openImpressionFacturesModal({ assetId = null } = {}) {
                     <h3 class="owned-modal-title" id="owned-pf-title">Imprimer les factures</h3>
                     <div class="owned-modal-sub">Un seul PDF : le récapitulatif, puis chaque facture dans le même ordre.</div>
                 </div>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div class="owned-pf__filters">
                 <label class="variables-field">
@@ -4632,12 +4633,12 @@ function renderOwnedTravauxTab(asset) {
                 ${rows.map(t => `
                     <div class="owned-travaux-row" data-search-text="${escapeHtml(`${t.description || ''} ${t.montant || ''} ${t.commentaire || ''}`)}">
                         <span class="owned-travaux-date">${escapeHtml(_formatDateFr(t.date))}</span>
-                        <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.financeParCredit ? ` <small class="owned-caveat" data-tooltip="Inclus dans le crédit immobilier principal (pas payé cash) — reste déductible l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">🏦 financé</small>` : ''}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
+                        <span class="owned-travaux-desc">${escapeHtml(t.description || '—')}${t.financeParCredit ? ` <small class="owned-caveat" data-tooltip="Inclus dans le crédit immobilier principal (pas payé cash) — reste déductible l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">${icone('banque')} financé</small>` : ''}${t.commentaire ? `<br><small style="color:var(--text-tertiary)">${escapeHtml(t.commentaire)}</small>` : ''}</span>
                         <span class="owned-travaux-montant">${Math.round(t.montant).toLocaleString('fr-FR')} €</span>
                         <span class="tag ${TAG_CSS[t.tag] || 'tag--grey'}">${escapeHtml(TAG_LABELS[t.tag] || t.tag)}</span>
-                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le justificatif" aria-label="Voir le justificatif de ${escapeHtml(t.description || 'ce frais')}">📄</button>` : '<span class="owned-travaux-pdf-vide"></span>'}
-                        <button type="button" class="owned-travaux-edit" data-edit-travail="${escapeHtml(t.id)}" title="Modifier" aria-label="Modifier ${escapeHtml(t.description || 'ce frais')}">✏️</button>
-                        <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">✕</button>
+                        ${t.pdfFilename ? `<button type="button" class="owned-travaux-pdf-btn" data-preview-pdf="${escapeHtml(t.pdfFilename)}" title="Voir le justificatif" aria-label="Voir le justificatif de ${escapeHtml(t.description || 'ce frais')}">${icone('document')}</button>` : '<span class="owned-travaux-pdf-vide"></span>'}
+                        <button type="button" class="owned-travaux-edit" data-edit-travail="${escapeHtml(t.id)}" title="Modifier" aria-label="Modifier ${escapeHtml(t.description || 'ce frais')}">${icone('crayon')}</button>
+                        <button class="owned-travaux-delete" data-delete-travail-tab="${escapeHtml(t.id)}" title="Supprimer" aria-label="Supprimer">${icone('croix')}</button>
                     </div>
                 `).join('')}
             </div>
@@ -4656,7 +4657,7 @@ function renderOwnedTravauxTab(asset) {
         <div data-ce-root ${vueCorps ? '' : 'hidden'}></div>
         <div data-travaux-liste ${vueCorps ? 'hidden' : ''}>
         <div class="owned-travaux-toolbar">
-            <input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="🔍 Rechercher un frais…" aria-label="Rechercher un frais">
+            <span class="owned-travaux-search-wrap">${icone('loupe')}<input type="search" class="variables-input owned-travaux-search" data-travaux-search placeholder="Rechercher un frais…" aria-label="Rechercher un frais"></span>
             <button type="button" class="btn btn--ghost btn--sm" data-action="print-factures" ${(post.travaux || []).length ? '' : 'disabled'}>Imprimer les factures</button>
             ${IS_MOBILE_PAGE ? '' : `<button type="button" class="btn btn--ghost btn--sm" data-action="open-projection-impots" title="Effet des travaux déductibles sur l'impôt du foyer, année par année">Impôts des prochaines années</button>`}
         </div>
@@ -4667,7 +4668,7 @@ function renderOwnedTravauxTab(asset) {
             <div class="owned-travaux-dropzone" data-travaux-dropzone tabindex="0" role="button" aria-label="Déposer une facture ou une photo">
                 <input type="file" accept="application/pdf,image/jpeg,image/png" multiple data-travaux-file-input hidden>
                 <div class="owned-travaux-dropzone__body" data-travaux-dropzone-body>
-                    <div class="owned-travaux-dropzone__icon">📄</div>
+                    <div class="owned-travaux-dropzone__icon">${icone('document')}</div>
                     <div class="owned-travaux-dropzone__label">Dépose une facture ou une photo</div>
                     <div class="owned-travaux-dropzone__hint">PDF, JPG ou PNG — glisser-déposer ou <span class="owned-travaux-dropzone__browse">choisir un fichier</span></div>
                 </div>
@@ -4682,7 +4683,7 @@ function renderOwnedTravauxTab(asset) {
                     <label class="field-inline"><span class="field-inline__label">Nature du frais</span><select name="tag" class="variables-input" data-field="tag" style="flex:0 0 130px">
                         ${natureFraisOptionsHtml()}
                     </select></label>
-                    <span class="owned-tag-suggested-badge" data-tag-suggested-badge hidden>🤖 suggéré</span>
+                    <span class="owned-tag-suggested-badge" data-tag-suggested-badge hidden>${icone('etincelle')} suggéré</span>
                 </span>
                 <label class="field-inline"><span class="field-inline__label">Commentaire (optionnel)</span><input type="text" name="commentaire" class="variables-input" placeholder="Commentaire (optionnel)" style="flex:1;min-width:120px"></label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text-secondary);white-space:nowrap;flex:0 0 auto" data-tooltip="À cocher si ce frais fait partie de l'enveloppe du crédit immobilier principal (pas payé cash) — reste déductible fiscalement l'année du frais, mais n'est plus retranché du cash-flow puisque la mensualité rembourse déjà cette part">
@@ -4806,11 +4807,11 @@ function renderOwnedTravauxTab(asset) {
         dropzone.classList.add('owned-travaux-dropzone--filled');
         statusEl.hidden = false;
         statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--loading';
-        statusEl.textContent = `📄 ${file.name} — lecture de la facture…`;
+        definirTexteAvecIcone(statusEl, 'document', `${file.name} — lecture de la facture…`);
 
         if (file.size > TRAVAUX_MAX_FILE_SIZE) {
             statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
-            statusEl.textContent = `📄 ${file.name} — trop volumineux pour l'extraction (max 8 Mo), remplis à la main`;
+            definirTexteAvecIcone(statusEl, 'document', `${file.name} — trop volumineux pour l'extraction (max 8 Mo), remplis à la main`);
             return;
         }
 
@@ -4824,12 +4825,12 @@ function renderOwnedTravauxTab(asset) {
             fieldTag.value = suggererNatureFrais(result);
             tagBadge.hidden = false;
             aiBanner.hidden = false;
-            aiBanner.textContent = `🤖 Facture : ${file.name} — vérifie les champs avant de valider`;
+            definirTexteAvecIcone(aiBanner, 'etincelle', `Facture : ${file.name} — vérifie les champs avant de valider`);
             statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--ok';
-            statusEl.textContent = `📄 ${file.name} — ✓ pré-rempli`;
+            definirTexteAvecIcone(statusEl, 'document', `${file.name} — pré-rempli`);
         } catch (err) {
             statusEl.className = 'owned-travaux-dropzone__status owned-travaux-dropzone__status--error';
-            statusEl.textContent = `📄 ${file.name} — extraction impossible, remplis à la main`;
+            definirTexteAvecIcone(statusEl, 'document', `${file.name} — extraction impossible, remplis à la main`);
             showToast('Extraction impossible, remplis le formulaire à la main', 'negative');
         }
     };
@@ -4896,7 +4897,7 @@ function renderOwnedTravauxTab(asset) {
         });
         form.reset();
         resetDropzone();
-        showToast(alerteTF ? `Frais ajouté. ⚠ ${alerteTF}` : 'Frais ajouté', alerteTF ? 'negative' : 'positive');
+        showToast(alerteTF ? `Frais ajouté. ${alerteTF}` : 'Frais ajouté', alerteTF ? 'negative' : 'positive');
         const fresh = getOwnedAsset(id);
         renderOwnedTravauxTab(fresh);
         renderAccordionPostAchat(fresh);
@@ -5004,7 +5005,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             <div class="owned-modal owned-fm">
                 <div class="owned-modal-head">
                     <h3 class="owned-modal-title">Ajouter des factures</h3>
-                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                    <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
                 </div>
                 <div class="owned-fm__none">
                     <p>Crée d'abord un bien : les factures s'enregistrent sur un bien du portefeuille.</p>
@@ -5027,7 +5028,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
                     <h3 class="owned-modal-title">Ajouter des factures</h3>
                     <div class="owned-modal-sub">Dépose, vérifie, valide — l'IA lit fournisseur, résumé, montant et date d'émission.</div>
                 </div>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <label class="owned-fm__asset">
                 <span class="variables-label">Bien</span>
@@ -5095,7 +5096,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
                         <span class="owned-fm-existing__desc" data-fm-existing-desc title="${escapeHtml(t.description || '')}">${escapeHtml(t.description || '—')}</span>
                         <span class="owned-fm-existing__montant" data-fm-existing-montant>${Math.round(t.montant || 0).toLocaleString('fr-FR')} €</span>
                         ${t.pdfFilename
-                            ? `<button type="button" class="owned-fm-existing__preview" data-fm-existing-preview="${escapeHtml(t.pdfFilename)}" title="Voir la facture" aria-label="Voir la facture de ${escapeHtml(t.description || 'ce frais')}">📄</button>`
+                            ? `<button type="button" class="owned-fm-existing__preview" data-fm-existing-preview="${escapeHtml(t.pdfFilename)}" title="Voir la facture" aria-label="Voir la facture de ${escapeHtml(t.description || 'ce frais')}">${icone('document')}</button>`
                             : '<span class="owned-fm-existing__nopreview" aria-hidden="true">—</span>'}
                     </div>`).join('')}
             </div>
@@ -5145,13 +5146,13 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             const alerteTF = alerteDoublonTaxeFonciere(asset, v);
             const messages = [];
             if (doublon) {
-                messages.push(`⚠ Doublon probable : « ${doublon.description || 'sans description'} » du ${_formatDateFr(doublon.date)} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €) — décoché par précaution`);
+                messages.push(`Doublon probable : « ${doublon.description || 'sans description'} » du ${_formatDateFr(doublon.date)} (${Math.round(doublon.montant).toLocaleString('fr-FR')} €) — décoché par précaution`);
                 existingEl.querySelector(`[data-travail-id="${CSS.escape(doublon.id)}"]`)?.classList.add('owned-fm-existing__row--dup');
                 if (!row.dupSeen) { row.dupSeen = true; rowCheck(row).checked = false; }
             }
-            if (alerteTF) messages.push(`⚠ ${alerteTF}`);
+            if (alerteTF) messages.push(alerteTF);
             dupEl.hidden = messages.length === 0;
-            dupEl.replaceChildren(...messages.map(m => Object.assign(document.createElement('div'), { textContent: m })));
+            dupEl.replaceChildren(...messages.map(m => { const d = document.createElement('div'); definirTexteAvecIcone(d, 'alerte', m); return d; }));
         }
         updateSubmit();
     };
@@ -5192,7 +5193,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             fillRow(row, result);
             row.status = 'ok';
             const complete = isComplete(rowValues(row));
-            setStatus(row, complete ? '✓ lu par l\'IA — vérifie avant d\'ajouter' : 'À compléter (date, résumé, montant)', complete ? 'ok' : '');
+            setStatus(row, complete ? 'Lu par l\'IA — vérifie avant d\'ajouter' : 'À compléter (date, résumé, montant)', complete ? 'ok' : '');
             rowCheck(row).checked = complete;
         } catch (err) {
             row.status = 'error';
@@ -5223,7 +5224,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
             <input type="checkbox" class="owned-fm-row__check" data-fm-check aria-label="Inclure ${escapeHtml(file.name)}">
             <button type="button" class="owned-fm-row__thumb" data-fm-preview title="Aperçu de la facture" aria-label="Aperçu de ${escapeHtml(file.name)}">
                 <img data-fm-thumb alt="" hidden>
-                <span data-fm-thumb-icon aria-hidden="true">${isPdf ? '📄' : '🖼'}</span>
+                <span data-fm-thumb-icon aria-hidden="true">${icone(isPdf ? 'document' : 'image')}</span>
             </button>
             <div class="owned-fm-row__main">
                 <div class="owned-fm-row__line">
@@ -5243,7 +5244,7 @@ async function openAjoutFacturesModal({ assetId = null, files = [], lockAsset = 
                 <div class="owned-batch-duplicate" data-fm-dup hidden></div>
             </div>
             <div class="owned-fm-row__tools">
-                <button type="button" data-fm-remove title="Retirer de la liste" aria-label="Retirer ${escapeHtml(file.name)}">✕</button>
+                <button type="button" data-fm-remove title="Retirer de la liste" aria-label="Retirer ${escapeHtml(file.name)}">${icone('croix')}</button>
             </div>`;
         rowsEl.appendChild(el);
         const row = { rid, file, imageFile: null, base64: null, mimeType: null, previewUrl: null, status: 'loading', el, dupSeen: false };
@@ -5391,7 +5392,7 @@ async function openImportDossierModal(existingAssetId) {
                     <h3 class="owned-modal-title">Import de dossier — ${files.length} document${files.length > 1 ? 's' : ''}</h3>
                     <div class="owned-modal-sub" data-dossier-progress>Analyse en cours… 0 / ${files.length}</div>
                 </div>
-                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">✕</button>
+                <button class="btn btn--ghost" data-close-modal aria-label="Fermer">${icone('croix')}</button>
             </div>
             <div data-dossier-body>
                 <p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Lecture des documents…</p>
@@ -5478,9 +5479,9 @@ async function openImportDossierModal(existingAssetId) {
         <tr>
             <td><input type="checkbox" data-dossier-travail-check="${idx}" checked></td>
             <td class="owned-batch-filename">
-                📄 ${escapeHtml(t.file.name)}
-                ${doublon ? `<div class="owned-batch-duplicate">⚠ Possible doublon : « ${escapeHtml(doublon.description || 'sans description')} » du ${escapeHtml(_formatDateFr(doublon.date))}</div>` : ''}
-                ${alerteTF ? `<div class="owned-batch-duplicate">⚠ ${escapeHtml(alerteTF)}</div>` : ''}
+                ${icone('document')} ${escapeHtml(t.file.name)}
+                ${doublon ? `<div class="owned-batch-duplicate">${icone('alerte')} Possible doublon : « ${escapeHtml(doublon.description || 'sans description')} » du ${escapeHtml(_formatDateFr(doublon.date))}</div>` : ''}
+                ${alerteTF ? `<div class="owned-batch-duplicate">${icone('alerte')} ${escapeHtml(alerteTF)}</div>` : ''}
             </td>
             <td><input type="date" class="variables-input" data-dossier-travail-field="date" data-idx="${idx}" value="${escapeHtml(t.date)}"></td>
             <td><input type="text" class="variables-input" data-dossier-travail-field="description" data-idx="${idx}" value="${escapeHtml(t.description)}"></td>
@@ -5494,7 +5495,7 @@ async function openImportDossierModal(existingAssetId) {
     }).join('');
 
     const failedHtml = failedRows.map(r => `
-        <div class="owned-batch-filename">📄 ${escapeHtml(r.file.name)} — <span class="owned-caveat" style="color:#ef4444">${escapeHtml(r.errorReason || 'échec')}</span></div>
+        <div class="owned-batch-filename">${icone('document')} ${escapeHtml(r.file.name)} — <span class="owned-caveat" style="color:#ef4444">${escapeHtml(r.errorReason || 'échec')}</span></div>
     `).join('');
 
     bodyEl.innerHTML = `
@@ -5721,9 +5722,9 @@ function renderOwnedSynthese(asset) {
     const loyerSousEvalue = loyerMarche && loyerInitialVal > 0 && loyerInitialVal < loyerMarche.loyerMedian * 0.9;
 
     nodes.ownedSynthese.innerHTML = `
-        ${alerteMicroFoncier ? `<div class="owned-alert owned-alert--error">⚠ Revenus fonciers bruts ${Math.round(revenusBruts).toLocaleString('fr-FR')} €/an — Micro-foncier interdit au-delà de 15 000 €. Changez de régime.</div>` : ''}
-        ${hasOptAlert ? `<div class="owned-alert owned-alert--info">💡 ${REGIME_LABELS_SHORT[optRegime.optimal]} serait plus favorable de <strong>+${Math.round(optGain).toLocaleString('fr-FR')} €/mois</strong> pour ce bien${optRegime.optimal === 'sci-is' ? ' <span class="owned-caveat" data-tooltip="Comparaison basée sur le seul CF net-net : ne compte pas les frais de structure d\'une SCI-IS (comptable, formalisme, ~1500-2500 €/an) ni sa fiscalité de sortie, moins favorable (pas d\'abattement pour durée de détention, flat tax sur les dividendes).">(hors frais de structure et fiscalité de sortie)</span>' : ''}</div>` : ''}
-        ${loyerSousEvalue ? `<div class="owned-alert owned-alert--warning">📈 Loyer potentiellement sous-évalué : marché à <strong>${Math.round(loyerMarche.loyerMedian).toLocaleString('fr-FR')} €/mois</strong> (médiane sur ${loyerMarche.nbSamples} biens)</div>` : ''}
+        ${alerteMicroFoncier ? `<div class="owned-alert owned-alert--error">${icone('alerte')} Revenus fonciers bruts ${Math.round(revenusBruts).toLocaleString('fr-FR')} €/an — Micro-foncier interdit au-delà de 15 000 €. Changez de régime.</div>` : ''}
+        ${hasOptAlert ? `<div class="owned-alert owned-alert--info">${icone('ampoule')} ${REGIME_LABELS_SHORT[optRegime.optimal]} serait plus favorable de <strong>+${Math.round(optGain).toLocaleString('fr-FR')} €/mois</strong> pour ce bien${optRegime.optimal === 'sci-is' ? ' <span class="owned-caveat" data-tooltip="Comparaison basée sur le seul CF net-net : ne compte pas les frais de structure d\'une SCI-IS (comptable, formalisme, ~1500-2500 €/an) ni sa fiscalité de sortie, moins favorable (pas d\'abattement pour durée de détention, flat tax sur les dividendes).">(hors frais de structure et fiscalité de sortie)</span>' : ''}</div>` : ''}
+        ${loyerSousEvalue ? `<div class="owned-alert owned-alert--warning">${icone('graphique')} Loyer potentiellement sous-évalué : marché à <strong>${Math.round(loyerMarche.loyerMedian).toLocaleString('fr-FR')} €/mois</strong> (médiane sur ${loyerMarche.nbSamples} biens)</div>` : ''}
     `;
 }
 
@@ -5844,7 +5845,7 @@ function renderOwnedCalculTab(asset) {
             </div>
         </div>
         <div class="owned-synthese__title" style="margin-top:16px">Comparaison des régimes — ${escapeHtml(libellePeriodeCF(periodeCFReference()))}
-            <button class="btn btn--ghost btn--sm" data-action="open-simu-travaux" style="margin-left:auto;font-size:0.75rem">🔧 Simuler des travaux</button>
+            <button class="btn btn--ghost btn--sm" data-action="open-simu-travaux" style="margin-left:auto;font-size:0.75rem">${icone('outil')} Simuler des travaux</button>
         </div>
         <div class="owned-synthese__defisca">
             ${defisca.map(d => {
@@ -5856,7 +5857,7 @@ function renderOwnedCalculTab(asset) {
                     : '';
                 return `
                 <div class="owned-synthese__defisca-card${isActive ? ' owned-synthese__defisca-card--active' : ''}">
-                    <span class="owned-synthese__defisca-name">${d.label}${isActive ? ' ✓' : ''}${isOptimal && !isActive ? ` <span class="owned-badge owned-badge--optimal"${optimalTooltip}>Optimal</span>` : ''}${isOptimal && isActive ? ` <span class="owned-badge owned-badge--optimal"${optimalTooltip}>✓ Optimal</span>` : ''}</span>
+                    <span class="owned-synthese__defisca-name">${d.label}${isActive ? ` ${icone('coche')}` : ''}${isOptimal && !isActive ? ` <span class="owned-badge owned-badge--optimal"${optimalTooltip}>Optimal</span>` : ''}${isOptimal && isActive ? ` <span class="owned-badge owned-badge--optimal"${optimalTooltip}>${icone('coche')} Optimal</span>` : ''}</span>
                     <div class="owned-synthese__defisca-row">
                         <span>Impôts sur 12 mois</span>
                         <span>${Math.round(d.impots).toLocaleString('fr-FR')} €</span>
@@ -5889,7 +5890,7 @@ function renderOwnedCalculTab(asset) {
     bottomEl.innerHTML = `
         <div class="owned-section-title" style="margin-top:20px">Comparaison des régimes — par année civile de détention</div>
         ${renderRegimeComparisonHTML(cmp, asset)}
-        <button type="button" class="btn btn--ghost btn--sm" data-action="open-compte-resultat" data-annee="${anneeComp}" style="margin-top:12px">📊 Compte de résultat ${anneeComp}</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-action="open-compte-resultat" data-annee="${anneeComp}" style="margin-top:12px">${icone('graphique')} Compte de résultat ${anneeComp}</button>
     `;
 }
 
@@ -5917,7 +5918,7 @@ function renderAccordionAcquisition(asset) {
     nodes.accAcquisitionContent.innerHTML = `
         ${IS_MOBILE_PAGE ? '' : `
         <div class="owned-import-dossier-row">
-            <button type="button" class="btn btn--ghost btn--sm" data-action="import-dossier">📁 Importer un dossier de documents</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="import-dossier">${icone('dossier')} Importer un dossier de documents</button>
             <span class="owned-caveat">Acte de vente, offre de prêt, taxe foncière, charges copro… pré-remplit les champs ci-dessous</span>
         </div>`}
         <div class="owned-form-grid">
@@ -5969,8 +5970,8 @@ function renderAccordionAcquisition(asset) {
                 <span class="owned-geocode-hint" data-geocode-hint>${
                     asset.adresse
                         ? (asset.lat != null
-                            ? '📍 Localisé sur la carte'
-                            : '⚠ Adresse non localisée — vérifiez l\'orthographe')
+                            ? 'Localisé sur la carte'
+                            : 'Adresse non localisée — vérifiez l\'orthographe')
                         : ''
                 }</span>
             </label>
@@ -5988,7 +5989,7 @@ function renderAccordionAcquisition(asset) {
                     <td><input class="variables-input variables-input--sm" type="number" min="0" step="10" data-lot-field="loyer" aria-label="Loyer (€/mois) de ${escapeHtml(l.nom)}" value="${l.loyer}"></td>
                     <td><input class="variables-input variables-input--sm" type="number" min="0" max="100" step="1" data-lot-field="vacance" aria-label="Vacance (%) de ${escapeHtml(l.nom)}" value="${l.vacance}"></td>
                     <td><input class="variables-input variables-input--sm" type="text" data-lot-field="locataire" aria-label="Locataire de ${escapeHtml(l.nom)}" value="${escapeHtml(l.locataire || '')}" placeholder="Nom locataire"></td>
-                    <td><button class="owned-travaux-delete" data-delete-lot="${escapeHtml(l.id)}" title="Supprimer ce lot" aria-label="Supprimer ${escapeHtml(l.nom)}">✕</button></td>
+                    <td><button class="owned-travaux-delete" data-delete-lot="${escapeHtml(l.id)}" title="Supprimer ce lot" aria-label="Supprimer ${escapeHtml(l.nom)}">${icone('croix')}</button></td>
                 </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;font-style:italic;color:var(--text-tertiary);padding:12px">Aucun lot — ajoutez le premier lot ci-dessous</td></tr>'}
             </tbody>
         </table>
@@ -6209,7 +6210,7 @@ function renderRegimeComparisonHTML(cmp, asset) {
     const opt1 = cmp.optimal[1];
     const opt5 = cmp.optimal[5];
     const alertHtml = (opt1 && opt5 && opt1 !== opt5)
-        ? `<div class="regime-comparison__alert">⚠ Régime optimal an 1 : <strong>${REGIME_LABELS[opt1]}</strong> — mais en an 5 : <strong>${REGIME_LABELS[opt5]}</strong> devient plus avantageux. Rappel : le foncier réel engage sur 3 ans minimum.</div>`
+        ? `<div class="regime-comparison__alert">${icone('alerte')} Régime optimal an 1 : <strong>${REGIME_LABELS[opt1]}</strong> — mais en an 5 : <strong>${REGIME_LABELS[opt5]}</strong> devient plus avantageux. Rappel : le foncier réel engage sur 3 ans minimum.</div>`
         : '';
 
     return `<div class="regime-comparison">
@@ -6228,7 +6229,7 @@ function renderRegimeComparisonHTML(cmp, asset) {
                     ${YEARS.map(y => {
                         const v = cmp.byRegime[regime]?.[y] ?? null;
                         const isOpt = cmp.optimal[y] === regime;
-                        return `<td><span class="${cls(v)}">${fmt(v)}</span>${isOpt ? '<span class="optimal-badge">✓</span>' : ''}</td>`;
+                        return `<td><span class="${cls(v)}">${fmt(v)}</span>${isOpt ? `<span class="optimal-badge" role="img" aria-label="Régime optimal">${icone('coche')}</span>` : ''}</td>`;
                     }).join('')}
                 </tr>`).join('')}
             </tbody>
@@ -6244,7 +6245,7 @@ function renderAccordionPostAchat(asset) {
     const hasUnclassified = (post.travaux || []).some(t => t.tag === 'a-classifier');
     if (nodes.accPostAchatSummary) {
         nodes.accPostAchatSummary.textContent = hasUnclassified
-            ? `⚠ ${(post.travaux || []).filter(t => t.tag === 'a-classifier').length} travail(x) à classifier`
+            ? `${(post.travaux || []).filter(t => t.tag === 'a-classifier').length} travail(x) à classifier`
             : post.travaux?.length ? `${post.travaux.length} travail(x)` : '';
     }
 
@@ -6279,7 +6280,7 @@ function renderAccordionPostAchat(asset) {
         <div style="font-size:.75rem;color:var(--accent-text);margin-bottom:8px;
           padding:6px 10px;background:var(--surface-raised,var(--surface));
           border-left:2px solid var(--accent);border-radius:4px">
-          ⚠ Ces valeurs proviennent de l'entrée <strong>${displayFromYear}</strong>
+          ${icone('alerte')} Ces valeurs proviennent de l'entrée <strong>${displayFromYear}</strong>
           de l'historique. Modifiez-les ici pour mettre à jour cette entrée.
         </div>` : ''}
         <div class="owned-form-grid">
@@ -6315,7 +6316,7 @@ function renderAccordionPostAchat(asset) {
                 <div class="owned-charges-annuelles-row">
                     <span class="owned-charges-annuelles-row__year">${e.annee}</span>
                     <span class="owned-charges-annuelles-row__vals">TF : ${(e.taxeFonciere ?? 0).toLocaleString('fr-FR')} €/an · Copro : ${(e.chargesCopro ?? 0).toLocaleString('fr-FR')} €/mois · Gest. : ${e.gestionLocative ?? 0} % · PNO : ${(e.assurancePNO ?? 0).toLocaleString('fr-FR')} €/an</span>
-                    <button class="owned-travaux-delete" data-delete-charges="${e.annee}" title="Supprimer" aria-label="Supprimer l'entrée de charges ${e.annee}">✕</button>
+                    <button class="owned-travaux-delete" data-delete-charges="${e.annee}" title="Supprimer" aria-label="Supprimer l'entrée de charges ${e.annee}">${icone('croix')}</button>
                 </div>
             `).join('') : '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Ajoutez une année pour suivre l\'évolution des charges.</p>'}
         </div>
@@ -6333,7 +6334,7 @@ function renderAccordionPostAchat(asset) {
             ${(post.travaux || []).length ? `${post.travaux.length} frais enregistré(s)` : 'Aucun frais enregistré.'}
             ${totalDed > 0 ? ` · ${Math.round(totalDed).toLocaleString('fr-FR')} € déductible ${currentYear}` : ''}
         </p>
-        <button type="button" class="btn btn--ghost btn--sm" data-action="goto-travaux-tab">Gérer les frais &amp; justificatifs →</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-action="goto-travaux-tab">Gérer les frais &amp; justificatifs ${icone('fleche-droite')}</button>
 
         <div class="owned-section-title" style="margin-top:20px">Loyer</div>
         ${(() => {
@@ -6361,7 +6362,7 @@ function renderAccordionPostAchat(asset) {
                             ${Math.round(e.montant || 0).toLocaleString('fr-FR')} €/mois
                             ${idx === historique.length - 1 ? ' · <em>début de location</em>' : ''}
                         </span>
-                        <button class="owned-travaux-delete" data-delete-loyer-hist="${escapeHtml(e.mois)}" title="Supprimer" aria-label="Supprimer le loyer à partir de ${escapeHtml(_formatMoisFr(e.mois))}">✕</button>
+                        <button class="owned-travaux-delete" data-delete-loyer-hist="${escapeHtml(e.mois)}" title="Supprimer" aria-label="Supprimer le loyer à partir de ${escapeHtml(_formatMoisFr(e.mois))}">${icone('croix')}</button>
                     </div>
                 `).join('')}
             </div>` : `<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">
@@ -6405,7 +6406,7 @@ function renderAccordionPostAchat(asset) {
                     <p class="owned-note-text">${escapeHtml(n.text)}</p>
                     <div style="display:flex;align-items:center;gap:8px">
                         <span class="owned-note-date">${new Date(n.createdAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
-                        <button class="owned-travaux-delete" data-delete-note="${escapeHtml(n.id)}" title="Supprimer" aria-label="Supprimer la note" style="margin-left:auto">✕</button>
+                        <button class="owned-travaux-delete" data-delete-note="${escapeHtml(n.id)}" title="Supprimer" aria-label="Supprimer la note" style="margin-left:auto">${icone('croix')}</button>
                     </div>
                 </div>
             `).join('') || '<p style="font-size:.82rem;color:var(--text-tertiary);font-style:italic">Aucune note.</p>'}
@@ -6622,7 +6623,7 @@ function renderAccordionSimulateur(asset) {
                                     data-sc-nom="${escapeHtml(sc.id)}"
                                     style="background:transparent;border:none;color:inherit;font-weight:700;font-size:0.75rem;text-transform:uppercase;letter-spacing:.06em;width:90px;text-align:center;cursor:text"
                                     title="Renommer le scénario">
-                                ${scenarios.length > 1 ? `<button class="owned-sim-delete-sc" data-sc-id="${escapeHtml(sc.id)}" title="Supprimer" aria-label="Supprimer le scénario ${escapeHtml(sc.nom)}" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:0.75rem;padding:0 2px">✕</button>` : ''}
+                                ${scenarios.length > 1 ? `<button class="owned-sim-delete-sc" data-sc-id="${escapeHtml(sc.id)}" title="Supprimer" aria-label="Supprimer le scénario ${escapeHtml(sc.nom)}" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:0.75rem;padding:0 2px">${icone('croix')}</button>` : ''}
                             </th>
                         `).join('')}
                         <th><button class="owned-sim-add-btn" type="button">+ Scénario</button></th>
@@ -6786,7 +6787,7 @@ function _diagnosticActionBar(hasHistory, confirming, errorHtml = '') {
     }
     return `
         ${errorHtml}
-        <button type="button" class="btn btn--primary ai-diag-new" data-diag-new>✦ ${hasHistory ? 'Nouveau diagnostic' : 'Lancer le diagnostic'}</button>`;
+        <button type="button" class="btn btn--primary ai-diag-new" data-diag-new>${icone('etincelle')} ${hasHistory ? 'Nouveau diagnostic' : 'Lancer le diagnostic'}</button>`;
 }
 
 // Rendu du drawer Diagnostic IA : barre d'action (nouveau diagnostic + confirmation), puis
@@ -6833,7 +6834,7 @@ function renderOwnedDiagnosticDrawer(history, selectedIndex, { confirming = fals
             <div style="border:1px solid var(--border-subtle);border-radius:8px;padding:14px;margin-bottom:10px">
                 <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:6px">${i + 1}. ${escapeHtml(r.title)}</div>
                 <p style="font-size:.83rem;color:var(--text-secondary);line-height:1.5;margin:0 0 8px">${escapeHtml(r.explanation)}</p>
-                <div style="font-size:.78rem;color:var(--accent-text)">→ ${escapeHtml(r.action)}</div>
+                <div style="font-size:.78rem;color:var(--accent-text)">${icone('fleche-droite')} ${escapeHtml(r.action)}</div>
             </div>
         `).join('')}
     `;

@@ -95,7 +95,15 @@ Le thème s'applique par data-theme="light|dark" sur <html> ; la page s'ouvre en
 - États de survol (Hover) : réduction de l'opacité de 12% ou légère élévation (shadow).
 - Graphiques : série unique = accent (trait plein, remplissage translucide) ; plusieurs séries = palette catégorielle.
 - Tons d'état (classes --excellent, --positive, --neutral, --watch, --negative) : jamais l'accent.
-- Icônes : style "Line", épaisseur de trait constante (1.5px).
+- Icônes (décidé le 20/11/2026, audit A7) : une seule famille, SVG en ligne, style "Line", trait constant de 1,5 px,
+  bouts et angles arrondis, couleur = celle du texte (currentColor), grille de 16 px. Source unique : icones.js (30
+  icônes). Plus aucun emoji couleur ni glyphe (✦ ✕ ✓ ⚠ ☀ ☾ ↑ ↓ ← → ▶ ● ○) comme icône d'interface ; les flèches ← → ne
+  subsistent que dans une phrase. Toute icône est décorative (aria-hidden) : un bouton qui n'a QUE une icône porte un
+  aria-label (ou un texte masqué). Dans un gabarit JS : ${icone('croix')} ; dans le HTML statique : <i
+  data-icone="croix"></i> (remplacé au démarrage) ; pour un texte venant de l'utilisateur : definirTexteAvecIcone().
+  Contrôle : tests/test_icones.mjs et tests/playwright/audit-lot3.mjs, scénario A7 (24 écrans).
+  Exceptions : le code mort de ui.js, les PDF (leur propre mise en page) et les <option> de tri (▲ ▼, une option ne
+  contient que du texte).
 
 ============================================================
 7. RÈGLES D'USAGE

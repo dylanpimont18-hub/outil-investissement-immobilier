@@ -79,7 +79,7 @@
                 <div class="sidebar-save" data-analysis-only>
                     <div id="asset-status-bar" class="asset-status-bar asset-status-bar--new" aria-live="polite">
                         <div class="asset-status-bar__left">
-                            <span class="asset-status-bar__dot asset-status-bar__dot--new">○</span>
+                            <span class="asset-status-bar__dot asset-status-bar__dot--new"><i data-icone="point-vide"></i></span>
                             <span class="asset-status-bar__text">Nouvelle étude · pas encore enregistrée</span>
                         </div>
                         <div class="asset-status-bar__badges"></div>
@@ -178,7 +178,7 @@
                                 <div class="form-zone__head" role="button" tabindex="0" aria-expanded="true">
                                     <span class="form-zone__badge form-zone__badge--essentiel">ESSENTIEL</span>
                                     <span class="form-zone__name">Acquisition &amp; financement</span>
-                                    <span class="form-zone__chevron">▶</span>
+                                    <span class="form-zone__chevron"><i data-icone="chevron-droit"></i></span>
                                 </div>
                                 <div class="form-zone__body">
 
@@ -301,7 +301,7 @@
                                 <div class="form-zone__head" role="button" tabindex="0" aria-expanded="false">
                                     <span class="form-zone__badge form-zone__badge--important">IMPORTANT</span>
                                     <span class="form-zone__name">Exploitation &amp; fiscalité</span>
-                                    <span class="form-zone__chevron">▶</span>
+                                    <span class="form-zone__chevron"><i data-icone="chevron-droit"></i></span>
                                 </div>
                                 <div class="form-zone__body" hidden>
 
@@ -370,7 +370,7 @@
                                 <div class="form-zone__head" role="button" tabindex="0" aria-expanded="false">
                                     <span class="form-zone__badge form-zone__badge--avance">AVANCÉ</span>
                                     <span class="form-zone__name">Vérifications, seuils &amp; journal</span>
-                                    <span class="form-zone__chevron">▶</span>
+                                    <span class="form-zone__chevron"><i data-icone="chevron-droit"></i></span>
                                 </div>
                                 <div class="form-zone__body" hidden>
 
@@ -680,7 +680,7 @@
         <div class="owned-quickrail__label">Actions rapides</div>
 
         <button type="button" class="owned-quickrail__action" data-quickaction="add-bien">
-            <span class="owned-quickrail__icon">🏠</span><span>Ajouter un bien</span>
+            <span class="owned-quickrail__icon"><i data-icone="maison"></i></span><span>Ajouter un bien</span>
         </button>
         <div class="owned-quickrail__panel" data-quickpanel="add-bien" hidden>
             <form id="owned-quick-add-bien-form" novalidate>
@@ -702,11 +702,11 @@
                 </div>
             </form>
             <div class="owned-quickrail__divider">ou</div>
-            <button type="button" class="btn btn--ghost btn--sm" id="owned-quick-import-dossier-btn" style="width:100%">📁 Importer un dossier de documents</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="owned-quick-import-dossier-btn" style="width:100%"><i data-icone="dossier"></i> Importer un dossier de documents</button>
         </div>
 
         <button type="button" class="owned-quickrail__action" data-quickaction="add-facture">
-            <span class="owned-quickrail__icon">📄</span><span>Ajouter une facture</span>
+            <span class="owned-quickrail__icon"><i data-icone="document"></i></span><span>Ajouter une facture</span>
         </button>
     </aside>
     <div class="owned-portfolio-main">
@@ -719,8 +719,8 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center">
                 <button id="owned-density-btn" class="btn btn--ghost btn--sm" type="button" title="Densité de la liste"></button>
-                <button id="owned-import-btn" class="btn btn--ghost btn--sm" type="button" title="Importer une archive (cloud ou fichier .json)">↑ Import</button>
-                <button id="owned-export-btn" class="btn btn--ghost btn--sm" type="button" title="Exporter le portefeuille en JSON (téléchargement + archive cloud)">↓ Export</button>
+                <button id="owned-import-btn" class="btn btn--ghost btn--sm" type="button" title="Importer une archive (cloud ou fichier .json)"><i data-icone="fleche-haut"></i> Import</button>
+                <button id="owned-export-btn" class="btn btn--ghost btn--sm" type="button" title="Exporter le portefeuille en JSON (téléchargement + archive cloud)"><i data-icone="fleche-bas"></i> Export</button>
             </div>
         </div>
         <!-- Navigation onglets portefeuille -->
@@ -759,9 +759,9 @@
     <!-- Vue détaillée -->
     <div id="owned-detail-view" hidden>
         <div class="owned-detail-header">
-            <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button">← Retour</button>
+            <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button"><i data-icone="fleche-gauche"></i> Retour</button>
             <div id="owned-detail-title" class="owned-detail-title"></div>
-            <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>✦ Diagnostic IA</button>
+            <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled><i data-icone="etincelle"></i> Diagnostic IA</button>
             <button id="owned-report-btn" class="btn btn--ghost" type="button" hidden title="Aperçu, PDF et export .md des données du bien">Rapport</button>
             <button id="owned-bank-dossier-btn" class="btn btn--ghost" type="button">Dossier bancaire</button>
         </div>
@@ -813,7 +813,7 @@
         <div id="owned-ai-drawer" class="portfolio-ai-drawer" role="dialog" aria-modal="true" aria-label="Diagnostic IA">
             <div class="portfolio-ai-drawer__header">
                 <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
-                <button id="owned-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer">✕</button>
+                <button id="owned-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer"><i data-icone="croix"></i></button>
             </div>
             <div id="owned-ai-drawer-content" class="portfolio-ai-drawer__content"></div>
         </div>
@@ -847,7 +847,7 @@
          le portefeuille cloud est chargé (owned-portfolio.js, _syncQuickFabVisibility), masqué dans la
          fenêtre d'analyse détachée. Ouvre la modale globale openAjoutFacturesModal — même flux que le
          bouton flottant d'owned.html (iPhone) et que « Ajouter une facture » du rail Actions rapides. -->
-    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter des factures" hidden>📄<span class="owned-quickfab__plus">+</span></button>
+    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter des factures" hidden><i data-icone="document"></i><span class="owned-quickfab__plus">+</span></button>
 
     <!-- Modale suppression sécurisée -->
     <div id="owned-delete-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
@@ -998,15 +998,15 @@
             <span id="tuto-bar-desc"></span>
         </div>
         <div class="tuto-bar__actions">
-            <button type="button" id="tuto-prev" class="tuto-btn">← Précédent</button>
-            <button type="button" id="tuto-next" class="tuto-btn tuto-btn--primary">Suivant →</button>
+            <button type="button" id="tuto-prev" class="tuto-btn"><i data-icone="fleche-gauche"></i> Précédent</button>
+            <button type="button" id="tuto-next" class="tuto-btn tuto-btn--primary">Suivant <i data-icone="fleche-droite"></i></button>
         </div>
     </div>
 
     <div id="glossaire-drawer" class="glossaire-drawer" hidden role="dialog" aria-modal="true" aria-label="Glossaire">
         <div class="glossaire-drawer__header">
             <span class="glossaire-drawer__title">Glossaire</span>
-            <button id="glossaire-close" class="glossaire-drawer__close" type="button" aria-label="Fermer">✕</button>
+            <button id="glossaire-close" class="glossaire-drawer__close" type="button" aria-label="Fermer"><i data-icone="croix"></i></button>
         </div>
         <div id="glossaire-content" class="glossaire-drawer__content"></div>
     </div>
@@ -1069,11 +1069,11 @@
     <div class="modal-dialog modal-dialog--wide">
         <div class="modal-header">
             <h2 id="modal-regimes-title" class="modal-title">Les régimes fiscaux</h2>
-            <button type="button" class="modal-close" id="modal-regimes-close" aria-label="Fermer">✕</button>
+            <button type="button" class="modal-close" id="modal-regimes-close" aria-label="Fermer"><i data-icone="croix"></i></button>
         </div>
         <div class="modal-body modal-body--regime">
             <div class="regime-card">
-                <div class="regime-card-icon">🏢</div>
+                <div class="regime-card-icon"><i data-icone="immeuble"></i></div>
                 <h3>SCI à l'IS</h3>
                 <p class="regime-card-sub">Société Civile Immobilière soumise à l'Impôt sur les Sociétés</p>
                 <p>Imposition du <strong>bénéfice comptable</strong> (loyers − charges − amortissement du bâti). Taux : <strong>15 %</strong> jusqu'à 42 500 €, <strong>25 %</strong> au-delà.</p>
@@ -1085,7 +1085,7 @@
                 </ul>
             </div>
             <div class="regime-card">
-                <div class="regime-card-icon">🏠</div>
+                <div class="regime-card-icon"><i data-icone="maison"></i></div>
                 <h3>Micro-Foncier</h3>
                 <p class="regime-card-sub">Location nue · Revenus fonciers bruts &lt; 15 000 €/an</p>
                 <p>Abattement forfaitaire de <strong>30 %</strong> sur les loyers. Les <strong>70 % restants</strong> sont imposés à votre TMI + CSG/CRDS (17,2 %).</p>
@@ -1097,7 +1097,7 @@
                 </ul>
             </div>
             <div class="regime-card">
-                <div class="regime-card-icon">📋</div>
+                <div class="regime-card-icon"><i data-icone="presse-papier"></i></div>
                 <h3>Foncier Réel</h3>
                 <p class="regime-card-sub">Location nue · Revenus &gt; 15 000 € ou sur option</p>
                 <p>Déduction de <strong>toutes les charges réelles</strong> : intérêts, travaux, charges copro, assurances, taxe foncière. Déficit imputable sur revenu global jusqu'à <strong>10 700 €/an</strong>.</p>
@@ -1117,7 +1117,7 @@
         <div class="drawer-inner">
             <div class="drawer-head">
                 <h3 id="autre-credit-drawer-title" class="drawer-title">Crédit hors immobilier</h3>
-                <button type="button" id="autre-credit-drawer-close" class="drawer-close" aria-label="Fermer">✕</button>
+                <button type="button" id="autre-credit-drawer-close" class="drawer-close" aria-label="Fermer"><i data-icone="croix"></i></button>
             </div>
             <div class="drawer-body">
                 <form id="autre-credit-drawer-form" class="credit-drawer-form" novalidate>

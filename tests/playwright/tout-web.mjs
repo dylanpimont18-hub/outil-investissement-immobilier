@@ -360,7 +360,7 @@ async function scenarioExportImport(browser) {
         assert.equal(archiveName, download.suggestedFilename());
         const content = await page.evaluate(n => JSON.parse(window.__store.archives[n]), archiveName);
         assert.deepEqual(Object.keys(content), ['oa-test-1']);
-        await page.waitForFunction(() => /✓/.test(document.getElementById('owned-export-btn').textContent));
+        await page.waitForFunction(() => !!document.querySelector('#owned-export-btn .icone--coche') && /portefeuille-.*\.json/.test(document.getElementById('owned-export-btn').textContent));
     });
 
     await step('second export le même jour → suffixe -1', async () => {

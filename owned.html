@@ -85,7 +85,7 @@
     <!-- Modal ajout bien -->
     <div id="owned-add-modal" class="owned-add-modal" hidden aria-modal="true" role="dialog">
         <div class="owned-add-modal__box">
-            <button type="button" class="owned-add-modal__close" data-close-add-modal aria-label="Fermer">✕</button>
+            <button type="button" class="owned-add-modal__close" data-close-add-modal aria-label="Fermer"><i data-icone="croix"></i></button>
             <h3>Ajouter un bien</h3>
             <form id="owned-add-form" novalidate>
                 <label class="variables-field">
@@ -113,10 +113,10 @@
          cette page (liste et fiche d'un bien) dès que le portefeuille cloud est chargé, ouvre la modale
          globale openAjoutFacturesModal (owned-portfolio.js) — bien pré-sélectionné, photo/galerie/fichiers,
          extraction IA par lot, aperçu des factures. Même modale que le bouton flottant PC d'index.html. -->
-    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter des factures" hidden>📄<span class="owned-quickfab__plus">+</span></button>
+    <button type="button" id="owned-quickfab" class="owned-quickfab" aria-label="Ajouter des factures" hidden><i data-icone="document"></i><span class="owned-quickfab__plus">+</span></button>
     <!-- Bouton flottant Assistant IA (2026-10-01) : à gauche du bouton facture, ouvre le chat en
          plein écran par-dessus la vue courante (liste ou fiche d'un bien) — la fermeture y ramène. -->
-    <button type="button" id="owned-chatfab" class="owned-quickfab owned-chatfab" aria-label="Assistant IA" aria-haspopup="dialog">✦</button>
+    <button type="button" id="owned-chatfab" class="owned-quickfab owned-chatfab" aria-label="Assistant IA" aria-haspopup="dialog"><i data-icone="etincelle"></i></button>
     <!-- Modale suppression sécurisée -->
     <div id="owned-delete-modal" class="owned-delete-modal" hidden aria-modal="true" role="dialog">
         <div class="owned-delete-modal__box">
@@ -134,9 +134,9 @@
     <!-- Vue détaillée -->
     <div id="owned-detail-view" hidden>
         <div class="owned-detail-header">
-            <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button">← Retour</button>
+            <button id="owned-back-btn" class="btn btn--ghost btn--sm" type="button"><i data-icone="fleche-gauche"></i> Retour</button>
             <div id="owned-detail-title" class="owned-detail-title"></div>
-            <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled>✦ Diagnostic IA</button>
+            <button id="owned-diagnostic-btn" class="btn btn--ghost portfolio-ai-trigger" type="button" disabled><i data-icone="etincelle"></i> Diagnostic IA</button>
             <button id="owned-report-btn" class="btn btn--ghost" type="button" hidden title="Aperçu, PDF et export .md des données du bien">Rapport</button>
             <button id="owned-bank-dossier-btn" class="btn btn--ghost" type="button">Dossier bancaire</button>
         </div>
@@ -188,7 +188,7 @@
         <div id="owned-ai-drawer" class="portfolio-ai-drawer" role="dialog" aria-modal="true" aria-label="Diagnostic IA">
             <div class="portfolio-ai-drawer__header">
                 <span class="portfolio-ai-drawer__title">Diagnostic IA</span>
-                <button id="owned-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer">✕</button>
+                <button id="owned-ai-drawer-close" class="portfolio-ai-drawer__close" type="button" aria-label="Fermer"><i data-icone="croix"></i></button>
             </div>
             <div id="owned-ai-drawer-content" class="portfolio-ai-drawer__content"></div>
         </div>
@@ -203,9 +203,9 @@
          Cloud Function chatPortefeuille ; conversation non persistée). Ouvert par #owned-chatfab. -->
     <div id="owned-chat-sheet" class="owned-chat-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="owned-chat-title">
         <div class="owned-chat-sheet__header">
-            <span id="owned-chat-title" class="owned-chat-sheet__title">✦ Assistant IA</span>
+            <span id="owned-chat-title" class="owned-chat-sheet__title"><i data-icone="etincelle"></i> Assistant IA</span>
             <button type="button" id="assistant-chat-new" class="btn btn--ghost btn--sm" disabled>Nouvelle</button>
-            <button type="button" id="owned-chat-close" class="owned-chat-sheet__close" aria-label="Fermer l'assistant">✕</button>
+            <button type="button" id="owned-chat-close" class="owned-chat-sheet__close" aria-label="Fermer l'assistant"><i data-icone="croix"></i></button>
         </div>
         <div id="assistant-chat" class="assistant-chat">
             <div id="assistant-chat-messages" class="assistant-chat__messages"></div>

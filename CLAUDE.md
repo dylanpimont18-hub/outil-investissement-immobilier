@@ -27,6 +27,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
 | `firebase-init.js` | Initialisation du SDK Firebase (auth, db, storage, functions) |
 | `archives-regles.js` | Règle pure de nommage des archives d'export (`nomArchiveUnique`) |
+| `icones.js` | Module pur : les 30 icônes SVG de l'interface (trait 1,5 px, `currentColor`), `icone(nom)`, `hydraterIcones()` (`<i data-icone>` du HTML), `definirTexteAvecIcone()` ; jamais d'emoji ni de glyphe comme icône |
 | `utils.js` | Helpers partagés formatage/échappement/toast, sans dépendance à `state`/`nodes` |
 | `calculs.js` | Moteur financier pur — tous les calculs, zéro accès DOM |
 | `pdf.js` | Génère le PDF de décision comme une page HTML autonome (imprimée depuis la page) |
@@ -82,6 +83,7 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
 - Fonts (charte unique, 2026-11-20) : Inter (texte et titres, variable) + IBM Plex Mono (chiffres), woff2 locales dans `vendor/fonts/`, préchargées ; jamais de nom de police en dur, passer par `--font-body` / `--font-heading` / `--font-mono`
 - Accent unique (2026-11-20) : l'indigo, jamais d'or hors logo — `--accent` (fonds/bordures, `#4F46E5` clair / `#8B8EF0` sombre), `--accent-text` (texte), `--on-accent` (texte sur fond accent) ; ne jamais écrire une teinte d'accent en dur (`rgba(var(--primary-rgb), x)`) ; contrastes AA contrôlés par `tests/playwright/audit-lot3.mjs` (scénario A5). Les couleurs d'état ne sont pas l'accent
 - Status tones map to CSS class suffixes: `--positive`, `--excellent`, `--watch`, `--negative`, `--neutral`
+- Icônes (charte unique, 2026-11-20) : `icones.js` uniquement (SVG en ligne, décoratives, `aria-label` obligatoire sur un bouton qui n'a que l'icône) ; aucun emoji ni glyphe d'interface
 - Spacing is a 4px grid; corner radii: 8px (components), 12px (cards)
 - Both themes are applied via `data-theme="light|dark"` on `<html>`
 

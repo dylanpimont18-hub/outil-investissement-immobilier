@@ -22,6 +22,7 @@
 // multi-tours function-calling côté serveur.
 
 import { escapeHtml, showToast } from './utils.js';
+import { icone } from './icones.js';
 import { buildPortfolioSummaryForAI, addOwnedNote, addOwnedTravail, addOwnedAutreCredit, patchProfileData, renderCollections, getOwnedAsset, findSimilarTravail } from './owned-portfolio.js';
 import { cloudChatPortefeuille } from './owned-cloud.js';
 
@@ -196,7 +197,7 @@ function _renderActionCard(message, msgIndex, call, callIndex) {
         return `
         <div class="assistant-chat__action-card">
             <p class="assistant-chat__action-desc">${escapeHtml(description)}</p>
-            ${warningText ? `<p class="assistant-chat__action-warning">⚠ ${escapeHtml(warningText)}</p>` : ''}
+            ${warningText ? `<p class="assistant-chat__action-warning">${icone('alerte')} ${escapeHtml(warningText)}</p>` : ''}
             <div class="assistant-chat__action-buttons">
                 <button type="button" class="btn btn--ghost btn--sm" data-action-cancel data-msg-index="${msgIndex}" data-call-index="${callIndex}">Annuler</button>
                 <button type="button" class="btn btn--primary btn--sm" data-action-confirm data-msg-index="${msgIndex}" data-call-index="${callIndex}">Confirmer</button>
@@ -204,7 +205,7 @@ function _renderActionCard(message, msgIndex, call, callIndex) {
         </div>`;
     }
     if (status === 'done') {
-        return `<div class="assistant-chat__action-card assistant-chat__action-card--done">✓ ${escapeHtml(call.resultText || description)}</div>`;
+        return `<div class="assistant-chat__action-card assistant-chat__action-card--done">${icone('coche')} ${escapeHtml(call.resultText || description)}</div>`;
     }
     if (status === 'error') {
         return `<div class="assistant-chat__action-card assistant-chat__action-card--error">${escapeHtml(call.resultText || 'Échec de l\'action')}</div>`;

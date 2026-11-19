@@ -295,9 +295,9 @@ const SONDE_ACCENT = () => {
     return { or: [...new Set(or)], bas: [...new Set(bas)] };
 };
 
-async function scenarioA5(browser) {
-    console.log('A5 — accent unique (indigo), contrastes AA');
-    const ecrans = [
+// Écrans parcourus par les scénarios A5 (couleurs) et A7 (icônes) : [nom, chemin, viewport, options, aller].
+function listeEcrans() {
+    return [
         ['pc-analyse', '/index.html', PC, {}, async () => {}],
         ['pc-portefeuille', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); }],
         ...['Acquisition', 'Exploitation', 'Travaux', 'Calcul'].map(o => [`pc-fiche-${o.toLowerCase()}`, '/index.html', PC, {}, async p => {
@@ -308,6 +308,12 @@ async function scenarioA5(browser) {
         ['pc-assistant', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="assistant-panel"]'); }],
         ['pc-modale-projection', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); await p.click('#owned-dashboard-wrap [data-action="open-projection-impots"]'); await p.waitForSelector('#owned-projection-impots-modal:not([hidden])'); }],
         ['pc-modale-factures', '/index.html', PC, {}, async p => { await p.click('#owned-quickfab'); await p.waitForSelector('#owned-factures-modal:not([hidden])'); }],
+        ['pc-analyse-guide', '/index.html', PC, {}, async p => { await p.click('#mode-btn-guided'); }],
+        ['pc-modale-regimes', '/index.html', PC, {}, async p => { await p.evaluate(() => { const m = document.getElementById('modal-regimes'); m.classList.add('is-open'); m.setAttribute('aria-hidden', 'false'); }); }],
+        ['pc-portefeuille-impot', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); await p.click('.owned-list-tabs [data-tab="impot"]'); }],
+        ['pc-portefeuille-profil', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); await p.click('.owned-list-tabs [data-tab="profil"]'); }],
+        ['pc-modale-import', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); await p.click('#owned-import-btn'); await p.waitForSelector('#owned-import-modal:not([hidden])'); }],
+        ['pc-modale-dossier-bancaire', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); await p.locator('[data-open-asset="oa-test-1"], [data-asset-id="oa-test-1"]').first().click(); await p.click('#owned-bank-dossier-btn'); await p.waitForTimeout(400); }],
         ['pc-analyse-remplie', '/index.html', PC, {}, async p => { await p.fill('[name="prix"]', '150000'); await p.fill('[name="loyer"]', '750'); await p.locator('[name="loyer"]').dispatchEvent('input'); }],
         ['iphone-liste', '/owned.html', IPHONE, { contextOptions: TOUCH }, async () => {}],
         ...['Acquisition', 'Travaux', 'Calcul'].map(o => [`iphone-fiche-${o.toLowerCase()}`, '/owned.html', IPHONE, { contextOptions: TOUCH }, async p => {
@@ -315,11 +321,17 @@ async function scenarioA5(browser) {
             await p.waitForSelector('#owned-detail-view:not([hidden])');
             await p.locator('#owned-detail-view .owned-tab', { hasText: o }).click(); }]),
     ];
+}
+
+async function scenarioA5(browser) {
+    console.log('A5 — accent unique (indigo), contrastes AA');
+    const ecrans = listeEcrans();
     for (const [nom, path, viewport, opts, aller] of ecrans) {
         const ctx = await openPage(browser, path, { viewport, seedCloud: SEED_T2, routes: ROUTES_T2, ...opts });
         const { page } = ctx;
         if (path === '/index.html') { await waitAppStarted(page); if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape'); }
         else await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+        await page.addStyleTag({ content: "*, *::before, *::after { transition: none !important; animation: none !important; }" }); // couleurs mesurées à l’état final, pas en cours de transition
         await aller(page);
         await page.waitForTimeout(500);
         for (const [theme, suffixe] of [['light', 'clair'], ['dark', 'sombre']]) {
@@ -336,7 +348,69 @@ async function scenarioA5(browser) {
     }
 }
 
-const SCENARIOS = { T5: scenarioT5, T5IPHONE: scenarioT5Iphone, T2: scenarioT2, A4: scenarioA4, A5: scenarioA5 };
+// ── A7 : une seule famille d'icônes (SVG en ligne), plus d'emoji ni de glyphes, nom accessible partout ──
+// Sonde exécutée dans la page : (1) aucun emoji ni glyphe d'interface (✦ ✕ ✓ ✗ ⚠ ☀ ☾ ↑ ↓ ▶ ● ○ ★) dans le texte visible,
+// (2) ← et → seulement dans une phrase, jamais en tête/en fin d'un bouton ou d'un lien, (3) tout bouton/lien sans texte
+// visible porte un nom (aria-label, title ou aria-labelledby), (4) toute icône est décorative (aria-hidden), visible et
+// dimensionnée, (5) aucun marqueur de gabarit « ${ » ni <i data-icone> non remplacé.
+const SONDE_ICONES = () => {
+    const vis = el => { const b = el.getBoundingClientRect(); const s = getComputedStyle(el); return b.width > 0 && b.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+    const nom = el => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}.${[...el.classList].slice(0, 2).join('.')} « ${el.textContent.trim().replace(/\s+/g, ' ').slice(0, 30)} »`;
+    const PICTO = /(?![©®™])\p{Extended_Pictographic}|[✦✕✓✗⚠☀☾↑↓▶●○★☆]/u;
+    const out = { glyphes: [], fleches: [], sansNom: [], icones: [], gabarit: [] };
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+        const el = n.parentElement;
+        if (!el || ['SCRIPT', 'STYLE', 'OPTION', 'TEXTAREA'].includes(el.tagName) || !vis(el)) continue;
+        const txt = n.textContent;
+        if (PICTO.test(txt)) out.glyphes.push(`${nom(el)} → ${[...txt.matchAll(new RegExp(PICTO.source, 'gu'))].map(m => m[0]).join('')}`);
+        if (/\$\{/.test(txt)) out.gabarit.push(nom(el));
+        const bouton = el.closest('button, a[href], [role=button], [role=tab], summary');
+        if (bouton && /^\s*[←→]|[←→]\s*$/.test(bouton.textContent.trim())) out.fleches.push(nom(bouton));
+    }
+    for (const el of document.querySelectorAll('button, a[href], [role=button], [role=tab], summary')) {
+        if (!vis(el)) continue;
+        const clone = el.cloneNode(true); clone.querySelectorAll('svg, .sr-only').forEach(x => x.remove());
+        const texteVisible = clone.textContent.trim();
+        if (!texteVisible && !(el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('aria-labelledby') || el.querySelector('.sr-only'))) out.sansNom.push(nom(el) + ' ' + el.className);
+    }
+    for (const s of document.querySelectorAll('svg.icone')) {
+        if (!vis(s)) continue;
+        const b = s.getBoundingClientRect();
+        if (s.getAttribute('aria-hidden') !== 'true' || b.width < 8 || b.height < 8 || b.width > 40) out.icones.push(`${s.getAttribute('class')} ${Math.round(b.width)}x${Math.round(b.height)} dans ${nom(s.parentElement)}`);
+    }
+    if (document.querySelector('i[data-icone]')) out.gabarit.push('<i data-icone> non remplacé');
+    out.nbIcones = [...document.querySelectorAll('svg.icone')].filter(vis).length;
+    return out;
+};
+
+async function scenarioA7(browser) {
+    console.log('A7 — icônes : une seule famille, noms accessibles');
+    let total = 0;
+    for (const [nom, path, viewport, opts, aller] of listeEcrans()) {
+        const ctx = await openPage(browser, path, { viewport, seedCloud: SEED_T2, routes: ROUTES_T2, ...opts });
+        const { page } = ctx;
+        if (path === '/index.html') { await waitAppStarted(page); if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape'); }
+        else await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+        await aller(page);
+        await page.waitForTimeout(500);
+        const r = await page.evaluate(SONDE_ICONES);
+        total += r.nbIcones;
+        await step(`${nom} : ${r.nbIcones} icônes SVG, aucun emoji/glyphe, flèches seulement dans le texte, boutons nommés, icônes décoratives`, () => {
+            assert.deepEqual(r.glyphes, [], 'emoji ou glyphes');
+            assert.deepEqual(r.fleches, [], 'flèche texte sur un bouton');
+            assert.deepEqual(r.sansNom, [], 'bouton ou lien sans nom accessible');
+            assert.deepEqual(r.icones, [], 'icône mal formée');
+            assert.deepEqual(r.gabarit, [], 'gabarit non résolu');
+        });
+        await shotThemes(page, `a7-${nom}`);
+        await finish(ctx, `A7 ${nom}`);
+    }
+    await step(`au total ${total} icônes rendues sur l'ensemble des écrans`, () => assert.ok(total >= 60, String(total)));
+}
+
+const SCENARIOS = { T5: scenarioT5, T5IPHONE: scenarioT5Iphone, T2: scenarioT2, A4: scenarioA4, A5: scenarioA5, A7: scenarioA7 };
 const only = (process.env.L3_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();

@@ -2,6 +2,7 @@
 import { buildDecisionPrintDocument } from './pdf.js';
 import { renderDonutChart, destroyDonut } from './ui.js';
 import { escapeHtml, formatMultilineText, showToast, formatCurrency, formatPercent, formatRatio, formatSignedCurrency, formatCompactCurrency, formatPlainCurrency, formatShortDateTime, getMetricClass, getDecisionClass, getRegimeLabel, getTypeBienLabel, getChecklistTone, getChecklistLabel, openPrintDocument } from './utils.js';
+import { icone, definirTexteAvecIcone, hydraterIcones } from './icones.js';
 import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections, syncProfileToCloud, invalidateOwnedMap, renderAuthGateInto } from './owned-portfolio.js';
 import { watchAuth, watchPortfolioMeta } from './owned-cloud.js';
 import { watchPrefs, savePref, watchStudies, cloudSetStudy, cloudDeleteStudy, watchAnalysis, cloudSaveAnalysis } from './cloud-store.js';
@@ -227,6 +228,9 @@ const PASSOIRE_POLICY_VALUES = new Set(['yes', 'no']);
 // Valeurs par défaut uniquement : les vraies valeurs arrivent par les snapshots Firestore (prefs,
 // portfolioMeta, studies, settings/analysis) avant le premier render(), voir _startCloud/_startApp.
 // Rien ici n'est jamais réécrit dans le cloud : seules les actions de l'utilisateur écrivent.
+// Icônes statiques du HTML (<i data-icone="nom">) : remplacées par leur SVG avant tout rendu (icones.js).
+hydraterIcones();
+
 const state = {
     theme: 'dark',
     profilePreset: 'famille',
@@ -432,7 +436,7 @@ function renderGuidedSteps(currentIndex) {
     let html = '';
     for (let i = 0; i < total; i++) {
         const stepState = i < currentIndex ? 'done' : (i === currentIndex ? 'active' : '');
-        const label = i < currentIndex ? '✓' : String(i + 1);
+        const label = i < currentIndex ? icone('coche') : String(i + 1);
         html += `<div class="guided-step-pip ${stepState ? 'guided-step-pip--' + stepState : ''}" aria-label="Étape ${i + 1}">${escapeHtml(label)}</div>`;
         if (i < total - 1) {
             html += `<div class="guided-step-line ${i < currentIndex ? 'guided-step-line--done' : ''}"></div>`;
@@ -483,8 +487,8 @@ function renderGuidedStep(index) {
         <p class="guided-step-desc">${escapeHtml(step.desc)}</p>
         ${fieldsHtml}
         <div class="guided-step-actions">
-            ${!isFirst ? `<button type="button" class="guided-btn-ghost" id="guided-prev">← Retour</button>` : ''}
-            <button type="button" class="guided-btn-gold" id="guided-next">${isLast ? 'Terminer ✓' : 'Suivant →'}</button>
+            ${!isFirst ? `<button type="button" class="guided-btn-ghost" id="guided-prev">${icone('fleche-gauche')} Retour</button>` : ''}
+            <button type="button" class="guided-btn-gold" id="guided-next">${isLast ? `Terminer ${icone('coche')}` : `Suivant ${icone('fleche-droite')}`}</button>
         </div>
     `;
 
@@ -1324,7 +1328,7 @@ function createOrUpdateCurrentAsset() {
     if (flashBtn) {
         const originalText = flashBtn.textContent;
         flashBtn.classList.add('is-saved-flash');
-        flashBtn.textContent = isNew ? '✓ Enregistré dans le comparateur' : '✓ Comparateur mis à jour';
+        definirTexteAvecIcone(flashBtn, 'coche', isNew ? 'Enregistré dans le comparateur' : 'Comparateur mis à jour');
         setTimeout(() => {
             flashBtn.classList.remove('is-saved-flash');
             flashBtn.textContent = originalText;
@@ -1355,7 +1359,7 @@ function applyTheme() {
         nodes.themeMeta.setAttribute('content', state.theme === 'dark' ? '#09090b' : '#f4f4f5');
     }
 
-    nodes.themeToggle.textContent = state.theme === 'dark' ? '☀' : '☾';
+    nodes.themeToggle.innerHTML = icone(state.theme === 'dark' ? 'soleil' : 'lune');
 
     const studyChip = document.getElementById('topbar-study-name');
     if (studyChip) {
@@ -1423,7 +1427,7 @@ function renderProfileCreditsList() {
                 <span class="profile-credit-row__amount">−${(c.mensualite || 0).toLocaleString('fr-FR')} €/mois</span>
                 ${c.dateFin ? `<span style="font-size:12px;color:var(--text-tertiary)">jusqu'à ${c.dateFin}</span>` : ''}
                 <button class="profile-credit-row__edit" data-edit-credit="${escapeHtml(c.id)}">Modifier</button>
-                <button class="profile-credit-row__edit" data-delete-credit="${escapeHtml(c.id)}" style="color:var(--color-negative,#ef4444)" title="Supprimer" aria-label="Supprimer le crédit ${escapeHtml(c.libelle || '')}">✕</button>
+                <button class="profile-credit-row__edit" data-delete-credit="${escapeHtml(c.id)}" style="color:var(--color-negative,#ef4444)" title="Supprimer" aria-label="Supprimer le crédit ${escapeHtml(c.libelle || '')}">${icone('croix')}</button>
             </div>`).join('');
         list.querySelectorAll('[data-edit-credit]').forEach(btn => {
             btn.addEventListener('click', () => openAutreCreditDrawer(btn.dataset.editCredit));
@@ -1494,7 +1498,7 @@ function syncAssetActionLabels() {
         nodes.assetStatusBar.className = `asset-status-bar asset-status-bar--${barState}`;
         nodes.assetStatusBar.innerHTML = `
             <div class="asset-status-bar__left">
-                <span class="asset-status-bar__dot asset-status-bar__dot--${dotClass}">${dotClass === 'saved' ? '✓' : dotClass === 'modified' ? '●' : '○'}</span>
+                <span class="asset-status-bar__dot asset-status-bar__dot--${dotClass}">${icone(dotClass === 'saved' ? 'coche' : dotClass === 'modified' ? 'point' : 'point-vide')}</span>
                 <span class="asset-status-bar__text">${text}</span>
             </div>
         `;
@@ -1576,7 +1580,7 @@ function renderStudiesList() {
                     <span class="study-item__kpis">${kpis}</span>
                     <span class="study-item__date">Modifiée le ${escapeHtml(formatDateFrCourte(record.updatedAt))}</span>
                 </button>
-                <button type="button" class="study-item__delete" data-study-delete="${escapeHtml(record.id)}" aria-label="Supprimer l’étude ${escapeHtml(nom)}" title="Supprimer l’étude">✕</button>
+                <button type="button" class="study-item__delete" data-study-delete="${escapeHtml(record.id)}" aria-label="Supprimer l’étude ${escapeHtml(nom)}" title="Supprimer l’étude">${icone('croix')}</button>
             </li>`;
     }).join('');
     // render() tourne à chaque saisie et au blur d'un champ (événement change) : réécrire la liste
@@ -1850,7 +1854,7 @@ function renderCFWaterfall(analysisModel) {
     nodes.analysisCFWaterfall.innerHTML = `
         <div class="cf-waterfall__head">
             <span class="cf-waterfall__title">Cash-flow — calcul en direct</span>
-            <span class="cf-waterfall__live">● LIVE</span>
+            <span class="cf-waterfall__live">${icone('point')} LIVE</span>
         </div>
         <div class="cf-waterfall__bars">
             ${rows.map(r => `
@@ -2409,7 +2413,7 @@ function renderTutoBar(n) {
     nodes.tutoBarTitle.textContent = step.title;
     nodes.tutoBarDesc.textContent = step.description;
     nodes.tutoPrev.disabled = n === 0;
-    nodes.tutoNext.textContent = n === TUTO_STEPS.length - 1 ? 'Terminer' : 'Suivant →';
+    nodes.tutoNext.innerHTML = n === TUTO_STEPS.length - 1 ? 'Terminer' : `Suivant ${icone('fleche-droite')}`;
 }
 
 function initTutoBar() {
@@ -3079,8 +3083,8 @@ function _initMobileBanner() {
     banner.setAttribute('role', 'region');
     banner.setAttribute('aria-label', 'Version iPhone');
     banner.innerHTML = `
-        <a class="mobile-redirect-banner__link" href="/portefeuille">Version iPhone : ouvrir le portefeuille →</a>
-        <button type="button" class="mobile-redirect-banner__close" aria-label="Fermer le bandeau">✕</button>`;
+        <a class="mobile-redirect-banner__link" href="/portefeuille">Version iPhone : ouvrir le portefeuille ${icone('fleche-droite')}</a>
+        <button type="button" class="mobile-redirect-banner__close" aria-label="Fermer le bandeau">${icone('croix')}</button>`;
     banner.querySelector('.mobile-redirect-banner__close').addEventListener('click', () => {
         banner.remove();
         document.body.classList.remove('has-mobile-banner');

@@ -4,6 +4,10 @@
 // (cloud-store.js), via initOwnedPortfolio (owned-portfolio.js).
 import { initOwnedPortfolio, initOwnedPortfolioEvents, renderCollections } from './owned-portfolio.js';
 import { initAssistantChat } from './assistant-chat.js';
+import { hydraterIcones } from './icones.js';
+
+// Icônes statiques du HTML (<i data-icone="nom">) : remplacées par leur SVG avant tout rendu (icones.js).
+hydraterIcones();
 
 const state = {
     activeOwnedAssetId: null,
