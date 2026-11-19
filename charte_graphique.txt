@@ -1,4 +1,5 @@
 CHARTE GRAPHIQUE - PLATEFORME D'INVESTISSEMENT LOCATIF
+(alignée sur le code le 20/11/2026 : les valeurs ci-dessous sont celles des variables de styles.css)
 
 ============================================================
 1. CONCEPT VISUEL
@@ -28,57 +29,78 @@ premier affichage (test : tests/playwright/audit-lot3.mjs, scénario A4, sous 20
 police remplacé doit changer de nom (cache d'un an, immutable, voir firebase.json).
 
 ============================================================
-3. MODE CLAIR (LIGHT MODE) - Institutionnel & Pur
+3. COULEUR D'ACCENT UNIQUE : L'INDIGO (décidé le 20/11/2026, audit A5)
+============================================================
+Une seule couleur d'action dans toute l'interface (boutons principaux, onglet actif, curseurs, liens accentués,
+bouton flottant, badges) : l'indigo. L'or de l'ancienne charte (#C5A059 / #D4AF37) n'existe plus que dans le
+logo. Les PDF et le rapport d'un bien suivent la même règle.
+Trois variables, toutes définies dans les deux thèmes (ne jamais écrire une teinte d'accent en dur ; pour une teinte
+transparente : rgba(var(--primary-rgb), 0.12)) :
+- --accent        : fonds, bordures, focus, barres actives.
+- --accent-text   : TEXTE accentué (liens, onglet actif, libellés) - plus foncé en clair, plus clair en sombre, pour
+                    atteindre 4,5:1 sur les fonds de cartes.
+- --on-accent     : texte posé SUR un fond --accent (blanc en clair ; presque noir en sombre, car le blanc
+                    n'atteignait que 3,5:1 sur l'indigo clair du thème sombre).
+Contrôle : tests/playwright/audit-lot3.mjs, scénario A5 (14 écrans x 2 thèmes) échoue si un texte accentué ou posé
+sur un fond accent passe sous 4,5:1 (3:1 pour un grand texte), ou si l'ancien or réapparaît.
+Exception documentée : les graphiques à plusieurs séries gardent une palette catégorielle (indigo/bleu/vert d'eau/
+ocre, _projectionPalette dans owned-portfolio.js) pour que les séries restent distinguables ; une série unique
+(cash-flow cumulé du dashboard) prend l'accent. Les couleurs d'état (ci-dessous) ne sont jamais l'accent.
+
+============================================================
+4. MODE CLAIR (LIGHT MODE) - Institutionnel & Pur, papier chaud
 ============================================================
 Cible : Confiance, clarté, lecture prolongée de rapports.
 
 COULEURS :
-- Fond principal : #F8F9FA (Gris perle très clair)
-- Fond de carte (Cards) : #FFFFFF (Blanc pur)
-- Texte principal : #1A2B3C (Bleu nuit profond)
-- Texte secondaire : #6C757D (Gris sourd)
-- Bordures & Séparateurs : #E9ECEF
-- Couleur d'accent (Action) : #C5A059 (Or Sablé)
-- Succès (Rendement +) : #2D6A4F (Vert Émeraude)
-- Alerte (Risque) : #E63946 (Corail)
+- Fond principal : #E9E4DB (papier)
+- Fond de carte (Cards) : #F8F5EF
+- Texte principal : #1F1B17
+- Texte secondaire : #5A534A
+- Bordures & Séparateurs : #D6CDBF
+- Accent : #4F46E5 (texte accentué #4338CA, texte sur accent #FFFFFF)
+- Succès : #136B34 / Alerte (risque) : #B42318 / À surveiller : #8F4706 / Neutre : #64748B
 
 EFFETS :
-- Ombres : 0px 4px 20px rgba(0, 0, 0, 0.05)
-- Bordures : 1px solid #E9ECEF
-- Arrondis (Radius) : 8px (Composants), 12px (Cards)
+- Ombres : 0 2px 8px rgba(60, 45, 25, 0.08) (cartes), 0 8px 24px rgba(60, 45, 25, 0.11) (surélévation)
+- Bordures : 1px solid #D6CDBF
+- Arrondis (Radius) : 6px, 8px (Composants), 12px (Cards), 16px (modales), pastille 9999px
 
 ============================================================
-4. MODE SOMBRE (DARK MODE) - Technique & Premium
+5. MODE SOMBRE (DARK MODE) - Technique & Premium, ardoise chaude (thème par défaut)
 ============================================================
 Cible : Analyse de données, aspect "SaaS" moderne, confort nocturne.
 
 COULEURS :
-- Fond principal : #0B0E14 (Noir bleuté profond)
-- Fond de carte (Cards) : #161B22 (Gris anthracite)
-- Texte principal : #F0F6FC (Blanc cassé)
-- Texte secondaire : #8B949E (Gris acier)
-- Bordures & Séparateurs : #30363D
-- Couleur d'accent (Action) : #D4AF37 (Or éclatant)
-- Succès (Rendement +) : #40916C (Vert Menthe)
-- Alerte (Risque) : #FF4D4D (Rouge vif)
+- Fond principal : #18171A
+- Fond de carte (Cards) : #201E23
+- Texte principal : #E8E4DF
+- Texte secondaire : #A09890
+- Bordures & Séparateurs : #312D30
+- Accent : #8B8EF0 (texte accentué #9EA1F0, texte sur accent #14131A)
+- Succès : #5BBF7A / Alerte (risque) : #E06A6A / À surveiller : #D4922A / Neutre : #7A7470
 
 EFFETS :
-- Ombres : 0px 4px 20px rgba(0, 0, 0, 0.4)
-- Bordures : 1px solid #30363D
-- Arrondis (Radius) : 8px (Composants), 12px (Cards)
+- Ombres : 0 4px 12px rgba(0, 0, 0, 0.38) (cartes), 0 14px 30px rgba(0, 0, 0, 0.28) (surélévation)
+- Bordures : 1px solid #312D30
+- Arrondis (Radius) : identiques au mode clair
+
+Le thème s'applique par data-theme="light|dark" sur <html> ; la page s'ouvre en sombre par défaut.
 
 ============================================================
-5. ÉLÉMENTS D'INTERFACE (UI)
+6. ÉLÉMENTS D'INTERFACE (UI)
 ============================================================
-- Boutons Primaires : Fond couleur accent (#C5A059), Texte blanc ou noir selon contraste.
-- Boutons Secondaires : Fond transparent, bordure couleur accent.
-- États de survol (Hover) : Réduction de l'opacité de 10% ou légère élévation (shadow).
-- Graphiques : Utiliser des dégradés (Gradients) allant de la couleur d'accent vers le transparent.
-- Icônes : Style "Line" ou "Light", épaisseur de trait constante (1.5px).
+- Boutons Primaires : fond --accent, texte --on-accent.
+- Boutons Secondaires : fond transparent, bordure fine, texte du thème ; le survol passe à l'accent.
+- États de survol (Hover) : réduction de l'opacité de 12% ou légère élévation (shadow).
+- Graphiques : série unique = accent (trait plein, remplissage translucide) ; plusieurs séries = palette catégorielle.
+- Tons d'état (classes --excellent, --positive, --neutral, --watch, --negative) : jamais l'accent.
+- Icônes : style "Line", épaisseur de trait constante (1.5px).
 
 ============================================================
-6. RÈGLES D'USAGE
+7. RÈGLES D'USAGE
 ============================================================
 - Espacement : Toujours utiliser un multiple de 4px (8, 16, 24, 32) pour les marges.
 - Hiérarchie : Toujours mettre le Rendement Brut/Net en police Mono et en gras.
-- Contraste : Vérifier que le texte secondaire reste lisible (Accessibilité WCAG).
+- Contraste : WCAG AA (4,5:1 pour le texte courant, 3:1 pour un grand texte) dans les DEUX thèmes ; vérifié par le
+  scénario A5 ci-dessus.

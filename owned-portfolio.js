@@ -770,7 +770,7 @@ function _projectionPalette() {
     const tok = (name, fallback) => (css.getPropertyValue(name) || '').trim() || fallback;
     return {
         dark,
-        gold: dark ? '#B3902E' : '#B08A3E',
+        gold: dark ? '#B3902E' : '#B08A3E', // couleur de série (palette catégorielle validée), pas l'accent de l'interface — voir charte_graphique.txt §3
         blue: dark ? '#5A85E6' : '#3F6FD1',
         teal: dark ? '#17A28C' : '#0E9E8A',
         neutral: dark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)',
@@ -1294,8 +1294,8 @@ function openCapaciteEmpruntModal() {
         return `
         <div class="cr-section">
             <div class="cr-row"><span>Capacité mensualité résiduelle</span><span>${Math.round(capRes).toLocaleString('fr-FR')} €/mois</span></div>
-            <div class="cr-row cr-row--kpi"><span>Montant empruntable</span><span style="color:var(--accent-gold)">${cap.montantEmpruntable.toLocaleString('fr-FR')} €</span></div>
-            <div class="cr-row cr-row--kpi"><span>Prix d'achat max (frais notaire ~8%)</span><span style="color:var(--accent-gold)">${cap.prixAchatMax.toLocaleString('fr-FR')} €</span></div>
+            <div class="cr-row cr-row--kpi"><span>Montant empruntable</span><span style="color:var(--accent-text)">${cap.montantEmpruntable.toLocaleString('fr-FR')} €</span></div>
+            <div class="cr-row cr-row--kpi"><span>Prix d'achat max (frais notaire ~8%)</span><span style="color:var(--accent-text)">${cap.prixAchatMax.toLocaleString('fr-FR')} €</span></div>
         </div>`;
     }
 
@@ -5656,7 +5656,9 @@ function renderOwnedPortfolioCharts(list, profileData, regime) {
     }
 
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const gold = '#C5A059', green = '#22c55e', red = '#ef4444';
+    // Série unique du graphique = couleur d'accent de l'interface (jetons --primary-rgb), pas d'or en dur (audit A5).
+    const accentRgb = getComputedStyle(document.documentElement).getPropertyValue('--primary-rgb').trim() || '99, 102, 241';
+    const accent = `rgb(${accentRgb})`, green = '#22c55e', red = '#ef4444';
     const textClr = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
     const gridClr = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
     const scaleOpts = {
@@ -5669,7 +5671,7 @@ function renderOwnedPortfolioCharts(list, profileData, regime) {
     if (cvCF) {
         _ownedPortfolioCfChart = new Chart(cvCF, {
             type: 'line',
-            data: { labels, datasets: [{ data: dataCF, borderColor: gold, backgroundColor: isDark ? 'rgba(197,160,89,0.08)' : 'rgba(197,160,89,0.13)', borderWidth: 2, pointRadius: 2, tension: 0.25, fill: true }] },
+            data: { labels, datasets: [{ data: dataCF, borderColor: accent, backgroundColor: `rgba(${accentRgb}, ${isDark ? 0.1 : 0.13})`, borderWidth: 2, pointRadius: 2, tension: 0.25, fill: true }] },
             options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString('fr-FR') + ' €' } } }, scales: scaleOpts }
         });
     }
@@ -5837,7 +5839,7 @@ function renderOwnedCalculTab(asset) {
                     ? `<span class="owned-synthese__card-value owned-synthese__card-value--${patTone}">${patNet.patrimoineNet >= 0 ? '+' : ''}${patNet.patrimoineNet.toLocaleString('fr-FR')} €</span>
                        <span class="owned-synthese__card-sub">Valeur ${patNet.valeurEstimee.toLocaleString('fr-FR')} € − CRD ${patNet.crd.toLocaleString('fr-FR')} €</span>`
                     : `<span class="owned-synthese__card-value" style="color:var(--text-tertiary)">—</span>
-                       <span class="owned-synthese__card-sub"><a href="#" data-action="focus-valeur-estimee" style="color:var(--accent-gold)">Renseigner la valeur</a></span>`
+                       <span class="owned-synthese__card-sub"><a href="#" data-action="focus-valeur-estimee" style="color:var(--accent-text)">Renseigner la valeur</a></span>`
                 }
             </div>
         </div>
@@ -6274,9 +6276,9 @@ function renderAccordionPostAchat(asset) {
     nodes.accPostAchatContent.innerHTML = `
         <div class="owned-section-title">Charges récurrentes</div>
         ${displayFromYear ? `
-        <div style="font-size:.75rem;color:var(--accent-gold);margin-bottom:8px;
+        <div style="font-size:.75rem;color:var(--accent-text);margin-bottom:8px;
           padding:6px 10px;background:var(--surface-raised,var(--surface));
-          border-left:2px solid var(--accent-gold);border-radius:4px">
+          border-left:2px solid var(--accent);border-radius:4px">
           ⚠ Ces valeurs proviennent de l'entrée <strong>${displayFromYear}</strong>
           de l'historique. Modifiez-les ici pour mettre à jour cette entrée.
         </div>` : ''}
@@ -6831,7 +6833,7 @@ function renderOwnedDiagnosticDrawer(history, selectedIndex, { confirming = fals
             <div style="border:1px solid var(--border-subtle);border-radius:8px;padding:14px;margin-bottom:10px">
                 <div style="font-weight:700;font-size:.9rem;color:var(--text-primary);margin-bottom:6px">${i + 1}. ${escapeHtml(r.title)}</div>
                 <p style="font-size:.83rem;color:var(--text-secondary);line-height:1.5;margin:0 0 8px">${escapeHtml(r.explanation)}</p>
-                <div style="font-size:.78rem;color:var(--accent-gold,#C5A059)">→ ${escapeHtml(r.action)}</div>
+                <div style="font-size:.78rem;color:var(--accent-text)">→ ${escapeHtml(r.action)}</div>
             </div>
         `).join('')}
     `;

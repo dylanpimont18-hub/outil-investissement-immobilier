@@ -113,7 +113,7 @@ export function detecterTypeFichier(bytes) {
 
 const A4 = [595.28, 841.89];
 const MARGE = 40;
-const OR = [197 / 255, 160 / 255, 89 / 255];
+const OR = [79 / 255, 70 / 255, 229 / 255]; // accent de la charte (indigo) : liseré et tampon
 const ENCRE = [0.13, 0.13, 0.15];
 const GRIS = [0.42, 0.42, 0.46];
 const FILET = [0.85, 0.85, 0.87];

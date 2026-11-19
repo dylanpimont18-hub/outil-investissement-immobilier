@@ -252,7 +252,91 @@ async function scenarioA4(browser) {
     }
 }
 
-const SCENARIOS = { T5: scenarioT5, T5IPHONE: scenarioT5Iphone, T2: scenarioT2, A4: scenarioA4 };
+// ── A5 : un seul accent (l'indigo), plus d'or ; contrastes WCAG AA dans les deux thèmes ─────────
+// Sonde exécutée dans la page : pour chaque élément visible portant du texte direct, couleur du texte et fond
+// effectif (calques semi-transparents composés jusqu'à <html>). Relève (1) tout usage de l'ancien or (texte, fond,
+// bordure), (2) tout texte de teinte indigo ou posé sur un fond indigo dont le contraste est sous 4,5:1
+// (3:1 pour un grand texte : ≥ 24 px, ou ≥ 18,66 px en gras).
+const SONDE_ACCENT = () => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    const rgba = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data;
+        // canvas prémultiplie : on relit l'alpha sur fond transparent
+        return [d[0], d[1], d[2], d[3] / 255]; };
+    const rgbaExact = c => { const m = String(c).match(/rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.%]+))?/); if (m) { let a = m[4] === undefined ? 1 : (m[4].endsWith('%') ? parseFloat(m[4]) / 100 : Number(m[4])); return [+m[1], +m[2], +m[3], a]; } return rgba(c); };
+    const over = (top, bot) => { const a = top[3] + bot[3] * (1 - top[3]); if (!a) return [0, 0, 0, 0]; return [0, 1, 2].map(i => (top[i] * top[3] + bot[i] * bot[3] * (1 - top[3])) / a).concat(a); };
+    const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const hue = ([r, g, b]) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx - mn < 40) return null; const d = mx - mn; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = Math.round(h * 60); return h < 0 ? h + 360 : h; };
+    const estIndigo = c => { const h = hue(c); return h !== null && h >= 225 && h <= 275; };
+    const proche = (c, ref) => Math.abs(c[0] - ref[0]) < 14 && Math.abs(c[1] - ref[1]) < 14 && Math.abs(c[2] - ref[2]) < 14;
+    const OR = [[197, 160, 89], [212, 175, 55]];
+    const estOr = c => c[3] > 0.02 && OR.some(r => proche(c, r));
+    const vis = el => { const b = el.getBoundingClientRect(); const s = getComputedStyle(el); return b.width > 0 && b.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0'; };
+    const fond = el => { let calques = []; for (let n = el; n; n = n.parentElement) { const c = rgbaExact(getComputedStyle(n).backgroundColor); if (c[3] > 0) { calques.push(c); if (c[3] >= 1) break; } }
+        let res = [255, 255, 255, 1]; for (const c of calques.reverse()) res = over(c, res); return res; };
+    const nom = el => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}.${[...el.classList].slice(0, 2).join('.')} « ${el.textContent.trim().replace(/\s+/g, ' ').slice(0, 28)} »`;
+    const or = [], bas = [];
+    for (const el of document.querySelectorAll('body *')) {
+        if (!vis(el)) continue;
+        const s = getComputedStyle(el);
+        for (const [prop, val] of [['color', s.color], ['fond', s.backgroundColor], ['bord', s.borderTopWidth !== '0px' ? s.borderTopColor : 'rgba(0,0,0,0)'], ['bord-bas', s.borderBottomWidth !== '0px' ? s.borderBottomColor : 'rgba(0,0,0,0)']]) {
+            if (estOr(rgbaExact(val))) or.push(`${prop} ${nom(el)}`);
+        }
+        const aTexte = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+        if (!aTexte) continue;
+        const bg = fond(el), fg = over(rgbaExact(s.color), bg);
+        if (!(estIndigo(rgbaExact(s.color)) || estIndigo(bg))) continue;
+        const taille = parseFloat(s.fontSize), gras = parseInt(s.fontWeight, 10) >= 700;
+        const seuil = (taille >= 24 || (taille >= 18.66 && gras)) ? 3 : 4.5;
+        const r = ratio(fg, bg);
+        if (r < seuil) bas.push(`${r.toFixed(2)}:1 (< ${seuil}) ${nom(el)}`);
+    }
+    return { or: [...new Set(or)], bas: [...new Set(bas)] };
+};
+
+async function scenarioA5(browser) {
+    console.log('A5 — accent unique (indigo), contrastes AA');
+    const ecrans = [
+        ['pc-analyse', '/index.html', PC, {}, async () => {}],
+        ['pc-portefeuille', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); }],
+        ...['Acquisition', 'Exploitation', 'Travaux', 'Calcul'].map(o => [`pc-fiche-${o.toLowerCase()}`, '/index.html', PC, {}, async p => {
+            await p.click('.workspace-tab[data-target="collection-panel"]');
+            await p.locator('[data-open-asset="oa-test-1"], [data-asset-id="oa-test-1"]').first().click();
+            await p.waitForSelector('#owned-detail-view:not([hidden])');
+            await p.locator('#owned-detail-view .owned-tab', { hasText: o }).click(); }]),
+        ['pc-assistant', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="assistant-panel"]'); }],
+        ['pc-modale-projection', '/index.html', PC, {}, async p => { await p.click('.workspace-tab[data-target="collection-panel"]'); await p.click('#owned-dashboard-wrap [data-action="open-projection-impots"]'); await p.waitForSelector('#owned-projection-impots-modal:not([hidden])'); }],
+        ['pc-modale-factures', '/index.html', PC, {}, async p => { await p.click('#owned-quickfab'); await p.waitForSelector('#owned-factures-modal:not([hidden])'); }],
+        ['pc-analyse-remplie', '/index.html', PC, {}, async p => { await p.fill('[name="prix"]', '150000'); await p.fill('[name="loyer"]', '750'); await p.locator('[name="loyer"]').dispatchEvent('input'); }],
+        ['iphone-liste', '/owned.html', IPHONE, { contextOptions: TOUCH }, async () => {}],
+        ...['Acquisition', 'Travaux', 'Calcul'].map(o => [`iphone-fiche-${o.toLowerCase()}`, '/owned.html', IPHONE, { contextOptions: TOUCH }, async p => {
+            await p.locator('[data-open-asset="oa-test-1"], [data-asset-id="oa-test-1"]').first().click();
+            await p.waitForSelector('#owned-detail-view:not([hidden])');
+            await p.locator('#owned-detail-view .owned-tab', { hasText: o }).click(); }]),
+    ];
+    for (const [nom, path, viewport, opts, aller] of ecrans) {
+        const ctx = await openPage(browser, path, { viewport, seedCloud: SEED_T2, routes: ROUTES_T2, ...opts });
+        const { page } = ctx;
+        if (path === '/index.html') { await waitAppStarted(page); if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape'); }
+        else await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+        await aller(page);
+        await page.waitForTimeout(500);
+        for (const [theme, suffixe] of [['light', 'clair'], ['dark', 'sombre']]) {
+            await page.evaluate(t => { document.documentElement.dataset.theme = t; }, theme);
+            await page.waitForTimeout(250);
+            const r = await page.evaluate(SONDE_ACCENT);
+            await step(`${nom} (${suffixe}) : aucun usage de l'ancien or ; textes accentués et textes sur fond accentué à 4,5:1 minimum`, () => {
+                assert.deepEqual(r.or, [], 'or résiduel');
+                assert.deepEqual(r.bas, [], 'contrastes insuffisants');
+            });
+            await shot(page, `a5-${nom}-${suffixe}`);
+        }
+        await finish(ctx, `A5 ${nom}`);
+    }
+}
+
+const SCENARIOS = { T5: scenarioT5, T5IPHONE: scenarioT5Iphone, T2: scenarioT2, A4: scenarioA4, A5: scenarioA5 };
 const only = (process.env.L3_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();

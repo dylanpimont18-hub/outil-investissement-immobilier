@@ -80,7 +80,7 @@ The acquisition decision is a composite score (0–100) built from: cash-flow, D
 
 The visual identity is documented in `charte_graphique.txt`. Key points:
 - Fonts (charte unique, 2026-11-20) : Inter (texte et titres, variable) + IBM Plex Mono (chiffres), woff2 locales dans `vendor/fonts/`, préchargées ; jamais de nom de police en dur, passer par `--font-body` / `--font-heading` / `--font-mono`
-- Accent color: `#C5A059` (light) / `#D4AF37` (dark) — gold
+- Accent unique (2026-11-20) : l'indigo, jamais d'or hors logo — `--accent` (fonds/bordures, `#4F46E5` clair / `#8B8EF0` sombre), `--accent-text` (texte), `--on-accent` (texte sur fond accent) ; ne jamais écrire une teinte d'accent en dur (`rgba(var(--primary-rgb), x)`) ; contrastes AA contrôlés par `tests/playwright/audit-lot3.mjs` (scénario A5). Les couleurs d'état ne sont pas l'accent
 - Status tones map to CSS class suffixes: `--positive`, `--excellent`, `--watch`, `--negative`, `--neutral`
 - Spacing is a 4px grid; corner radii: 8px (components), 12px (cards)
 - Both themes are applied via `data-theme="light|dark"` on `<html>`

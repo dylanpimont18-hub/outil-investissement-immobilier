@@ -351,8 +351,8 @@ const REPORT_CSS = `
     * { box-sizing: border-box; }
     .report-root { margin: 0; padding: 24px; background: #fff; color: #1f2328; font: 13px/1.5 -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .report { max-width: 900px; margin: 0 auto; }
-    header { border-bottom: 2px solid #C5A059; padding-bottom: 12px; margin-bottom: 18px; }
-    .eyebrow { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8a6d2f; }
+    header { border-bottom: 2px solid #4F46E5; padding-bottom: 12px; margin-bottom: 18px; }
+    .eyebrow { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #4338CA; }
     h1 { margin: 4px 0 6px; font-size: 24px; line-height: 1.2; }
     .meta { margin: 0; color: #57606a; font-size: 12px; }
     h2 { font-size: 15px; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; break-after: avoid; }
@@ -475,7 +475,7 @@ export function buildAssetReportHTML(data) {
     <section class="projection">
         <h2>Prévisionnel sur 10 ans (${first} → ${last})</h2>
         <p class="chart-title">Cash-flow net-net annuel</p>
-        ${buildLineChartSVG(chartPoints('cfAnnuel'), { ariaLabel: `Cash-flow annuel ${first}-${last}`, stroke: '#C5A059' })}
+        ${buildLineChartSVG(chartPoints('cfAnnuel'), { ariaLabel: `Cash-flow annuel ${first}-${last}`, stroke: '#4F46E5' })}
         <p class="chart-title">Cash-flow cumulé depuis le 1er janvier ${first} — <span class="${tone(cumulFinal)}">${escapeHtml(eurSigned(cumulFinal))} en ${last}</span></p>
         ${buildLineChartSVG(chartPoints('cumul'), { ariaLabel: `Cash-flow cumulé ${first}-${last}`, stroke: '#6366f1', area: true })}
         <table class="list">

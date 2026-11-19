@@ -121,7 +121,7 @@ function buildPDFParts(uploadedPhotos) {
     background: #fafafa;
     page-break-inside: avoid;
 }
-#pdf-render .r-kpi.gold { border-top: 3px solid #f59e0b; background: #fffbeb; }
+#pdf-render .r-kpi.gold { border-top: 3px solid #4F46E5; background: #eef0ff; }
 #pdf-render .r-kpi.blue { border-top: 3px solid #3b82f6; background: #eff6ff; }
 #pdf-render .r-kpi-lbl { font-size: 7.5px; text-transform: uppercase; letter-spacing: .6px; color: #64748b; margin-bottom: 5px; }
 #pdf-render .r-kpi-val { font-size: 19px; font-weight: 800; color: #0f172a; line-height: 1.1; }
@@ -352,7 +352,7 @@ function buildPDFParts(uploadedPhotos) {
   justify-content: center;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #c9a84c;
+  background: #4F46E5;
   color: #183458;
   font-size: 7.8px;
   font-weight: 800;
@@ -442,7 +442,7 @@ function buildPDFParts(uploadedPhotos) {
 }
 
 #pdf-render .r-kpi.gold {
-  border-top: 4px solid #c9a84c;
+  border-top: 4px solid #4F46E5;
   background: linear-gradient(180deg, #fff8e7 0%, #ffffff 100%);
 }
 
@@ -2517,8 +2517,8 @@ export function buildBankDossierPrintDocument({ assets, sections, highlights, pr
         --watch: #9a6700;
         --danger: #b42318;
         --danger-soft: rgba(180, 35, 24, 0.10);
-        --gold: #c9a84c;
-        --gold-soft: rgba(201, 168, 76, 0.16);
+        --accent: #4F46E5;
+        --accent-soft: rgba(79, 70, 229, 0.12);
       }
 
       * { box-sizing: border-box; }
@@ -2685,14 +2685,14 @@ export function buildBankDossierPrintDocument({ assets, sections, highlights, pr
       /* Surbrillance : fond + bordure dorée ET un repère textuel (label ★) redondant avec la
          couleur — reste lisible sur une impression noir & blanc, où la couleur seule disparaît. */
       .metric-card--highlight {
-        border-color: var(--gold);
+        border-color: var(--accent);
         border-width: 2px;
-        background: linear-gradient(180deg, var(--gold-soft) 0%, #fffaf0 100%);
-        box-shadow: 0 8px 20px rgba(201, 168, 76, 0.32);
+        background: linear-gradient(180deg, var(--accent-soft) 0%, #f7f7ff 100%);
+        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.30);
       }
 
       .metric-card--highlight .label {
-        color: #8a6d1f;
+        color: #4338CA;
         font-weight: 700;
       }
 
@@ -2729,7 +2729,7 @@ export function buildBankDossierPrintDocument({ assets, sections, highlights, pr
          negative déjà teinté — sinon deux systèmes de couleur se neutralisent visuellement. */
       .metric-card.tone-positive.metric-card--highlight,
       .metric-card.tone-negative.metric-card--highlight {
-        background: linear-gradient(180deg, var(--gold-soft) 0%, #fffaf0 100%);
+        background: linear-gradient(180deg, var(--accent-soft) 0%, #f7f7ff 100%);
       }
 
       .metric-note {
@@ -2976,8 +2976,8 @@ const SHARE_PDF_PALETTE = {
   brandSoft: [238, 245, 255],
   blue: [59, 130, 246],
   blueSoft: [239, 246, 255],
-  gold: [201, 168, 76],
-  goldSoft: [255, 249, 235],
+  accent: [79, 70, 229],
+  accentSoft: [238, 240, 255],
   success: [22, 163, 74],
   successSoft: [240, 253, 244],
   danger: [220, 38, 38],
@@ -3001,7 +3001,7 @@ function getScoreTheme(scoreLabel) {
   if (label.includes('ris')) {
     return { accent: SHARE_PDF_PALETTE.danger, soft: SHARE_PDF_PALETTE.dangerSoft, text: [153, 27, 27] };
   }
-  return { accent: SHARE_PDF_PALETTE.gold, soft: SHARE_PDF_PALETTE.goldSoft, text: [146, 64, 14] };
+  return { accent: SHARE_PDF_PALETTE.accent, soft: SHARE_PDF_PALETTE.accentSoft, text: [146, 64, 14] };
 }
 
 function extractNumericValue(value) {
@@ -3021,7 +3021,7 @@ function resolveMetricTone(label, value) {
     return { accent: SHARE_PDF_PALETTE.success, soft: SHARE_PDF_PALETTE.successSoft, value: [21, 128, 61] };
   }
   if (labelLower.includes('nette-nette') || labelLower.includes('break-even')) {
-    return { accent: SHARE_PDF_PALETTE.gold, soft: SHARE_PDF_PALETTE.goldSoft, value: [146, 64, 14] };
+    return { accent: SHARE_PDF_PALETTE.accent, soft: SHARE_PDF_PALETTE.accentSoft, value: [146, 64, 14] };
   }
   if (labelLower.includes('dscr') || labelLower.includes('grm')) {
     return { accent: SHARE_PDF_PALETTE.blue, soft: SHARE_PDF_PALETTE.blueSoft, value: [30, 64, 175] };
@@ -3229,7 +3229,7 @@ function addSectionTitle(doc, text, y) {
   const titleWidth = Math.min(pageWidth - 28, doc.getTextWidth(text) + 14);
   doc.setFillColor(...SHARE_PDF_PALETTE.brandSoft);
   doc.roundedRect(14, y, titleWidth, 8.4, 4.2, 4.2, 'F');
-  doc.setFillColor(...SHARE_PDF_PALETTE.gold);
+  doc.setFillColor(...SHARE_PDF_PALETTE.accent);
   doc.roundedRect(14, y + 2.1, 3.2, 4.2, 2.1, 2.1, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...SHARE_PDF_PALETTE.brand);
@@ -3282,7 +3282,7 @@ export async function buildSharePDFFile(uploadedPhotos) {
 
   doc.setFillColor(...SHARE_PDF_PALETTE.brand);
   doc.roundedRect(14, cursorY, contentWidth, 24, 4, 4, 'F');
-  doc.setFillColor(...SHARE_PDF_PALETTE.gold);
+  doc.setFillColor(...SHARE_PDF_PALETTE.accent);
   doc.roundedRect(pageWidth - 62, cursorY + 4, 42, 6.3, 3.1, 3.1, 'F');
   doc.setTextColor(...SHARE_PDF_PALETTE.brand);
   doc.setFont('helvetica', 'bold');
@@ -3470,7 +3470,7 @@ export async function buildSharePDFFile(uploadedPhotos) {
     doc.setFillColor(...SHARE_PDF_PALETTE.white);
     doc.setDrawColor(...SHARE_PDF_PALETTE.line);
     doc.roundedRect(14, cursorY, contentWidth, noteHeight, 3, 3, 'FD');
-    doc.setFillColor(...SHARE_PDF_PALETTE.goldSoft);
+    doc.setFillColor(...SHARE_PDF_PALETTE.accentSoft);
     doc.roundedRect(18, cursorY + 4, 3, noteHeight - 8, 1.5, 1.5, 'F');
     cursorY = addWrappedText(doc, snapshot.notes, cursorY + 6, { fontSize: 9, lineHeight: 4.5, x: 24, maxWidth: contentWidth - 16 });
     cursorY += 6;
@@ -3481,7 +3481,7 @@ export async function buildSharePDFFile(uploadedPhotos) {
     doc.setPage(page);
     doc.setDrawColor(...SHARE_PDF_PALETTE.line);
     doc.line(14, 10, pageWidth - 14, 10);
-    doc.setFillColor(...SHARE_PDF_PALETTE.gold);
+    doc.setFillColor(...SHARE_PDF_PALETTE.accent);
     doc.roundedRect(14, 9.1, 24, 1.8, 0.9, 0.9, 'F');
     doc.line(14, pageHeight - 11, pageWidth - 14, pageHeight - 11);
     doc.setFont('helvetica', 'normal');
