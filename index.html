@@ -67,13 +67,13 @@
                     <button id="glossaire-btn" class="glossaire-trigger topbar-btn" type="button" title="Glossaire des termes financiers" aria-label="Glossaire des termes financiers">?</button>
                     <button id="calculette-btn" class="glossaire-trigger topbar-btn" type="button" title="Ce que coûte un euro emprunté" aria-label="Calculette : ce que coûte un euro emprunté" aria-haspopup="dialog">€</button>
                 </nav>
-                <div class="sidebar-mode">
+                <div class="sidebar-mode" data-analysis-only>
                     <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode de saisie">
                         <button type="button" class="mode-toggle__btn" id="mode-btn-guided" data-mode="guided" aria-pressed="false">Guidé</button>
                         <button type="button" class="mode-toggle__btn" id="mode-btn-full" data-mode="full" aria-pressed="true">Complet</button>
                     </div>
                 </div>
-                <div class="sidebar-save">
+                <div class="sidebar-save" data-analysis-only>
                     <div id="asset-status-bar" class="asset-status-bar asset-status-bar--new" aria-live="polite">
                         <div class="asset-status-bar__left">
                             <span class="asset-status-bar__dot asset-status-bar__dot--new">○</span>

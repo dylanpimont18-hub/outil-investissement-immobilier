@@ -2488,12 +2488,21 @@ function initWorkspaceTabs() {
     Object.entries(panels).forEach(([target, panel]) => {
         if (panel) panel.style.display = target === 'workspace-panel' ? '' : 'none';
     });
+    // Blocs propres à l'Analyse (mode de saisie, statut/Enregistrer/Nouvelle étude/PDF) :
+    // masqués sur Portefeuille et Assistant (audit 2026-11-18, F2).
+    const syncAnalysisOnlyBlocks = (target) => {
+        document.querySelectorAll('.app-sidebar [data-analysis-only]').forEach((el) => {
+            el.hidden = target !== 'workspace-panel';
+        });
+    };
+    syncAnalysisOnlyBlocks('workspace-panel');
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('is-active'));
             tab.classList.add('is-active');
             const target = tab.dataset.target;
+            syncAnalysisOnlyBlocks(target);
 
             Object.entries(panels).forEach(([key, panel]) => {
                 if (!panel) return;
