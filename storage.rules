@@ -1,9 +1,40 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Documents PDF du portefeuille : meme regle que Firestore, scope par uid.
-    match /users/{uid}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+    function estProprietaire(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // 15 Mo maximum par fichier : le formulaire de frais plafonne l'extraction IA a 8 Mo,
+    // mais un justificatif plus gros peut etre enregistre sans lecture IA (scan multipage).
+    function tailleAcceptee() {
+      return request.resource.size <= 15 * 1024 * 1024;
+    }
+
+    // Justificatifs des frais : users/{uid}/documents/{bien}/{fichier} (owned-cloud.js, cloudUploadDocument).
+    // Types envoyes par l'application : PDF, JPEG, PNG (le client force application/pdf si le
+    // navigateur ne donne aucun type).
+    match /users/{uid}/documents/{assetId}/{filename} {
+      allow read, delete: if estProprietaire(uid);
+      allow create, update: if estProprietaire(uid)
+        && tailleAcceptee()
+        && (request.resource.contentType == 'application/pdf'
+            || request.resource.contentType.matches('image/(jpe?g|pjpeg|png)'));
+    }
+
+    // Archives JSON du portefeuille : users/{uid}/archives/{fichier} (cloud-store.js, cloudUploadArchive).
+    match /users/{uid}/archives/{filename} {
+      allow read, delete: if estProprietaire(uid);
+      allow create, update: if estProprietaire(uid)
+        && tailleAcceptee()
+        && request.resource.contentType == 'application/json';
+    }
+
+    // Tout autre chemin sous users/{uid} : lecture et suppression seulement. L'application
+    // n'y ecrit rien ; d'eventuels anciens fichiers restent lisibles et supprimables.
+    match /users/{uid}/{autre=**} {
+      allow read, delete: if estProprietaire(uid);
     }
   }
 }

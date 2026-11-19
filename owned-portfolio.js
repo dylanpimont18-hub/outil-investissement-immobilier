@@ -3926,6 +3926,10 @@ function openEditTravailModal(assetId, travailId) {
                 showToast('Format non supporté (PDF, JPG ou PNG uniquement)', 'negative');
                 return;
             }
+            if (file.size > TRAVAUX_MAX_STORED_SIZE) {
+                showToast('Fichier trop volumineux (15 Mo maximum)', 'negative');
+                return;
+            }
             try {
                 const newFilename = await uploadOwnedDocument(assetId, file);
                 if (travail.pdfFilename) cloudDeleteDocument(assetId, travail.pdfFilename).catch(() => {});
@@ -4144,6 +4148,7 @@ function _normalizeSearchText(str) {
 
 const TRAVAUX_ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png'];
 const TRAVAUX_MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 Mo — marge sous la limite de la Cloud Function
+const TRAVAUX_MAX_STORED_SIZE = 15 * 1024 * 1024; // 15 Mo — plafond de storage.rules pour un justificatif enregistré (au-delà de 8 Mo, sans lecture IA)
 
 function _fileToBase64(file) {
     return new Promise((resolve, reject) => {
@@ -4790,6 +4795,10 @@ function renderOwnedTravauxTab(asset) {
     const handleFile = async file => {
         if (!TRAVAUX_ACCEPTED_MIME.includes(file.type)) {
             showToast('Format non supporté (PDF, JPG ou PNG uniquement)', 'negative');
+            return;
+        }
+        if (file.size > TRAVAUX_MAX_STORED_SIZE) {
+            showToast('Fichier trop volumineux (15 Mo maximum)', 'negative');
             return;
         }
         pendingFile = file;
