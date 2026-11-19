@@ -877,6 +877,15 @@ html[data-theme='dark'] #collection-panel .workspace-hero-card {
     gap: 6px;
 }
 
+/* Raison du verdict, sous le titre (audit 2026-11-18, F4) : baisse de prix nécessaire pour
+   « Économie défavorable », hypothèses à confirmer pour « Dossier à documenter ». */
+.workspace-hero-decision__reason {
+    margin: 2px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted-strong);
+}
+
 .workspace-hero-card--decision .workspace-hero-decision__heading {
     display: flex;
     align-items: baseline;

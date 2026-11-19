@@ -456,7 +456,73 @@ async function scenarioF1(browser) {
     await finish(m, 'F1 iPhone');
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1 };
+// ── F4 : verdict unique sur le premier écran, nuancé ───────────────────────
+// Nombre d'occurrences visibles d'un libellé dans la fenêtre (premier écran, sans défilement).
+const countInViewport = (page, text) => page.evaluate((t) => {
+    let n = 0;
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) {
+        const node = w.currentNode;
+        if (!node.textContent.includes(t)) continue;
+        const el = node.parentElement; const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+        if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && s.visibility !== 'hidden' && s.display !== 'none') n++;
+    }
+    return n;
+}, text);
+
+async function fillStudy(page, values) {
+    // Valeur posée dans le DOM puis input/change : marche aussi pour les champs d'un accordéon replié.
+    await page.evaluate((vals) => {
+        for (const [name, value] of Object.entries(vals)) {
+            const el = document.querySelector(`#variables-form [name="${name}"]`);
+            el.value = String(value);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }, values);
+    await page.waitForTimeout(600);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await page.waitForTimeout(200);
+}
+
+async function scenarioF4(browser) {
+    console.log('F4 — verdict unique et nuancé');
+    const ctx = await openPcIndex(browser);
+    const { page } = ctx;
+    await fillStudy(page, { prix: 150000, loyer: 750 });
+    await step('150 000 € / 750 € : « Économie défavorable », une seule fois sur le premier écran', async () => {
+        assert.equal(await countInViewport(page, 'Économie défavorable'), 1);
+        assert.equal(await countInViewport(page, 'Offre non recevable'), 0);
+    });
+    await step('… avec la baisse de prix nécessaire juste en dessous', async () => {
+        assert.match(await page.locator('#workspace-hero .workspace-hero-decision__reason').textContent(), /de baisse \(prix autour de/);
+    });
+    await shot(page, 'f4-pc-economie-defavorable');
+    await fillStudy(page, { prix: 60000, loyer: 750, 'loyer-marche': 750, fonciere: 500, apport: 10000 });
+    await step('bien rentable mais hypothèses estimées : « Dossier à documenter », une seule fois', async () => {
+        assert.equal(await countInViewport(page, 'Dossier à documenter'), 1);
+        assert.match(await page.locator('#workspace-hero .workspace-hero-decision__reason').textContent(), /à confirmer/);
+    });
+    await shot(page, 'f4-pc-dossier-a-documenter');
+    await step('carte Verdict (plus bas) : le libellé n\'est plus répété sous l\'anneau du score', async () => {
+        assert.equal(await page.locator('#analysis-acquisition-decision .score-verdict').count(), 0);
+    });
+    await finish(ctx, 'F4 PC');
+
+    const m = await openPage(browser, '/index.html', { viewport: IPHONE, contextOptions: TOUCH });
+    await waitAppStarted(m.page);
+    if (await m.page.locator('#profile-modal:not([hidden])').count()) await m.page.keyboard.press('Escape');
+    await m.page.locator('#mobile-redirect-banner button, .mobile-redirect-banner__close').first().click().catch(() => {});
+    await fillStudy(m.page, { prix: 150000, loyer: 750 });
+    await m.page.locator('#workspace-hero').scrollIntoViewIfNeeded();
+    await step('iPhone index.html : verdict une seule fois dans la bande de synthèse', async () => {
+        assert.equal(await m.page.locator('#workspace-hero').getByText('Économie défavorable', { exact: true }).count(), 1);
+    });
+    await shot(m.page, 'f4-iphone-index-verdict');
+    await finish(m, 'F4 iPhone');
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4 };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();

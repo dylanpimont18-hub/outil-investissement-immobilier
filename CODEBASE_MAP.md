@@ -43,6 +43,7 @@ le Comparateur, le profil, le shell (thème, onglets) et le câblage des imports
   - `syncAssetActionLabels()` — barre de statut Analyse (nouveau/modifié/à jour)
 - `isEssentialDataMissing()` / `buildNeutralAnalysisPlaceholder()` — état neutre ("Renseignez le prix et le loyer") tant que `prix`/`loyer` ne sont pas saisis, utilisé par `buildWorkspaceHero`/`buildAnalysisStickySummary`/`buildAnalysisAcquisitionDecision`
 - `renderCFWaterfall(analysisModel)` — bloc "② Économie du deal" (`#analysis-cf-waterfall`) : header + barres de décomposition uniquement (Loyers/Crédit/Charges/Impôts/Net net). N'affiche plus de mini-cartes Rendement brut/CF/DSCR en tête — doublon exact avec `buildAnalysisMetrics` juste en dessous (corrigé, audit UX 2026-07 bug #3), classes CSS `.cf-waterfall__kpi*` supprimées
+- `buildWorkspaceHero(analysisModel, …)` — bande de synthèse en tête de l'Analyse : depuis le 2026-11-19 (audit F4) le verdict n'y apparaît qu'une fois (`<h2>`, badge `decision-badge` retiré), suivi de `acquisitionDecision.reason` (`.workspace-hero-decision__reason`) ; le score reste à droite. `buildAnalysisAcquisitionDecision` : le libellé n'est plus répété sous l'anneau du score (`.score-verdict` retiré, le `<h4>` le porte déjà)
 - `buildAnalysisSummary(analysisModel, parts)` — bloc "Décision d'exploitation" (`#analysis-summary`) : la liste `analysis-list--compact` ne montre plus que "Parts fiscales" — Profil actif/Composition du foyer/TMI retirés car déjà affichés dans `buildWorkspaceHero` (doublon corrigé, audit UX 2026-07 bug #3)
 - `skipProfileModal()` — ferme le modal Profil (bouton "Plus tard" / Échap) sans marquer `profileConfigured` — le badge topbar reste en attente
 - `numberOrDefault(raw, fallback)` — nombre saisi, ou `fallback` si absent/vide/non numérique ; garde un 0 légitime (bilan B5 2026-10-12 : `Number(x) || 2` transformait une revalorisation 0 % en 2 % sur PC)
@@ -246,6 +247,8 @@ Config du projet Firebase `spark-investissement` (plan **Blaze** depuis le 2026-
 
 ## calculs.js
 Moteur financier pur — zéro DOM. Tous les calculs, toutes les fiscalités.
+- `buildAcquisitionDecision(...)` (interne, appelée par `computeAnalysisViewModel`) — verdict de l'Analyse. Classement depuis le 2026-11-19 (audit F4, règles choisies par l'utilisateur) : 1) économie d'abord — si le signal économique (`getEconomicAcquisitionSignal`) n'est ni `excellent` ni `positive` (« Révision de prix requise » ou « Non recevable »), verdict « Économie défavorable » (ton `watch` ou `negative`), même si le dossier est aussi incomplet ; 2) vrai défaut du bien (`checklist.defectBlockers`) → « Offre non recevable » (défaut critique ou ≥ 2) / « Validation bloquée » ; 3) seulement des blocages d'information (`checklist.informationBlockers`) ou fiabilité < 55 → « Dossier à documenter » (remplace « Attendre les confirmations »). Le score n'est PAS modifié. Renvoie aussi `verdictKind` (`economie-defavorable`|`defaut`|`documenter`|`economie-ok`) et `reason` (une ligne : baisse de prix nécessaire, défaut bloquant ou hypothèses à confirmer)
+- `buildAcquisitionChecklist(...)` (interne) — items `isInformation` : « Fiabilité des hypothèses » toujours, « Loyer de marché » seulement s'il n'est pas renseigné (au-dessus du marché = vrai défaut) ; renvoie `informationBlockers`, `defectBlockers`, `criticalDefects` en plus des compteurs existants
 - `formatDecimalFr(value, digits = 2)` / `formatRatioFr(value)` — (2026-11-19, audit A1) format décimal français pur (« 0,92 », `'--'` si non fini), source unique de `formatRatio`/`formatPercent` (utils.js) et des ratios/pourcentages de pdf.js ; utilisé dans les textes du moteur (DSCR des forces/blocages et de l'alerte `computePortfolioAlerts`, rentabilité nette-nette, vacance cible, taux d'endettement)
 - `computeAnalysisViewModel(inputs)` — **point d'entrée principal** : retourne tout le VM analyse
 - `computeCF(prixVendeur, loyer, inputs, tmi)` — cash-flow brut + net + net-net
@@ -404,6 +407,7 @@ Structure DOM statique — tous les panels et formulaires pré-déclarés.
 
 ## styles.css
 Design system complet : tokens CSS, composants, thèmes light/dark.
+- `.workspace-hero-decision__reason` (2026-11-19, audit F4) — ligne de raison sous le verdict, visible dans la bande compacte
 - `.sidebar-studies`, `.study-item` (`__open`, `__name`, `__meta`, `__kpis`, `__kpi--positive|negative`, `__date`, `__delete`), `.study-confirm__actions` (2026-11-19, audit F1) — liste « Mes études » de la barre latérale, défilante au-delà de `min(46vh, 420px)` ; la boîte `#study-confirm` réutilise `.calculette`
 - `.shell` : `padding-bottom: calc(52px + 18px + 16px + safe-area)` (2026-11-19, audit F3) — en bas de page, le bouton flottant 📄 `.owned-quickfab` ne recouvre plus rien sur index.html (il cachait « Enregistrer » des notes, onglet Exploitation) ; `.shell--owned` garde ses 96 px
 - `.field-inline` / `.field-inline__label` (2026-11-19, audit X1, à côté de `.sr-only`) — `<label>` des formulaires en ligne du portefeuille : `display: contents` + texte masqué visuellement sur PC (mise en page des lignes inchangée), colonne libellé-au-dessus-du-champ sous 640 px (largeurs en ligne des champs neutralisées par `!important`)
@@ -487,6 +491,7 @@ Test Playwright des corrections d'interface du bilan 2026-10-12 (hors `npm test`
 Test Playwright des corrections de l'audit du 18/11/2026 (hors `npm test`, `AC_SCREENSHOTS=<dir>` pour les captures PC 1440×900 / iPhone 393×852, `AC_ONLY=F2,A1…` pour filtrer). Un scénario par défaut corrigé, chacun termine par zéro accès storage + aucune erreur JS/404.
 - `scenarioF2` — contrôles de l'Analyse visibles sur Analyse, masqués sur Portefeuille/Assistant (PC + index.html iPhone)
 - `scenarioT1` — `Logo_site.png` jamais téléchargé, `logo-48.png` 48 × 48 dans l'en-tête, aucun PNG > 50 Ko, `apple-touch-icon` 180 × 180 (PC + iPhone)
+- `scenarioF4` — verdict compté une seule fois dans la fenêtre au premier écran (`countInViewport`) : « Économie défavorable » + baisse de prix (150 000 € / 750 €), « Dossier à documenter » (bien rentable, hypothèses estimées) ; plus de `.score-verdict` dans la carte Verdict ; iPhone index.html. `fillStudy` pose les valeurs dans le DOM (marche dans un accordéon replié)
 - `scenarioF1` — « Mes études » avec 2 études du stub (`STUDIES_SEED`, dont un nom piégé `<img onerror>`) : aucune écriture au chargement, ordre, contenu d'une ligne, échappement, chargement sans question depuis un brouillon vide, confirmation si saisie non enregistrée (Annuler / Ouvrir sans enregistrer), suppression (Échap annule, confirmée → `deleteStudy` dans le stub), suppression de l'étude ouverte, « Enregistrer » ajoute à la liste, masquée sur Portefeuille ; iPhone index.html
 - `scenarioF3` — `COVERED_AT_BOTTOM` (défilement instantané jusqu'en bas, la page a `scroll-behavior: smooth`) : aucun texte/bouton/champ sous ✦ ou 📄 sur Profil, Vue d'ensemble, les 4 onglets d'une fiche, Analyse, Assistant (PC) et liste, Profil, 4 onglets (iPhone)
 - `scenarioX1` — aucun champ visible sans libellé (`NO_LABEL`) sur Analyse, Assistant, Profil, Exploitation, Travaux (PC + iPhone) ; libellés masqués sur PC, visibles sur iPhone ; nom accessible vérifié dans l'arbre d'accessibilité de Chromium (CDP, `axName`) ; ajout d'un frais via les champs libellés
@@ -515,6 +520,9 @@ Test Playwright du chantier CF unique (hors `npm test`, `npm run serve` sur 8090
 ## tests/playwright/projection-impots.mjs
 Test Playwright du coût d'un euro emprunté et de la projection « Impôts des prochaines années » (3 onglets ; PC 1440 + iPhone ; `PI_SCREENSHOTS=<dir>`; hors `npm test`). Même adaptation tout-web (profil revenu 48 000 € dans le `meta` du stub, `cloud-store.js` du harnais). Prérequis : `node scripts/serve-static.mjs 8090`.
 - `openPage(browser, path, viewport)` — page stubbée, attend les 2 biens du stub
+
+## tests/test_verdict_analyse.mjs
+Verdict de l'Analyse (audit F4) : exemple de l'audit → « Économie défavorable » + baisse ; bien rentable aux hypothèses estimées → « Dossier à documenter » ; DPE G → défaut (« Offre non recevable ») ; hypothèses vérifiées → verdict économique ; score inchangé. Relit `VARIABLE_DEFAULTS` dans le source de main.js (non importable sous Node).
 
 ## tests/test_format_fr.mjs
 Test du format décimal français (`formatDecimalFr`, `formatRatioFr`, message DSCR de `computePortfolioAlerts`), audit A1 du 2026-11-18.

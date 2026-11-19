@@ -869,6 +869,7 @@ function buildWorkspaceHero(analysisModel, { tmi, composition } = {}) {
                     <span class="workspace-hero-decision__study">${escapeHtml(getCurrentAssetName())}</span>
                     <h2>${escapeHtml(acquisitionDecision.label)}</h2>
                 </div>
+                ${acquisitionDecision.reason ? `<p class="workspace-hero-decision__reason">${escapeHtml(acquisitionDecision.reason)}</p>` : ''}
                 <p class="workspace-hero-decision__summary">${escapeHtml(acquisitionDecision.summary)}</p>
                 <div class="workspace-hero-decision__action">
                     <span>Recommandation</span>
@@ -894,8 +895,7 @@ function buildWorkspaceHero(analysisModel, { tmi, composition } = {}) {
                 <div class="workspace-hero-decision__scoreline">
                     <span class="workspace-hero-score-label">Indice de décision</span>
                     <div class="workspace-hero-decision__scorepack">
-                        <strong class="workspace-hero-score-value workspace-hero-score-value--${acquisitionDecision.tone}">${acquisitionDecision.score}<small>/100</small></strong>
-                        <span class="decision-badge decision-badge--${acquisitionDecision.tone}">${escapeHtml(acquisitionDecision.label)}</span>
+                        <strong class="workspace-hero-score-value workspace-hero-score-value--${acquisitionDecision.tone}" title="Indice de décision">${acquisitionDecision.score}<small>/100</small></strong>
                     </div>
                 </div>
                 <div class="workspace-hero-decision__kpis">
@@ -1974,7 +1974,6 @@ function buildAnalysisAcquisitionDecision(analysisModel) {
                         <text class="gauge-number" x="60" y="68">${acquisitionDecision.score}</text>
                     </svg>
                     <div class="score-meta">
-                        <span class="score-verdict score-verdict--${acquisitionDecision.tone}">${acquisitionDecision.label}</span>
                         <span class="score-label">Score de décision</span>
                     </div>
                 </div>

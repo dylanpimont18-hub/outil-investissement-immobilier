@@ -925,10 +925,13 @@ function buildAcquisitionChecklist(inputs, thresholds, confidenceModel) {
                 : (rentGapRatio > Math.max(0, thresholds.maxRentGapRatio - 0.05)
                     ? `Le loyer visé reste au-dessus du marché (${Math.round(marketRent)} €). Justifier cet écart avant offre.`
                     : `Le loyer visé reste aligné avec le marché estimé (${Math.round(marketRent)} €).`)),
-            isCritical: marketRent <= 0 || rentGapRatio > thresholds.maxRentGapRatio
+            isCritical: marketRent <= 0 || rentGapRatio > thresholds.maxRentGapRatio,
+            // Loyer de marché absent = information manquante ; loyer au-dessus du marché = vrai défaut.
+            isInformation: marketRent <= 0
         },
         {
             key: 'confidence',
+            isInformation: true,
             label: 'Fiabilité des hypothèses',
             status: (confidenceModel.score < 50 || confidenceModel.criticalUnknowns > 0) ? 'block' : (confidenceModel.score < 70 ? 'watch' : 'ready'),
             detail: confidenceModel.score < 50 || confidenceModel.criticalUnknowns > 0
@@ -943,6 +946,11 @@ function buildAcquisitionChecklist(inputs, thresholds, confidenceModel) {
     const blockersCount = items.filter(item => item.status === 'block').length;
     const warningCount = items.filter(item => item.status === 'watch').length;
     const criticalBlockers = items.filter(item => item.status === 'block' && item.isCritical).length;
+    // Audit 2026-11-18, F4 : un blocage « information » (fiabilité des hypothèses, loyer de marché
+    // non renseigné) se lève en documentant le dossier ; les autres sont de vrais défauts du bien.
+    const informationBlockers = items.filter(item => item.status === 'block' && item.isInformation).length;
+    const defectBlockers = blockersCount - informationBlockers;
+    const criticalDefects = items.filter(item => item.status === 'block' && item.isCritical && !item.isInformation).length;
 
     let readinessLabel = 'Prêt à offrir';
     let readinessTone = 'positive';
@@ -963,6 +971,9 @@ function buildAcquisitionChecklist(inputs, thresholds, confidenceModel) {
         blockersCount,
         warningCount,
         criticalBlockers,
+        informationBlockers,
+        defectBlockers,
+        criticalDefects,
         readinessLabel,
         readinessTone,
         summary
@@ -1248,11 +1259,48 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
     let summary = economicSignal.summary;
     let action = economicSignal.action;
 
-    if (economicSignal.tone !== 'negative' && checklist.blockersCount > 0) {
-        label = checklist.criticalBlockers > 0 || checklist.blockersCount >= 2 ? 'Offre non recevable' : 'Validation bloquée';
-        tone = checklist.criticalBlockers > 0 || checklist.blockersCount >= 2 ? 'negative' : 'watch';
-        summary = 'Les indicateurs économiques peuvent être recevables, mais le dossier reste incomplet sur des points terrain ou documentaires.';
+    // Classement du verdict (audit 2026-11-18, F4, règles choisies par l'utilisateur le 2026-11-19) :
+    //   1. l'économie d'abord : si elle ne tient pas au prix affiché (« Révision de prix requise » ou
+    //      « Non recevable »), verdict « Économie défavorable », même si le dossier est aussi incomplet ;
+    //   2. économie tenable + seulement des blocages d'information (fiabilité des hypothèses, loyer de
+    //      marché non renseigné) → « Dossier à documenter » ;
+    //   3. économie tenable + vrai défaut du bien → « Offre non recevable » / « Validation bloquée ».
+    // Le score n'est pas modifié (choix utilisateur).
+    const economyHolds = economicSignal.tone === 'excellent' || economicSignal.tone === 'positive';
+    const informationLabels = checklist.items
+        .filter(item => item.status === 'block' && item.isInformation)
+        .map(item => item.label.toLowerCase());
+    const defectLabels = checklist.items
+        .filter(item => item.status === 'block' && !item.isInformation)
+        .map(item => item.label.toLowerCase());
+    let verdictKind = 'economie-ok';
+    let reason = ''; // une ligne sous le verdict, dans la bande compacte de l'Analyse
+
+    if (!economyHolds) {
+        verdictKind = 'economie-defavorable';
+        label = 'Économie défavorable';
+        tone = economicSignal.tone === 'negative' ? 'negative' : 'watch';
+        const baisse = Math.ceil(negotiationToTenable / 100) * 100;
+        reason = baisse > 0 && maxOfferPrice > 0
+            ? `Il faudrait environ ${baisse.toLocaleString('fr-FR')} € de baisse (prix autour de ${Math.round(maxOfferPrice).toLocaleString('fr-FR')} €) pour atteindre le seuil minimal.`
+            : 'Cash-flow et couverture du crédit ne tiennent pas, même avec une négociation réaliste.';
+        summary = `Au prix affiché, cash-flow et couverture du crédit ne tiennent pas. ${reason}`;
+        action = economicSignal.action;
+    } else if (checklist.defectBlockers > 0) {
+        verdictKind = 'defaut';
+        const severe = checklist.criticalDefects > 0 || checklist.defectBlockers >= 2;
+        label = severe ? 'Offre non recevable' : 'Validation bloquée';
+        tone = severe ? 'negative' : 'watch';
+        reason = `L’économie tient, mais point bloquant : ${defectLabels.join(', ')}.`;
+        summary = 'L’économie tient au prix affiché, mais le bien présente un point bloquant dans la checklist.';
         action = 'Lever les points bloquants de la checklist avant toute offre.';
+    } else if (checklist.informationBlockers > 0 || confidenceModel.score < 55) {
+        verdictKind = 'documenter';
+        label = 'Dossier à documenter';
+        tone = 'watch';
+        reason = `L’économie tient au prix affiché ; à confirmer : ${informationLabels.length ? informationLabels.join(', ') : 'fiabilité des hypothèses'}.`;
+        summary = `L’économie tient au prix affiché, mais le dossier repose encore sur des estimations${informationLabels.length ? ` (${informationLabels.join(', ')})` : ''}.`;
+        action = 'Confirmer les hypothèses (loyer de marché, charges, travaux, documents) avant toute offre.';
     } else if (economicSignal.tone === 'excellent' && checklist.warningCount > 0) {
         label = 'Favorable sous validation';
         tone = 'positive';
@@ -1263,13 +1311,6 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
         tone = 'watch';
         summary = 'Le dossier reste potentiellement recevable, mais les réserves doivent être levées avant engagement.';
         action = 'Traiter les points de vigilance avant décision.';
-    }
-
-    if (tone !== 'negative' && confidenceModel.score < 55) {
-        label = 'Attendre les confirmations';
-        tone = 'watch';
-        summary = 'L\'économie existe peut-être, mais la qualité des hypothèses reste trop faible pour avancer proprement.';
-        action = 'Faire confirmer les hypothèses critiques avant d émettre une offre.';
     }
 
     if ((tone === 'excellent' || tone === 'positive') && scenarioModel.worstCase.tone === 'negative') {
@@ -1285,6 +1326,8 @@ function buildAcquisitionDecision(metrics, regimeComparison, inputs, tmi, checkl
 
     return {
         label,
+        verdictKind,
+        reason,
         tone,
         score,
         summary,
