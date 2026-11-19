@@ -7938,10 +7938,31 @@ body.asset-report-open .owned-quickfab { display: none; }
 .owned-fm__empty { font-size: .82rem; color: var(--text-tertiary); font-style: italic; padding: 8px 0; margin: 0; }
 .owned-fm__none { text-align: center; padding: 24px 8px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 14px; align-items: center; }
 
+/* Titre + croix collés en haut de la modale (bug signalé le 2026-11-19 : « impossible de fermer la
+   fenêtre » en saisissant une facture). La boîte défile elle-même : dès qu'on descendait vers le
+   bouton « Ajouter », la croix sortait de l'écran ; sur iPhone la modale est plein écran (pas de
+   fond cliquable, pas d'Échap), il fallait tout remonter. */
+.owned-fm > .owned-modal-head {
+    /* top négatif = padding de la boîte : l'élément collant se cale sinon sous ce padding et
+       laisse voir le contenu défiler au-dessus de lui. */
+    position: sticky; top: -24px; z-index: 3;
+    margin: -24px -24px 12px; padding: 24px 24px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
 /* Écran étroit : plein écran, une info par ligne, cibles tactiles ≥ 44 px. */
 @media (max-width: 480px) {
     .owned-modal-overlay--fm { padding: 0; align-items: stretch; }
     .owned-fm { max-height: 100dvh; border-radius: 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+    /* owned.html : viewport-fit=cover + barre d'état translucide → en mode écran d'accueil, sans
+       cette marge la croix passait sous l'encoche / la barre d'état et ne se touchait pas. */
+    .owned-fm > .owned-modal-head {
+        top: -16px;
+        margin: -16px -16px 12px;
+        padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 10px;
+    }
+    .owned-fm > .owned-modal-head [data-close-modal] { min-width: 44px; min-height: 44px; }
     .owned-fm-row { grid-template-columns: auto 48px minmax(0, 1fr); }
     .owned-fm-row__thumb { width: 48px; height: 48px; }
     .owned-fm-row__tools { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; }

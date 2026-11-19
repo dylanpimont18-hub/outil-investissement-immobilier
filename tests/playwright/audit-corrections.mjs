@@ -4,6 +4,7 @@
 //   AC_SCREENSHOTS=<dossier> enregistre des captures PC 1440×900 et iPhone 393×852.
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import zlib from 'node:zlib';
 import { openPage, waitAppStarted, step, getFailures, assert, assertNoStorageHits } from './_harness.mjs';
 
 const SHOTS = process.env.AC_SCREENSHOTS || '';
@@ -522,7 +523,55 @@ async function scenarioF4(browser) {
     await finish(m, 'F4 iPhone');
 }
 
-const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4 };
+// ── Bug signalé le 2026-11-19 : « impossible de fermer la fenêtre » d'ajout de factures ──
+function pngBuffer(w, h) {
+    const crc32 = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); } return (~c) >>> 0; };
+    const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const tb = Buffer.from(t, 'ascii'); const c = Buffer.alloc(4); c.writeUInt32BE(crc32(Buffer.concat([tb, d]))); return Buffer.concat([l, tb, d, c]); };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 0x80)]);
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(Array.from({ length: h }, () => row)))), chunk('IEND', Buffer.alloc(0))]);
+}
+const closeButtonState = (page) => page.evaluate(() => {
+    const x = document.querySelector('#owned-factures-modal [data-close-modal]');
+    const r = x.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { inView: r.top >= 0 && r.bottom <= innerHeight, clickable: hit === x || x.contains(hit) };
+});
+
+async function scenarioFermerFactures(browser) {
+    console.log('Bug 19/11 — fenêtre « Ajouter des factures » refermable');
+    const files = [1, 2, 3].map((n) => ({ name: `facture-${n}.png`, mimeType: 'image/png', buffer: pngBuffer(4 + n, 4) }));
+    for (const [label, path, viewport, opts] of [['iPhone', '/owned.html', IPHONE, { contextOptions: TOUCH }], ['PC', '/index.html', { width: 1440, height: 700 }, {}]]) {
+        const ctx = await openPage(browser, path, { viewport, ...opts });
+        const { page } = ctx;
+        if (label === 'PC') { await waitAppStarted(page); if (await page.locator('#profile-modal:not([hidden])').count()) await page.keyboard.press('Escape'); }
+        else await page.waitForSelector('#owned-list-view:not([hidden])', { timeout: 10000 });
+        await page.waitForSelector('#owned-quickfab:not([hidden])');
+        await page.click('#owned-quickfab');
+        await page.waitForSelector('#owned-factures-modal:not([hidden])');
+        await page.setInputFiles('#owned-factures-modal [data-fm-file-input]', files);
+        await page.waitForTimeout(1200);
+        await page.evaluate(() => { const box = document.querySelector('#owned-factures-modal .owned-modal'); box.scrollTo({ top: box.scrollHeight, behavior: 'instant' }); });
+        await page.waitForTimeout(250);
+        await step(`${label} : 3 factures déposées, défilé jusqu'en bas → la croix reste visible et cliquable`, async () => {
+            assert.deepEqual(await closeButtonState(page), { inView: true, clickable: true });
+        });
+        await shot(page, `bug-fermer-factures-${label.toLowerCase()}`);
+        await step(`${label} : la croix ferme la fenêtre`, async () => {
+            await page.locator('#owned-factures-modal [data-close-modal]').click();
+            await page.waitForSelector('#owned-factures-modal', { state: 'hidden', timeout: 3000 });
+        });
+        if (label === 'iPhone') {
+            await step('iPhone : le titre de la fenêtre réserve la zone de l\'encoche (safe-area-inset-top)', async () => {
+                const found = await page.evaluate(() => [...document.styleSheets].some((sh) => { try { return [...sh.cssRules].some(function walk(r) { return (r.cssRules && [...r.cssRules].some(walk)) || (r.selectorText === '.owned-fm > .owned-modal-head' && /safe-area-inset-top/.test(r.cssText)); }); } catch { return false; } }));
+                assert.equal(found, true);
+            });
+        }
+        await finish(ctx, `Fermer factures ${label}`);
+    }
+}
+
+const SCENARIOS = { F2: scenarioF2, A1: scenarioA1, T1: scenarioT1, X1: scenarioX1, F3: scenarioF3, F1: scenarioF1, F4: scenarioF4, FERMER_FACTURES: scenarioFermerFactures };
 const only = (process.env.AC_ONLY || '').split(',').filter(Boolean);
 
 const browser = await chromium.launch();
