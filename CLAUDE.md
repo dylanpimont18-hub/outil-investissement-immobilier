@@ -33,8 +33,14 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `factures-pdf.js` | Module pur : impression groupée des factures (sélection, récapitulatif, PDF unique assemblé avec pdf-lib vendorisé dans `vendor/pdf-lib/`) |
 | `corps-etat.js` | Module pur : factures décortiquées par corps d'état (liste des 12 corps d'état, nettoyage des articles lus par l'IA, regroupement, écarts, reclassement) pour la sous-vue « Par corps d'état » de l'onglet Travaux |
 | `rapport-bien.js` | Module pur : rapport d'un bien détenu en HTML imprimable (courbes SVG) et en Markdown (export IA) |
+| `rapport-annuel.js` | Module pur : rapport annuel du portefeuille (trésorerie, fiscalité, patrimoine, par bien), en données et en texte brut ; ouvert par `openRapportAnnuelModal` (`owned-portfolio.js`) |
 | `assistant-chat.js` | Onglet Assistant IA (chat), via la Cloud Function `chatPortefeuille` |
 | `styles.css` | Design system complet (thèmes clair/sombre, toutes les classes de composants) |
+| `vendor/` | Bibliothèques et polices copiées en local : `pdf-lib/`, `pdfjs/`, `leaflet/`, `fonts/` |
+| `VERSION` / `CHANGELOG.md` | Numéro de version (lu par `main.js`) et journal des versions |
+| `charte_graphique.txt` | Identité visuelle (polices, couleurs, icônes) |
+| `RESUME_PROJET.txt` | Résumé fonctionnel du projet pour un lecteur extérieur (non déployé) |
+| `logo-48.png` / `logo-180.png` | Logo d'en-tête et icône d'écran d'accueil iPhone (`Logo_site.png`, source lourde, n'est pas déployé) |
 | `ui.js` | Helpers d'interface (graphiques, tableaux) |
 | `functions/` | Cloud Functions (IA, extraction de factures, changement de mot de passe), secret `MAMMOUTH_API_KEY` |
 | `scripts/` | Outillage Node de dev : `run-tests.mjs` (`npm test` / `npm run verify`), `serve-static.mjs` (`npm run serve`, port 8090), `controle-migration.mjs` (relecture post-migration, lecture seule) |

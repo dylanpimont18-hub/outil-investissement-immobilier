@@ -484,6 +484,11 @@ Journal des versions (format Keep a Changelog) — à mettre à jour à chaque r
 
 ---
 
+## RESUME_PROJET.txt
+Résumé fonctionnel du projet pour un lecteur extérieur (réécrit le 2026-11-19 : app 100 % web, plus d'exe/Flask/PyWebView ; la charte visuelle n'y est plus recopiée, voir `charte_graphique.txt`). Non déployé (`*.txt` exclu par `firebase.json`).
+
+---
+
 ## tests/playwright/_harness.mjs
 Harnais commun des tests navigateur (tout-web, 2026-10-11) : stubs complets de `owned-cloud.js` et `cloud-store.js` (exportent exactement les fonctions des modules réels ; exports de migration retirés le 2026-10-12), espions `localStorage`/`window.print`, ouverture de page avec collecte des erreurs.
 - `openPage(browser, path, { viewport, seedCloud, seedStore, spyStorage, routes, initScripts, contextOptions })` — page stubbée, erreurs collectées ; `contextOptions` (2026-10-12) passe p. ex. `{ hasTouch: true, isMobile: true }` à `newContext`
