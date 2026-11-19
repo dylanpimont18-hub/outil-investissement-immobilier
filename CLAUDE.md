@@ -36,7 +36,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `rapport-annuel.js` | Module pur : rapport annuel du portefeuille (trésorerie, fiscalité, patrimoine, par bien), en données et en texte brut ; ouvert par `openRapportAnnuelModal` (`owned-portfolio.js`) |
 | `assistant-chat.js` | Onglet Assistant IA (chat), via la Cloud Function `chatPortefeuille` |
 | `styles.css` | Design system complet (thèmes clair/sombre, toutes les classes de composants) |
-| `vendor/` | Bibliothèques et polices copiées en local : `pdf-lib/`, `pdfjs/`, `leaflet/`, `fonts/` |
+| `vendor/` | Bibliothèques et polices copiées en local : `pdf-lib/`, `pdfjs/`, `leaflet/`, `chartjs/` (Chart.js 4.4.0, licence MIT jointe), `fonts/`. Seul le SDK Firebase vient encore d'un CDN (gstatic) |
 | `VERSION` / `CHANGELOG.md` | Numéro de version (lu par `main.js`) et journal des versions |
 | `charte_graphique.txt` | Identité visuelle (polices, couleurs, icônes) |
 | `RESUME_PROJET.txt` | Résumé fonctionnel du projet pour un lecteur extérieur (non déployé) |

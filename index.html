@@ -10,8 +10,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <script src="/vendor/leaflet/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- defer : n'empêche pas l'affichage ; exécutés dans l'ordre, avant le module main.js (déclaré plus bas), donc L et Chart existent quand l'application démarre -->
+    <script defer src="/vendor/leaflet/leaflet.js"></script>
+    <script defer src="/vendor/chartjs/chart.umd.min.js"></script>
 </head>
 <body>
     <!-- Connexion obligatoire pour toute l'app (main.js) : recouvre tout tant que Firebase Auth n'a pas de session -->
