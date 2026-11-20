@@ -14,7 +14,6 @@
 import { icone, definirTexteAvecIcone } from './icones.js';
 import { state, nodes, definirContexte } from './owned-contexte.js';
 import { escapeHtml, showToast } from './utils.js';
-import { cloudSignIn } from './owned-cloud.js';
 import { savePref, cloudListArchives, cloudUploadArchive, cloudReadArchive } from './cloud-store.js';
 import { nomArchiveUnique } from './archives-regles.js';
 import { openAssetReportPreview, openBankDossierModal } from './owned-rapports.js';
@@ -25,6 +24,9 @@ import { closeOwnedDetail, openOwnedDetail, renderOwnedDetail } from './owned-fi
 import { _downloadOrShareFile, _wireOwnedModalEscape } from './owned-outils.js';
 import { _authUser, _cloudLoaded, _initCloudSync, _metaLoaded, _prefsLoaded, createOwnedAsset, deleteOwnedAsset, loadOwnedAssets, updateOwnedAsset } from './owned-donnees.js';
 import { _syncQuickFabVisibility, closeOwnedAddModal, closeOwnedDeleteModal, initOwnedQuickFab, initOwnedQuickRail, openOwnedAddModal } from './owned-actions.js';
+import { _renderAuthGate } from './owned-auth.js';
+export { renderAuthGateInto } from './owned-auth.js';
+
 export { openOwnedAddModal, closeOwnedAddModal, _refreshAfterFacturesAdd, openOwnedDeleteModal, closeOwnedDeleteModal } from './owned-actions.js';
 
 export { formatDateAchat, _authUser, syncProfileToCloud, loadOwnedAssets, saveOwnedAssets, createOwnedAsset, getOwnedAsset, updateOwnedAsset, updateOwnedAcquisition, updateOwnedCredit, updateOwnedPostAchat, addOwnedLot, updateOwnedLot, deleteOwnedLot, NATURES_FRAIS, natureFraisOptionsHtml, suggererNatureFrais, alerteDoublonTaxeFonciere, findSimilarTravail, addOwnedTravail, updateOwnedTravail, deleteOwnedTravail, uploadOwnedDocument, addOwnedNote, deleteOwnedNote, addOwnedChargesAnnuelles, deleteOwnedChargesAnnuelles, addOwnedLoyerHistorique, deleteOwnedLoyerHistorique, geocodeOwnedAsset, loadPortfolioGoals, savePortfolioGoals, addOwnedScenario, updateOwnedScenarioVar, updateOwnedScenarioNom, deleteOwnedScenario, getOwnedTmi, getOwnedRegime, setOwnedRegime, getOwnedDefaultScenario, getOrderedAssetList, buildPortfolioSummaryForAI } from './owned-donnees.js';
@@ -248,56 +250,6 @@ function initOwnedPortfolioEvents() {
             }, 100);
         }
     });
-}
-
-// ─── CONNEXION (compte unique PC + iPhone) ───────────────────────────────────
-
-// Formulaire de connexion (compte unique PC + iPhone). Sert deux conteneurs : #owned-auth-gate dans
-// le panneau Portefeuille (owned.html, et index.html hors onglet actif) et #app-auth-gate, le gate
-// plein écran d'index.html géré par main.js — connexion obligatoire pour toute l'app depuis le
-// passage au tout-web. Câblé une seule fois par conteneur (data-wired).
-export function renderAuthGateInto(gate, { title = 'Connexion' } = {}) {
-    if (!gate) return;
-    if (!gate.innerHTML.trim()) {
-        gate.innerHTML = `
-            <div class="owned-auth-gate">
-                <h2>${escapeHtml(title)}</h2>
-                <p class="owned-auth-gate__hint">Un seul compte, partagé entre le PC et l'iPhone.</p>
-                <form id="owned-auth-form" novalidate>
-                    <label class="variables-field">
-                        <span class="variables-label">Email</span>
-                        <input class="variables-input" type="email" name="email" required autocomplete="username">
-                    </label>
-                    <label class="variables-field">
-                        <span class="variables-label">Mot de passe</span>
-                        <input class="variables-input" type="password" name="password" required autocomplete="current-password">
-                    </label>
-                    <div id="owned-auth-error" class="owned-auth-gate__error" hidden></div>
-                    <button type="submit" class="btn btn--primary">Se connecter</button>
-                </form>
-            </div>`;
-    }
-    if (gate.dataset.wired) return;
-    gate.dataset.wired = '1';
-    gate.querySelector('#owned-auth-form')?.addEventListener('submit', async e => {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const errEl = gate.querySelector('#owned-auth-error');
-        const btn = e.target.querySelector('button[type="submit"]');
-        if (errEl) errEl.hidden = true;
-        if (btn) { btn.disabled = true; btn.textContent = 'Connexion…'; }
-        try {
-            await cloudSignIn(String(fd.get('email') || '').trim(), String(fd.get('password') || ''));
-        } catch {
-            if (errEl) { errEl.textContent = 'Email ou mot de passe incorrect.'; errEl.hidden = false; }
-        } finally {
-            if (btn) { btn.disabled = false; btn.textContent = 'Se connecter'; }
-        }
-    });
-}
-
-function _renderAuthGate() {
-    renderAuthGateInto(document.getElementById('owned-auth-gate'), { title: 'Portefeuille — Connexion' });
 }
 
 function renderCollections() {
