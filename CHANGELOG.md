@@ -7,6 +7,24 @@ et ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [1.0.29] - 2026-11-20
+
+### Added
+- Onglet Analyse : liste « Mes études » dans la barre latérale.
+
+### Changed
+- Charte graphique unique : police Inter pour le texte et IBM Plex Mono pour les chiffres (polices hébergées avec le site, préchargées), un seul accent indigo en thème clair et sombre (contrastes AA contrôlés), une seule famille d'icônes SVG à la place des emoji et glyphes.
+- Chart.js est désormais hébergé avec le site ; Leaflet et Chart.js se chargent sans bloquer l'affichage.
+- Le verdict de l'Analyse est affiché une fois et nuancé ; les en-têtes Robustesse et Scénarios se replient ; le cash-flow n'est plus répété dans le portefeuille ; dates au format JJ/MM/AAAA ; virgule décimale pour les DSCR et pourcentages.
+- Sur iPhone, les boutons flottants se replient pendant le défilement.
+- Logo allégé (2,6 Ko en en-tête), en-têtes de sécurité ajoutés, fichiers internes exclus du déploiement.
+- Code : le portefeuille des biens détenus est découpé en modules (un par onglet ou fonctionnalité), sans changement de comportement.
+
+### Fixed
+- Libellés accessibles sur les champs d'Exploitation, Travaux, Profil, Assistant et les curseurs.
+- La fenêtre « Ajouter des factures » se ferme toujours ; un fichier de plus de 15 Mo est refusé avec un message clair.
+- Barre latérale : les contrôles de l'Analyse ne s'affichent plus hors de l'onglet Analyse.
+
 ## [1.0.28] - 2026-10-27
 
 ### Added
