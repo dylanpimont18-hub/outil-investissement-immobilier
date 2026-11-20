@@ -28,6 +28,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `owned-fiscal.js` | Portefeuille — modales fiscales : compte de résultat, simulation de travaux, projection des impôts, capacité d'emprunt, objectifs, déclaration 2044 |
 | `owned-fichiers.js` | Portefeuille — utilitaires justificatifs : formats/tailles, base64, pdf-lib/pdf.js paresseux, PDF → image, filtrage d'un lot de fichiers |
 | `owned-factures.js` | Portefeuille — impression groupée des factures, modale « Ajouter des factures » (lecture IA par lot), import d'un dossier de documents |
+| `owned-travaux.js` | Portefeuille — onglet Travaux : liste des frais, vue « Par corps d'état » (décorticage IA), édition d'un frais, aperçu d'un justificatif |
 | `owned-cloud.js` | Wrapper Firebase du portefeuille (Auth, `ownedAssets`, `portfolioMeta`, justificatifs Storage, appels aux Cloud Functions IA) |
 | `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
 | `firebase-init.js` | Initialisation du SDK Firebase (auth, db, storage, functions) |
