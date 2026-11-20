@@ -34,6 +34,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `owned-liste.js` | Portefeuille — vue liste : dashboard dirigeant, carte Leaflet, graphiques de synthèse, tableau/liste des biens, import d'archives |
 |  | Portefeuille — onglet Acquisition d'un bien : données, prix, crédit, localisation |
 |  | Portefeuille — onglet Exploitation d'un bien : loyers, lots, charges annuelles, notes, scénarios |
+|  | Portefeuille — onglet Calcul d'un bien : indicateurs, décomposition du CF, régimes, flux annuels |
 | `owned-cloud.js` | Wrapper Firebase du portefeuille (Auth, `ownedAssets`, `portfolioMeta`, justificatifs Storage, appels aux Cloud Functions IA) |
 | `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
 | `firebase-init.js` | Initialisation du SDK Firebase (auth, db, storage, functions) |
