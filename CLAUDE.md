@@ -23,6 +23,8 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `owned.html` / `owned-entry.js` | Page iPhone : sous-ensemble portefeuille, bootstrap dédié (`IS_MOBILE_PAGE`) |
 | `main.js` | Shell de l'app : état, câblage DOM, onglet Analyse + comparateur, démarrage cloud (`_initCloud`). Délègue le portefeuille à `owned-portfolio.js` |
 | `owned-portfolio.js` | Module portefeuille biens détenus (CRUD, liste/détail, dashboard, modales). Reçoit `state`/`nodes` de `main.js` par référence via `initOwnedPortfolio(deps)`, appelée avant le premier `render()` |
+| `owned-contexte.js` | `state`, `nodes`, `IS_MOBILE_PAGE` du portefeuille en liaisons vivantes (renseignés une fois par `definirContexte`) : les modules du portefeuille les importent au lieu de les recevoir en paramètre |
+| `owned-rapports.js` | Portefeuille — dossier bancaire, rapport d'un bien, rapport annuel (découpage T7 d'`owned-portfolio.js`) |
 | `owned-cloud.js` | Wrapper Firebase du portefeuille (Auth, `ownedAssets`, `portfolioMeta`, justificatifs Storage, appels aux Cloud Functions IA) |
 | `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
 | `firebase-init.js` | Initialisation du SDK Firebase (auth, db, storage, functions) |
