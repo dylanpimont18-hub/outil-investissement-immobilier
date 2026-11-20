@@ -26,6 +26,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `owned-contexte.js` | `state`, `nodes`, `IS_MOBILE_PAGE` du portefeuille en liaisons vivantes (renseignés une fois par `definirContexte`) : les modules du portefeuille les importent au lieu de les recevoir en paramètre |
 | `owned-rapports.js` | Portefeuille — dossier bancaire, rapport d'un bien, rapport annuel (découpage T7 d'`owned-portfolio.js`) |
 | `owned-fiscal.js` | Portefeuille — modales fiscales : compte de résultat, simulation de travaux, projection des impôts, capacité d'emprunt, objectifs, déclaration 2044 |
+| `owned-fichiers.js` | Portefeuille — utilitaires justificatifs : formats/tailles, base64, pdf-lib/pdf.js paresseux, PDF → image, filtrage d'un lot de fichiers |
 | `owned-cloud.js` | Wrapper Firebase du portefeuille (Auth, `ownedAssets`, `portfolioMeta`, justificatifs Storage, appels aux Cloud Functions IA) |
 | `cloud-store.js` | Wrapper Firebase des données hors portefeuille : études du comparateur, réglages (`settings/analysis`, `settings/prefs`), archives JSON du portefeuille |
 | `firebase-init.js` | Initialisation du SDK Firebase (auth, db, storage, functions) |
