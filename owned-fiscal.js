@@ -6,7 +6,9 @@ import { computeEndettementGlobal, computeCapaciteEmprunt, computeCompteResultat
 import { icone } from './icones.js';
 import { state } from './owned-contexte.js';
 import { escapeHtml, showToast, formatPercent } from './utils.js';
-import { _showOwnedModal, getOwnedAsset, getOwnedRegime, loadOwnedAssets, loadPortfolioGoals, renderOwnedPortfolioList, savePortfolioGoals } from './owned-portfolio.js';
+import { _showOwnedModal } from './owned-outils.js';
+import { getOwnedAsset, getOwnedRegime, loadOwnedAssets, loadPortfolioGoals, savePortfolioGoals } from './owned-donnees.js';
+import { renderOwnedPortfolioList } from './owned-liste.js';
 
 // ─── COMPTE DE RÉSULTAT ──────────────────────────────────────────────────────
 

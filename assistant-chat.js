@@ -23,7 +23,9 @@
 
 import { escapeHtml, showToast } from './utils.js';
 import { icone } from './icones.js';
-import { buildPortfolioSummaryForAI, addOwnedNote, addOwnedTravail, addOwnedAutreCredit, patchProfileData, renderCollections, getOwnedAsset, findSimilarTravail } from './owned-portfolio.js';
+import { renderCollections } from './owned-portfolio.js';
+import { buildPortfolioSummaryForAI, addOwnedNote, addOwnedTravail, getOwnedAsset, findSimilarTravail } from './owned-donnees.js';
+import { addOwnedAutreCredit, patchProfileData } from './owned-profil.js';
 import { cloudChatPortefeuille } from './owned-cloud.js';
 
 const INPUT_MAX_HEIGHT = 160; // px, identique au max-height CSS de .assistant-chat__input

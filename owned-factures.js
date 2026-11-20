@@ -9,7 +9,14 @@ import { cloudDocumentUrl, cloudExtraireFraisFacture, cloudExtraireDossierBien }
 import { savePref } from './cloud-store.js';
 import { anneesDisponibles, selectionnerFrais, nomFichierFactures, formatEuros, formatDateFr, genererPdfFactures } from './factures-pdf.js';
 import { FM_MAX_FILES_PER_DROP, _collectDroppedFiles, _fileToBase64, _filterFactureFiles, _formatDateFr, _loadPdfLib, _pdfFirstPageToPngFile, _prepareFactureImage, _runWithConcurrencyLimit, _telechargerBlob } from './owned-fichiers.js';
-import { NATURES_FRAIS, _refreshAfterFacturesAdd, _showOwnedModal, addOwnedTravail, alerteDoublonTaxeFonciere, createOwnedAsset, findSimilarTravail, getOrderedAssetList, getOwnedAsset, natureFraisOptionsHtml, openDocumentPreview, openOwnedAddModal, openOwnedDetail, renderAccordionAcquisition, renderAccordionPostAchat, renderAccordionSimulateur, renderOwnedCalculTab, renderOwnedSynthese, renderOwnedTravauxTab, suggererNatureFrais, updateOwnedAcquisition, updateOwnedAsset, updateOwnedCredit, updateOwnedPostAchat, uploadOwnedDocument } from './owned-portfolio.js';
+import { NATURES_FRAIS, addOwnedTravail, alerteDoublonTaxeFonciere, createOwnedAsset, findSimilarTravail, getOrderedAssetList, getOwnedAsset, natureFraisOptionsHtml, suggererNatureFrais, updateOwnedAcquisition, updateOwnedAsset, updateOwnedCredit, updateOwnedPostAchat, uploadOwnedDocument } from './owned-donnees.js';
+import { _refreshAfterFacturesAdd, openOwnedAddModal } from './owned-actions.js';
+import { _showOwnedModal } from './owned-outils.js';
+import { openDocumentPreview, renderOwnedTravauxTab } from './owned-travaux.js';
+import { openOwnedDetail } from './owned-fiche.js';
+import { renderAccordionAcquisition } from './owned-acquisition.js';
+import { renderAccordionPostAchat, renderAccordionSimulateur } from './owned-exploitation.js';
+import { renderOwnedCalculTab, renderOwnedSynthese } from './owned-calcul.js';
 
 export function openImpressionFacturesModal({ assetId = null } = {}) {
     const assets = getOrderedAssetList();

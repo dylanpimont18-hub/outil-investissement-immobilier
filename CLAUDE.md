@@ -22,7 +22,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `index.html` | Structure HTML complète, tous les panneaux et formulaires pré-déclarés |
 | `owned.html` / `owned-entry.js` | Page iPhone : sous-ensemble portefeuille, bootstrap dédié (`IS_MOBILE_PAGE`) |
 | `main.js` | Shell de l'app : état, câblage DOM, onglet Analyse + comparateur, démarrage cloud (`_initCloud`). Délègue le portefeuille à `owned-portfolio.js` |
-| `owned-portfolio.js` | Module portefeuille biens détenus (CRUD, liste/détail, dashboard, modales). Reçoit `state`/`nodes` de `main.js` par référence via `initOwnedPortfolio(deps)`, appelée avant le premier `render()` |
+| `owned-portfolio.js` | Façade du portefeuille biens détenus (293 lignes depuis le découpage T7 du 2026-11-20, il en avait ~7 000) : `initOwnedPortfolio(deps)` (reçoit `state`/`nodes` de `main.js` par référence, avant le premier `render()`), `initOwnedPortfolioEvents()` (écouteurs persistants), `renderCollections()` (rendu d'ensemble). Tout le reste est dans les modules `owned-*.js` ci-dessous |
 | `owned-contexte.js` | `state`, `nodes`, `IS_MOBILE_PAGE` du portefeuille en liaisons vivantes (renseignés une fois par `definirContexte`) : les modules du portefeuille les importent au lieu de les recevoir en paramètre |
 | `owned-rapports.js` | Portefeuille — dossier bancaire, rapport d'un bien, rapport annuel (découpage T7 d'`owned-portfolio.js`) |
 | `owned-fiscal.js` | Portefeuille — modales fiscales : compte de résultat, simulation de travaux, projection des impôts, capacité d'emprunt, objectifs, déclaration 2044 |
@@ -51,7 +51,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `factures-pdf.js` | Module pur : impression groupée des factures (sélection, récapitulatif, PDF unique assemblé avec pdf-lib vendorisé dans `vendor/pdf-lib/`) |
 | `corps-etat.js` | Module pur : factures décortiquées par corps d'état (liste des 12 corps d'état, nettoyage des articles lus par l'IA, regroupement, écarts, reclassement) pour la sous-vue « Par corps d'état » de l'onglet Travaux |
 | `rapport-bien.js` | Module pur : rapport d'un bien détenu en HTML imprimable (courbes SVG) et en Markdown (export IA) |
-| `rapport-annuel.js` | Module pur : rapport annuel du portefeuille (trésorerie, fiscalité, patrimoine, par bien), en données et en texte brut ; ouvert par `openRapportAnnuelModal` (`owned-portfolio.js`) |
+| `rapport-annuel.js` | Module pur : rapport annuel du portefeuille (trésorerie, fiscalité, patrimoine, par bien), en données et en texte brut ; ouvert par `openRapportAnnuelModal` (`owned-rapports.js`) |
 | `assistant-chat.js` | Onglet Assistant IA (chat), via la Cloud Function `chatPortefeuille` |
 | `styles.css` | Design system complet (thèmes clair/sombre, toutes les classes de composants) |
 | `vendor/` | Bibliothèques et polices copiées en local : `pdf-lib/`, `pdfjs/`, `leaflet/`, `chartjs/` (Chart.js 4.4.0, licence MIT jointe), `fonts/`. Seul le SDK Firebase vient encore d'un CDN (gstatic) |
@@ -64,6 +64,10 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 | `scripts/` | Outillage Node de dev : `run-tests.mjs` (`npm test` / `npm run verify`), `serve-static.mjs` (`npm run serve`, port 8090), `controle-migration.mjs` (relecture post-migration, lecture seule) |
 | `firebase.json` | Config Hosting (fichiers exclus du déploiement, en-têtes `Cache-Control`), Firestore, Storage, Functions |
 
+### Découpage du portefeuille (T7, 2026-11-20) — où écrire
+
+Un module par onglet ou fonctionnalité, aucun ne dépasse ~1 000 lignes : `owned-donnees.js` (cache Firestore, CRUD, régime, objectifs — **toute écriture de données passe par là**), `owned-liste.js` (dashboard, carte, graphiques, liste), `owned-fiche.js` (fiche d'un bien) avec ses onglets `owned-acquisition.js`, `owned-exploitation.js`, `owned-travaux.js`, `owned-calcul.js`, `owned-profil.js` (onglets Impôt/Profil + compte), `owned-fiscal.js` (modales fiscales), `owned-factures.js`, `owned-rapports.js`, `owned-diagnostic.js`, `owned-actions.js` (rail, boutons flottants, modales d'ajout/suppression), `owned-auth.js`, `owned-outils.js` (modale générique, partage de fichier), `owned-fichiers.js` (PDF/images des justificatifs), `owned-contexte.js` (`state`, `nodes`, `IS_MOBILE_PAGE` en liaisons vivantes : `import { state, nodes, IS_MOBILE_PAGE } from './owned-contexte.js'`, ne jamais réaffecter, modifier `state.xxx`). Règles : on importe un nom depuis le module qui le **définit** (pas via la façade) ; les imports circulaires entre modules sont tolérés **à condition de ne contenir que des fonctions** (jamais un appel ni une initialisation de niveau module qui dépende d'un autre module du portefeuille : TDZ) ; un `let` de module modifié par deux modules est interdit (le déplacer ou passer par une fonction). Le test de fumée `tests/playwright/decoupage-owned.mjs` ouvre chaque fonctionnalité : le lancer après tout déplacement.
+
 ### Data flow — analysis tool
 
 1. User edits the form in `index.html`
@@ -71,12 +75,12 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 3. On any change, `main.js` calls `computeAnalysisViewModel()` from `calculs.js`, which returns a fully computed view model
 4. `main.js` renders that view model into the pre-declared DOM containers via `innerHTML` injection
 
-### Key state shape (`state` object in `main.js`, passed by reference into `owned-portfolio.js`)
+### Key state shape (`state` object in `main.js`, passed by reference through `initOwnedPortfolio`, then shared as live bindings by `owned-contexte.js`)
 
 - `variablesData` — current study inputs (all form fields, sanitized)
 - `assetRecords[]` — saved comparator studies only (draft/candidate deals under analysis, unrelated to the owned portfolio)
 - `activeAssetId` — which saved comparator record is currently loaded
-- `ownedAssets`, `activeOwnedAssetId`, `ownedOrder`, `ownedCompact`, `ownedYearFilters`, `ownedLoyerPage` — owned-portfolio state, read/written by `owned-portfolio.js`
+- `ownedAssets`, `activeOwnedAssetId`, `ownedOrder`, `ownedCompact`, `ownedYearFilters`, `ownedLoyerPage` — owned-portfolio state, read/written by the `owned-*.js` modules
 - `profileData` — household profile (income, adults, children) used for tax calculations
 - `theme` — UI preference
 
@@ -86,7 +90,7 @@ Pour publier : `firebase deploy --only hosting` (et `--only functions` pour les 
 - `computeCF(prixVendeur, loyer, inputs, tmi)` — core net-net cash-flow function used throughout
 - `computeProjectMetrics(inputs)` — per-asset KPIs (rentaBrute, rentaNette, dscr, grm, coc…)
 - `computeResaleTimeline(...)` — resale gain projection (exported, currently not called anywhere)
-- `computeOwnedAssetCF`, `computeOwnedAssetTimeline`, `computeCFBreakdown`, `computeRegimeComparison`, `computePortfolioAlerts`, etc. — owned-portfolio-specific, imported by `owned-portfolio.js`
+- `computeOwnedAssetCF`, `computeOwnedAssetTimeline`, `computeCFBreakdown`, `computeRegimeComparison`, `computePortfolioAlerts`, etc. — owned-portfolio-specific, imported by the `owned-*.js` modules
 - Tax logic handles three regimes: `micro-foncier`, `reel` (foncier réel), `sci-is`
 - One yearly tax engine (`impotLocatifAnnee`) serves both the study and owned assets: IR is always the difference of two full household taxes (`impotRevenuDifferentiel`, décote and quotient-familial cap included), never base × TMI; foncier deficits carry forward by vintage for 10 years (usable until A+10), SCI-IS deficits indefinitely, deductible CSG (6.8 %) offsets next year's income
 
@@ -111,14 +115,14 @@ The visual identity is documented in `charte_graphique.txt`. Key points:
   - Serveur : `npm run serve` (serveur statique `scripts/serve-static.mjs`, http://127.0.0.1:8090, mêmes réécritures que Hosting). **Jamais sur le port 8080.** Vérifier qu'il sert bien le code courant (`curl -s http://127.0.0.1:8090/VERSION`).
   - L'app exige Firebase Auth + un vrai compte Firestore, qu'un test n'a pas. **Ne jamais se connecter pour de vrai** : `tests/playwright/_harness.mjs` intercepte les DEUX modules cloud, `owned-cloud.js` (`OWNED_CLOUD_STUB_SOURCE`) et `cloud-store.js` (`CLOUD_STORE_STUB_SOURCE`), et sert des stubs alimentés par `seedCloud`/`seedStore`. Un stub doit exporter exactement les fonctions du module réel (un export manquant casse l'import sans erreur claire). Le code réel de l'app (`main.js`, `owned-portfolio.js`, `calculs.js`…) tourne ainsi dans un vrai Chromium sans toucher au vrai projet Firebase ni aux vraies données.
   - Le harnais fournit `openPage(browser, path, { viewport, seedCloud, seedStore, spyStorage, routes, initScripts })`, `waitAppStarted`, `step`, `getFailures` ; l'espion `localStorage`/`sessionStorage` vérifie qu'aucun accès n'a lieu ; `page.on('pageerror'/'console')` collecte les erreurs JS.
-  - Tests de référence (hors `npm test`, ils demandent le serveur + Chromium) : `tests/playwright/tout-web.mjs`, `factures-modal.mjs`, `impression-factures.mjs`, `change-password.mjs`, `projection-impots.mjs`, `corps-etat.mjs`. Lancer avec `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/<fichier>.mjs` ; `FM_SCREENSHOTS=<dir>` / `PI_SCREENSHOTS=<dir>` enregistrent des captures PNG pour contrôler le rendu.
+  - Tests de référence (hors `npm test`, ils demandent le serveur + Chromium) : `tests/playwright/tout-web.mjs`, `decoupage-owned.mjs` (le portefeuille de bout en bout, à relancer après tout déplacement de code), `audit-corrections.mjs`, `audit-lot3.mjs` (lots 1-3 de l'audit du 18/11/2026), `factures-modal.mjs`, `impression-factures.mjs`, `change-password.mjs`, `projection-impots.mjs`, `corps-etat.mjs`. Lancer avec `SPARK_TEST_BASE=http://127.0.0.1:8090 node tests/playwright/<fichier>.mjs` ; `FM_SCREENSHOTS=<dir>` / `PI_SCREENSHOTS=<dir>` enregistrent des captures PNG pour contrôler le rendu.
   - Viewport `{ width: 393, height: 852 }` pour approcher un iPhone (`owned.html`, comportement `IS_MOBILE_PAGE`).
   - Outillage de dev local uniquement — `node_modules/`, `tests/` et `scripts/` sont gitignorés ou exclus du déploiement (`firebase.json`) ; ne jamais compter dessus en production.
 
 ## Important conventions
 
 - All user-facing text is in French.
-- HTML is built via template literals in `main.js`/`owned-portfolio.js` — always run user content through `escapeHtml()` (from `utils.js`) before injecting.
+- HTML is built via template literals in `main.js` and the `owned-*.js` modules — always run user content through `escapeHtml()` (from `utils.js`) before injecting.
 - New form fields require entries in: `VARIABLE_DEFAULTS`, `VARIABLE_KEYS` (derived), `sanitizeVariablesData()`, and the corresponding `<fieldset>` in `index.html`.
 - `calculs.js` exports are pure functions — keep them free of DOM, `localStorage`, and `window` references.
 - `computeAnalysisViewModel` is called on every keystroke; keep it synchronous and fast.

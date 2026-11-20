@@ -4,7 +4,7 @@
 
 import { nodes } from './owned-contexte.js';
 import { showToast } from './utils.js';
-import { closeOwnedAddModal, closeOwnedDeleteModal } from './owned-portfolio.js';
+import { closeOwnedAddModal, closeOwnedDeleteModal } from './owned-actions.js';
 
 // Échap commun à toutes les modales du portefeuille (B4) : modales génériques (.owned-modal-overlay),
 // Import et Suppression (.owned-delete-modal), « Ajouter un bien » mobile (.owned-add-modal) et

@@ -7,7 +7,7 @@ import { icone } from './icones.js';
 import { state, nodes } from './owned-contexte.js';
 import { escapeHtml } from './utils.js';
 import { cloudDiagnosticPortefeuille } from './owned-cloud.js';
-import { getOwnedAsset, getOwnedTmi, updateOwnedAsset } from './owned-portfolio.js';
+import { getOwnedAsset, getOwnedTmi, updateOwnedAsset } from './owned-donnees.js';
 
 const OWNED_DIAGNOSTIC_HISTORY_MAX = 10;
 

@@ -11,7 +11,7 @@ import { renderOwnedPortfolioList, renderOwnedRegimeSelector } from './owned-lis
 import { renderAccordionAcquisition } from './owned-acquisition.js';
 import { renderAccordionPostAchat, renderAccordionSimulateur } from './owned-exploitation.js';
 import { libelleAnneeCF, ownedYearButtonHTML, parseOwnedYear, renderOwnedCalculTab, renderOwnedSynthese } from './owned-calcul.js';
-import { addOwnedChargesAnnuelles, formatDateAchat, getOrderedAssetList, getOwnedAsset, getOwnedDefaultScenario, getOwnedRegime, getOwnedTmi, updateOwnedAsset } from './owned-portfolio.js';
+import { addOwnedChargesAnnuelles, formatDateAchat, getOrderedAssetList, getOwnedAsset, getOwnedDefaultScenario, getOwnedRegime, getOwnedTmi, updateOwnedAsset } from './owned-donnees.js';
 
 let _ownedTransitionTimer = null;
 

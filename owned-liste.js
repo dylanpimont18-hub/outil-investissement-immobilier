@@ -12,7 +12,10 @@ import { openRapportAnnuelModal } from './owned-rapports.js';
 import { openCapaciteEmpruntModal, openDeclarationFiscaleModal, openObjectifsModal, openProjectionImpotsModal } from './owned-fiscal.js';
 import { openImpressionFacturesModal } from './owned-factures.js';
 import { renderOwnedImpotTab, renderOwnedProfilTab } from './owned-profil.js';
-import { _authUser, formatDateAchat, getOrderedAssetList, getOwnedAsset, getOwnedDefaultScenario, getOwnedRegime, getOwnedTmi, loadOwnedAssets, loadPortfolioGoals, openOwnedAddModal, openOwnedDeleteModal, openOwnedDetail, parseOwnedYear, renderOwnedCalculTab, renderOwnedSynthese, saveOwnedAssets, setOwnedRegime } from './owned-portfolio.js';
+import { _authUser, formatDateAchat, getOrderedAssetList, getOwnedAsset, getOwnedDefaultScenario, getOwnedRegime, getOwnedTmi, loadOwnedAssets, loadPortfolioGoals, saveOwnedAssets, setOwnedRegime } from './owned-donnees.js';
+import { openOwnedAddModal, openOwnedDeleteModal } from './owned-actions.js';
+import { openOwnedDetail } from './owned-fiche.js';
+import { parseOwnedYear, renderOwnedCalculTab, renderOwnedSynthese } from './owned-calcul.js';
 
 // ─── DASHBOARD DIRIGEANT (vue liste) ─────────────────────────────────────────
 

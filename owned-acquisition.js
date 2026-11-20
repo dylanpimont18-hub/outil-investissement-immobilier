@@ -7,7 +7,10 @@ import { icone } from './icones.js';
 import { state, nodes, IS_MOBILE_PAGE } from './owned-contexte.js';
 import { escapeHtml, showToast, formatPercent } from './utils.js';
 import { openImportDossierModal } from './owned-factures.js';
-import { addOwnedLot, deleteOwnedLot, formatDateAchat, geocodeOwnedAsset, getOwnedAsset, renderAccordionSimulateur, renderOwnedCalculTab, renderOwnedSynthese, renderOwnedVerdictBlock, updateOwnedAcquisition, updateOwnedAsset, updateOwnedCredit, updateOwnedLot } from './owned-portfolio.js';
+import { addOwnedLot, deleteOwnedLot, formatDateAchat, geocodeOwnedAsset, getOwnedAsset, updateOwnedAcquisition, updateOwnedAsset, updateOwnedCredit, updateOwnedLot } from './owned-donnees.js';
+import { renderAccordionSimulateur } from './owned-exploitation.js';
+import { renderOwnedCalculTab, renderOwnedSynthese } from './owned-calcul.js';
+import { renderOwnedVerdictBlock } from './owned-fiche.js';
 
 // ─── COÛT D'UN EURO EMPRUNTÉ (formulaire Crédit d'un bien) ───────────────────
 // Lecture directe sous les champs Durée/Taux du crédit : « pour 1 € emprunté, X € remboursés ».

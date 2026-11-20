@@ -1,15 +1,15 @@
-// Module Portefeuille biens detenus — CRUD (ownedAssets, Firestore via owned-cloud.js), rendu (liste, fiche detail,
-// onglets Acquisition/Exploitation/Travaux/Projection) et evenements. Extrait de main.js (axe 3).
-//
-// Interface : initOwnedPortfolio(deps) doit etre appelee en tout premier (avant le premier render()),
-// avec { state, nodes, IS_MOBILE_PAGE } (les memes objets partages
-// que main.js, passes par reference) — renderCollections() en depend des le premier rendu.
-// IS_MOBILE_PAGE (true depuis owned-entry.js, false depuis main.js) fait sauter dashboard/carte/
-// graphiques/comparaison regimes/diagnostic IA dans le rendu, pour ne garder sur owned.html (page
-// iPhone) que la saisie/edition d'un bien + le detail du calcul du CF net-net. initOwnedPortfolioEvents()
-// cable les listeners persistants et doit etre appelee separement, au meme moment que dans main.js
-// avant l'extraction (apres le rendu initial). renderCollections() est ensuite appelee a chaque cycle
-// de rendu par main.js.
+// Façade du portefeuille biens détenus. Le module d'origine (7 000 lignes) a été découpé le 2026-11-20 (audit T7) ; il ne
+// garde que l'initialisation, le câblage des écouteurs persistants et le rendu d'ensemble :
+//   initOwnedPortfolio(deps)       — à appeler en tout premier (avant le premier render()), avec { state, nodes, IS_MOBILE_PAGE }
+//                                    (les mêmes objets que main.js / owned-entry.js, PAR RÉFÉRENCE) : les range dans owned-contexte.js
+//                                    puis démarre les abonnements Firestore (owned-donnees.js)
+//   initOwnedPortfolioEvents()     — écouteurs persistants (export, import, régime, tri…), après le rendu initial
+//   renderCollections()            — rendu : grille de connexion, liste ou fiche selon l'état ; rappelée par main.js à chaque cycle
+// Le reste vit dans un module par onglet / fonctionnalité (voir CLAUDE.md) : owned-donnees (données), owned-liste, owned-fiche,
+// owned-acquisition, owned-exploitation, owned-travaux, owned-calcul, owned-profil, owned-fiscal, owned-factures, owned-rapports,
+// owned-diagnostic, owned-actions, owned-auth, owned-outils, owned-fichiers, owned-contexte.
+// IS_MOBILE_PAGE (true depuis owned-entry.js) fait sauter dashboard / carte / graphiques / comparaison des régimes / diagnostic IA
+// dans le rendu pour ne garder sur owned.html (iPhone) que la saisie d'un bien et le détail du calcul.
 
 import { icone, definirTexteAvecIcone } from './icones.js';
 import { state, nodes, definirContexte } from './owned-contexte.js';
@@ -25,28 +25,6 @@ import { _downloadOrShareFile, _wireOwnedModalEscape } from './owned-outils.js';
 import { _authUser, _cloudLoaded, _initCloudSync, _metaLoaded, _prefsLoaded, createOwnedAsset, deleteOwnedAsset, loadOwnedAssets, updateOwnedAsset } from './owned-donnees.js';
 import { _syncQuickFabVisibility, closeOwnedAddModal, closeOwnedDeleteModal, initOwnedQuickFab, initOwnedQuickRail, openOwnedAddModal } from './owned-actions.js';
 import { _renderAuthGate } from './owned-auth.js';
-export { renderAuthGateInto } from './owned-auth.js';
-
-export { openOwnedAddModal, closeOwnedAddModal, _refreshAfterFacturesAdd, openOwnedDeleteModal, closeOwnedDeleteModal } from './owned-actions.js';
-
-export { formatDateAchat, _authUser, syncProfileToCloud, loadOwnedAssets, saveOwnedAssets, createOwnedAsset, getOwnedAsset, updateOwnedAsset, updateOwnedAcquisition, updateOwnedCredit, updateOwnedPostAchat, addOwnedLot, updateOwnedLot, deleteOwnedLot, NATURES_FRAIS, natureFraisOptionsHtml, suggererNatureFrais, alerteDoublonTaxeFonciere, findSimilarTravail, addOwnedTravail, updateOwnedTravail, deleteOwnedTravail, uploadOwnedDocument, addOwnedNote, deleteOwnedNote, addOwnedChargesAnnuelles, deleteOwnedChargesAnnuelles, addOwnedLoyerHistorique, deleteOwnedLoyerHistorique, geocodeOwnedAsset, loadPortfolioGoals, savePortfolioGoals, addOwnedScenario, updateOwnedScenarioVar, updateOwnedScenarioNom, deleteOwnedScenario, getOwnedTmi, getOwnedRegime, setOwnedRegime, getOwnedDefaultScenario, getOrderedAssetList, buildPortfolioSummaryForAI } from './owned-donnees.js';
-
-export { _showOwnedModal, _downloadOrShareFile, _copyText } from './owned-outils.js';
-
-export { openOwnedDetail, renderOwnedVerdictBlock } from './owned-fiche.js';
-
-export { renderOwnedSynthese, renderOwnedCalculTab, parseOwnedYear } from './owned-calcul.js';
-
-export { renderAccordionPostAchat, renderAccordionSimulateur } from './owned-exploitation.js';
-
-export { renderAccordionAcquisition } from './owned-acquisition.js';
-
-export { invalidateOwnedMap, renderOwnedPortfolioList } from './owned-liste.js';
-
-
-export { addOwnedAutreCredit, patchProfileData } from './owned-profil.js';
-
-export { openDocumentPreview, renderOwnedTravauxTab } from './owned-travaux.js'; // premier snapshot settings/prefs (densite, tri, filtres d'annee, dernier bien factures)
 
 export function initOwnedPortfolio(deps) {
     definirContexte(deps);

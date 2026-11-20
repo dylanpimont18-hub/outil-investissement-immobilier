@@ -7,7 +7,8 @@ import { icone } from './icones.js';
 import { state, nodes, IS_MOBILE_PAGE } from './owned-contexte.js';
 import { escapeHtml, formatRatio } from './utils.js';
 import { savePref } from './cloud-store.js';
-import { getOwnedAsset, getOwnedDefaultScenario, getOwnedRegime, getOwnedTmi, loadOwnedAssets, renderOwnedVerdictBlock } from './owned-portfolio.js';
+import { getOwnedAsset, getOwnedDefaultScenario, getOwnedRegime, getOwnedTmi, loadOwnedAssets } from './owned-donnees.js';
+import { renderOwnedVerdictBlock } from './owned-fiche.js';
 
 const CF_TABLE_YEARS_COLLAPSED = 5;
 const expandedCfTables = new Set(); // ids d'actifs dont on a demandé les 20 années (état en mémoire, non persisté)

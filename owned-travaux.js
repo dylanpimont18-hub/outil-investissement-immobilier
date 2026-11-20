@@ -11,7 +11,10 @@ import { CORPS_ETAT, nettoyerArticles, fusionnerReclassements, corpsEtatLibres, 
 import { formatEuros, formatDateFr } from './factures-pdf.js';
 import { TRAVAUX_ACCEPTED_MIME, TRAVAUX_MAX_FILE_SIZE, TRAVAUX_MAX_STORED_SIZE, _canvasVersJpeg, _fileToBase64, _formatDateFr, _loadPdfjs, _normalizeSearchText, _prepareFactureImage } from './owned-fichiers.js';
 import { _buildFactureDescription, openAjoutFacturesModal, openImpressionFacturesModal } from './owned-factures.js';
-import { NATURES_FRAIS, _showOwnedModal, addOwnedTravail, alerteDoublonTaxeFonciere, deleteOwnedTravail, findSimilarTravail, getOwnedAsset, loadOwnedAssets, natureFraisOptionsHtml, renderAccordionPostAchat, renderAccordionSimulateur, renderOwnedCalculTab, renderOwnedSynthese, saveOwnedAssets, suggererNatureFrais, updateOwnedTravail, uploadOwnedDocument } from './owned-portfolio.js';
+import { NATURES_FRAIS, addOwnedTravail, alerteDoublonTaxeFonciere, deleteOwnedTravail, findSimilarTravail, getOwnedAsset, loadOwnedAssets, natureFraisOptionsHtml, saveOwnedAssets, suggererNatureFrais, updateOwnedTravail, uploadOwnedDocument } from './owned-donnees.js';
+import { _showOwnedModal } from './owned-outils.js';
+import { renderAccordionPostAchat, renderAccordionSimulateur } from './owned-exploitation.js';
+import { renderOwnedCalculTab, renderOwnedSynthese } from './owned-calcul.js';
 
 const _isImageFilename = filename => /\.(jpe?g|png)$/i.test(filename || '');
 

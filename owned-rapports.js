@@ -9,7 +9,8 @@ import { escapeHtml, showToast, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
 import { buildRapportAnnuelData, buildRapportAnnuelTexte } from './rapport-annuel.js';
-import { _copyText, _downloadOrShareFile, _showOwnedModal, getOrderedAssetList, getOwnedAsset, getOwnedRegime, getOwnedTmi, loadOwnedAssets } from './owned-portfolio.js';
+import { _copyText, _downloadOrShareFile, _showOwnedModal } from './owned-outils.js';
+import { getOrderedAssetList, getOwnedAsset, getOwnedRegime, getOwnedTmi, loadOwnedAssets } from './owned-donnees.js';
 
 // ─── DOSSIER BANCAIRE (PDF multi-biens) ─────────────────────────────────────
 // Voir docs/superpowers/specs/2026-09-22-pdf-dossier-bancaire.md. Modale en 2 écrans : biens +

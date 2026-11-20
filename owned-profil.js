@@ -7,7 +7,8 @@ import { icone } from './icones.js';
 import { state } from './owned-contexte.js';
 import { escapeHtml, showToast } from './utils.js';
 import { cloudChangePassword } from './owned-cloud.js';
-import { _authUser, getOwnedRegime, loadOwnedAssets, renderCollections, syncProfileToCloud } from './owned-portfolio.js';
+import { renderCollections } from './owned-portfolio.js';
+import { _authUser, getOwnedRegime, loadOwnedAssets, syncProfileToCloud } from './owned-donnees.js';
 
 // ─── ONGLET IMPÔT (vue liste) ────────────────────────────────────────────────
 // Reprend le revenu salarial du profil (déjà net imposable, après abattement 10 % — saisi tel quel
