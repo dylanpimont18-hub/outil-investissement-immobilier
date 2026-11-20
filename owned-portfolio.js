@@ -22,6 +22,7 @@ import {
     resolveScenarioCourant, estFraisDeductible, computeCFBreakdownReference, libellePeriodeCF, periodeCFReference
 } from './calculs.js';
 import { icone, definirTexteAvecIcone } from './icones.js';
+import { state, nodes, IS_MOBILE_PAGE, definirContexte } from './owned-contexte.js';
 import { escapeHtml, showToast, formatSignedCurrency, formatCompactCurrency, formatRatio, formatPercent, openPrintDocument } from './utils.js';
 import { buildBankDossierPrintDocument } from './pdf.js';
 import { buildAssetReportData, buildAssetReportHTML, buildAssetReportMarkdown, assetReportMarkdownFilename } from './rapport-bien.js';
@@ -40,7 +41,6 @@ import { watchPrefs, savePref, cloudListArchives, cloudUploadArchive, cloudReadA
 import { nomArchiveUnique } from './archives-regles.js';
 import { anneesDisponibles, selectionnerFrais, nomFichierFactures, formatEuros, formatDateFr, genererPdfFactures } from './factures-pdf.js';
 
-let state, nodes, IS_MOBILE_PAGE;
 
 // Affichage de dateAchat ('YYYY-MM', voir parseDateAchat dans calculs.js) au format français MM/YYYY.
 // Accepte aussi une année brute (biens saisis avant l'ajout du mois précis) : affichée telle quelle.
@@ -64,9 +64,7 @@ let _metaLoaded = false; // premier snapshot portfolioMeta (regime/profil/ordre)
 let _prefsLoaded = false; // premier snapshot settings/prefs (densite, tri, filtres d'annee, dernier bien factures)
 
 export function initOwnedPortfolio(deps) {
-    state = deps.state;
-    nodes = deps.nodes;
-    IS_MOBILE_PAGE = !!deps.IS_MOBILE_PAGE;
+    definirContexte(deps);
     _initCloudSync();
 }
 
